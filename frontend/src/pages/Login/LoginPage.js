@@ -9,14 +9,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import hotelBg from '../../assets/images/hotel-bg.jpg';
 
 // ── Separate files ──
-import './LoginPage.css';
+import '../../styles/LoginPage.css';
 import {
   IconBed, IconUsers, IconChart, IconHeadphone,
   IconEmail, IconLock, IconEye, IconArrow,
   IconShield, IconBuilding, IconThumb,
   IconGlobe, IconChevron,
   GoogleLogo, MicrosoftLogo, HotelierCrown,
-} from './LoginIcons';
+} from '../../utils/icons/LoginIcons';
 
 // ============================================================
 //  COMPONENT
