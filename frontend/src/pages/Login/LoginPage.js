@@ -132,14 +132,6 @@ function LoginPage() {
 
         {/* ════════════ RIGHT PANEL ════════════ */}
         <div className="auth-panel-right">
-
-          {/* Language picker */}
-          <div className="auth-lang-selector">
-            <IconGlobe />
-            <span>English</span>
-            <IconChevron />
-          </div>
-
           {/* Form header */}
           <div className="auth-form-header">
             <h2>Sign In</h2>

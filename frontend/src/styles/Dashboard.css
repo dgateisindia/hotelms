@@ -1,3 +1,4 @@
+
 /* ============================================================
    Dashboard.css — Admin Dashboard Styles
    ============================================================ */
@@ -453,4 +454,23 @@ body { font-family: 'Inter', sans-serif; background: var(--bg); }
 
 @media (max-width: 480px) {
   .stats-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Notification badge ── */
+.nav-item {
+  justify-content: flex-start;
+}
+
+/* ── Sidebar Logo fix - match reference ── */
+.sidebar-logo-text span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
+}
+
+.sidebar-logo-text small {
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
+  font-weight: 400;
 }
