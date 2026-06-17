@@ -7,7 +7,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import hotelBg from '../../assets/images/hotel-bg.jpg';
-
+import axios from 'axios';
+import Swal from 'sweetalert2';
 // ── Separate files ──
 import './LoginPage.css';
 import {
@@ -36,28 +37,77 @@ function LoginPage() {
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+ const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (!formData.email || !formData.password) {
-      setError('Please enter your email and password.');
-      return;
-    }
+  console.log("Login button clicked");
+  setError('');
 
-    setLoading(true);
-    try {
-      // TODO: connect to backend API
-      // const res = await axios.post('/api/auth/login', { email: formData.email, password: formData.password });
-      // localStorage.setItem('token', res.data.token);
+  if (!formData.email || !formData.password) {
+    setError('Please enter your email and password.');
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    console.log("Sending login request...");
+
+    const response = await axios.post(
+      'http://localhost:5000/api/auth/login',
+      {
+        email: formData.email,
+        password: formData.password,
+      }
+    );
+
+    console.log("Response:", response.data);
+
+    if (response.data.success) {
+      // Save token
+      localStorage.setItem('token', response.data.token);
+
+      // Save user data
+      localStorage.setItem(
+        'user',
+        JSON.stringify(response.data.user)
+      );
+
+      // Success popup
+      await Swal.fire({
+        icon: 'success',
+        title: 'Welcome Back!',
+        text: 'You have successfully logged in.',
+        confirmButtonText: 'Continue',
+        confirmButtonColor: '#0f1f63',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+      });
+
+      // Redirect after clicking Continue
       navigate('/dashboard');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password.');
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
 
+    const errorMessage =
+      err.response?.data?.message ||
+      err.message ||
+      'Invalid email or password.';
+
+    setError(errorMessage);
+
+    // Error popup
+    Swal.fire({
+      icon: 'error',
+      title: 'Login Failed',
+      text: errorMessage,
+      confirmButtonText: 'OK',
+    });
+  } finally {
+    setLoading(false);
+  }
+};
   // ── JSX (HTML structure) ──
   return (
     <div className="auth-page">
@@ -212,7 +262,7 @@ function LoginPage() {
                 />
                 <span className="checkbox-label">Remember me</span>
               </label>
-              <Link to="/forgot-password" className="auth-forgot-link">Forgot Password?</Link>
+              <Link to="/ForgotPassword" className="auth-forgot-link">Forgot Password?</Link>
             </div>
 
             {/* Submit button */}
