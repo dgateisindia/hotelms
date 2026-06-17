@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+require('dotenv').config();
 
 dotenv.config();
 
@@ -19,4 +20,6 @@ app.use('/api/auth', authRoutes);
 app.get('/', (req, res) => res.json({ message: 'Hotelier API running' }));
 
 const PORT = process.env.PORT || 5000;
+console.log("EMAIL_USER:", process.env.EMAIL_USER);
+console.log("EMAIL_PASS:", process.env.EMAIL_PASS ? "Loaded" : "Not Loaded");
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

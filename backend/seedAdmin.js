@@ -14,7 +14,7 @@ async function seedAdmin() {
        VALUES(?,?,?,?)`,
       [
         'Admin',
-        'admin@hotel.com',
+        'nikhilrkaushik2004@gmail.com',
         hash,
         'admin'
       ]
