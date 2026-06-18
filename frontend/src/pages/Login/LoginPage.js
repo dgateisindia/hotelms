@@ -40,74 +40,54 @@ function LoginPage() {
  const handleSubmit = async (e) => {
   e.preventDefault();
 
-  console.log("Login button clicked");
-  setError('');
+  setError("");
 
   if (!formData.email || !formData.password) {
-    setError('Please enter your email and password.');
+    setError("Please enter your email and password.");
     return;
   }
 
   setLoading(true);
 
   try {
-    console.log("Sending login request...");
+    const response = await axios.post("http://localhost:5000/api/auth/login", {
+      email: formData.email,
+      password: formData.password,
+    });
 
-    const response = await axios.post(
-      'http://localhost:5000/api/auth/login',
-      {
-        email: formData.email,
-        password: formData.password,
-      }
-    );
+    if (response.data.token) {
+      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("user", JSON.stringify(response.data.user));
 
-    console.log("Response:", response.data);
-
-    if (response.data.success) {
-      // Save token
-      localStorage.setItem('token', response.data.token);
-
-      // Save user data
-      localStorage.setItem(
-        'user',
-        JSON.stringify(response.data.user)
-      );
-
-      // Success popup
       await Swal.fire({
-        icon: 'success',
-        title: 'Welcome Back!',
-        text: 'You have successfully logged in.',
-        confirmButtonText: 'Continue',
-        confirmButtonColor: '#0f1f63',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
+        icon: "success",
+        title: "Welcome Back!",
+        text: "You have successfully logged in.",
+        confirmButtonText: "Continue",
+        confirmButtonColor: "#0f1f63",
       });
 
-      // Redirect after clicking Continue
-      navigate('/dashboard');
+      navigate("/dashboard");
     }
   } catch (err) {
-    console.error("LOGIN ERROR:", err);
-
     const errorMessage =
       err.response?.data?.message ||
       err.message ||
-      'Invalid email or password.';
+      "Invalid email or password.";
 
     setError(errorMessage);
 
-    // Error popup
     Swal.fire({
-      icon: 'error',
-      title: 'Login Failed',
+      icon: "error",
+      title: "Login Failed",
       text: errorMessage,
-      confirmButtonText: 'OK',
+      confirmButtonText: "OK",
     });
   } finally {
     setLoading(false);
   }
 };
+
   // ── JSX (HTML structure) ──
   return (
     <div className="auth-page">

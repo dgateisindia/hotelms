@@ -26,6 +26,7 @@ exports.login = async (req, res) => {
 
 console.log("DB Email:", user.email);
 console.log("DB Password Hash:", user.password);
+console.log("Password from UI:", password);
 
 const passwordMatch = await bcrypt.compare(
   password,
@@ -181,7 +182,7 @@ exports.resetPassword = async (req, res) => {
     console.log("Reset Email:", email);
     console.log("New Password:", password);
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    //const hashedPassword = await bcrypt.hash(password, 10);
 
     const [result] = await db.query(
       "UPDATE users SET password=?, otp=NULL, otp_expiry=NULL WHERE email=?",

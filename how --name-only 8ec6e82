@@ -1,0 +1,26 @@
+[33mcommit 8ec6e825a0b952435193698d9785f5e99d5702e1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbackend[m[33m, [m[1;31morigin/backend[m[33m)[m
+Author: Nikhil R <19sc336nikhil@gmail.com>
+Date:   Wed Jun 17 17:21:38 2026 +0530
+
+    updated backend, implemented nodemailer,swal and axios
+
+admindb.sql
+backend/controllers/authController.js
+backend/package-lock.json
+backend/package.json
+backend/routes/authRoutes.js
+backend/seedAdmin.js
+backend/server.js
+frontend/package-lock.json
+frontend/package.json
+frontend/src/App.js
+frontend/src/components/ProtectedRoute.js
+frontend/src/pages/Bookings.js
+frontend/src/pages/Dashboard.js
+frontend/src/pages/Dashboard/Dashboard.js
+frontend/src/pages/ForgotPassword/ForgotPassword.js
+frontend/src/pages/Login/LoginPage.js
+frontend/src/styles/Dashboard.css
+frontend/src/styles/LoginPage.css
+frontend/src/utils/icons/DashboardIcons.js
+frontend/src/utils/icons/LoginIcons.js
