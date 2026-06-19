@@ -64,6 +64,8 @@ a { text-decoration: none; color: inherit; }
   cursor: pointer;
   transition: background var(--transition), transform var(--transition), box-shadow var(--transition);
   font-family: 'Inter', sans-serif;
+
+
 }
 .btn:active { transform: scale(0.98); }
 

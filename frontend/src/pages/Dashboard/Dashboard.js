@@ -7,6 +7,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import '../../styles/Dashboard.css';
+import Bookings from '../Bookings/Bookings';
+import Rooms from '../Rooms/Rooms';
 import {
   IcoDashboard, IcoBookings, IcoRooms, IcoCustomers,
   IcoRoomService, IcoBilling, IcoStaff, IcoAttendance,
@@ -18,17 +20,18 @@ import {
 // ── Static Data ──────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { label: 'Dashboard',    icon: <IcoDashboard />,    path: '/dashboard' },
-  { label: 'Bookings',     icon: <IcoBookings />,     path: '/bookings' },
-  { label: 'Rooms',        icon: <IcoRooms />,        path: '/rooms' },
-  { label: 'Customers',    icon: <IcoCustomers />,    path: '/customers' },
-  { label: 'Room Service', icon: <IcoRoomService />,  path: '/room-service' },
-  { label: 'Billing',      icon: <IcoBilling />,      path: '/billing' },
-  { label: 'Staff',        icon: <IcoStaff />,        path: '/staff' },
-  { label: 'Attendance',   icon: <IcoAttendance />,   path: '/attendance' },
-  { label: 'Housekeeping', icon: <IcoHousekeeping />, path: '/housekeeping' },
-  { label: 'Reports',      icon: <IcoReports />,      path: '/reports' },
-  { label: 'Settings',     icon: <IcoSettings />,     path: '/settings' },
+  { label: 'Dashboard',       icon: <IcoDashboard />,    path: '/dashboard' },
+  { label: 'Bookings',        icon: <IcoBookings />,     path: '/bookings' },
+  { label: 'Rooms',           icon: <IcoRooms />,        path: '/rooms' },
+  { label: 'Customers',       icon: <IcoCustomers />,    path: '/customers' },
+  { label: 'Room Service',    icon: <IcoRoomService />,  path: '/room-service' },
+  { label: 'Billing & Invoice', icon: <IcoBilling />,   path: '/billing' },
+  { label: 'Staff',           icon: <IcoStaff />,        path: '/staff' },
+  { label: 'Attendance',      icon: <IcoAttendance />,   path: '/attendance' },
+  { label: 'Payroll',         icon: <IcoPayroll />,      path: '/payroll' },
+  { label: 'Reports',         icon: <IcoReports />,      path: '/reports' },
+  { label: 'Notifications',   icon: <IcoAttendance />,   path: '/notifications', badge: 6 },
+  { label: 'Settings',        icon: <IcoSettings />,     path: '/settings' },
 ];
 
 const STAT_CARDS = [
@@ -218,13 +221,13 @@ const CrownLogo = () => (
 // ════════════════════════════════════════════════════════════
 //  MAIN COMPONENT
 // ════════════════════════════════════════════════════════════
-function Dashboard() {
+function Dashboard({ page = 'dashboard' }) {
   const navigate = useNavigate();
-  const [activePath, setActivePath] = useState('/dashboard');
+  const [activePath, setActivePath] = useState('/' + page);
 
   const handleLogout = () => {
     // TODO: clear token
-     localStorage.removeItem('token');
+    // localStorage.removeItem('token');
     navigate('/login');
   };
 
@@ -254,7 +257,15 @@ function Dashboard() {
               }}
             >
               {item.icon}
-              {item.label}
+              <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>
+              {item.badge && (
+                <span style={{
+                  background: '#ef4444', color: '#fff',
+                  borderRadius: '10px', fontSize: '10px',
+                  fontWeight: 700, padding: '1px 6px', minWidth: 18,
+                  textAlign: 'center'
+                }}>{item.badge}</span>
+              )}
             </button>
           ))}
 
@@ -271,7 +282,7 @@ function Dashboard() {
 
         {/* Header */}
         <header className="dash-header">
-          <h1 className="dash-header-title">Dashboard</h1>
+          <h1 className="dash-header-title">{page.charAt(0).toUpperCase() + page.slice(1)}</h1>
           <div className="dash-header-right">
             <div className="header-user">
               <span className="header-user-name">Admin</span>
@@ -282,6 +293,11 @@ function Dashboard() {
 
         {/* Body */}
         <div className="dash-body">
+
+          {/* ── Render page content ── */}
+          {page === 'bookings' ? <Bookings /> :
+          page === 'rooms' ? <Rooms /> : (
+          <>
 
           {/* ── Stat Cards ── */}
           <div className="stats-grid">
@@ -352,6 +368,8 @@ function Dashboard() {
             </table>
           </div>
 
+          </>
+          )}
         </div>{/* end dash-body */}
       </div>{/* end dash-main */}
     </div>

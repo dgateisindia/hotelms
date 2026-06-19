@@ -91,6 +91,8 @@ export const IconChevron = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
   </svg>
 );
+
+
 export const HotelierCrown = () => (
   <svg width="42" height="42" viewBox="0 0 42 42" fill="none">
     <rect width="42" height="42" rx="7" fill="rgba(201,162,39,0.12)" stroke="#c9a227" strokeWidth="1.5"/>

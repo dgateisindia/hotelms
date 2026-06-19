@@ -1,49 +1,25 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-
 import LoginPage from './pages/Login/LoginPage';
 import Dashboard from './pages/Dashboard/Dashboard';
-import Guests from './pages/Guests';
-import Reports from './pages/Reports';
-
-import ProtectedRoute from './components/ProtectedRoute';
-import ForgotPassword from './pages/ForgotPassword/ForgotPassword';
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-<Route path="/ForgotPassword" element={<ForgotPassword />} />
-
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/guests"
-          element={
-            <ProtectedRoute>
-              <Guests />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/reports"
-          element={
-            <ProtectedRoute>
-              <Reports />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login"         element={<LoginPage />} />
+        <Route path="/dashboard"     element={<Dashboard page="dashboard" />} />
+        <Route path="/bookings"      element={<Dashboard page="bookings" />} />
+        <Route path="/rooms"         element={<Dashboard page="rooms" />} />
+        <Route path="/customers"     element={<Dashboard page="customers" />} />
+        <Route path="/room-service"  element={<Dashboard page="room-service" />} />
+        <Route path="/billing"       element={<Dashboard page="billing" />} />
+        <Route path="/staff"         element={<Dashboard page="staff" />} />
+        <Route path="/attendance"    element={<Dashboard page="attendance" />} />
+        <Route path="/reports"       element={<Dashboard page="reports" />} />
+        <Route path="/notifications" element={<Dashboard page="notifications" />} />
+        <Route path="/settings"      element={<Dashboard page="settings" />} />
+        <Route path="/"              element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
   );

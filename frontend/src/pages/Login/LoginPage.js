@@ -7,17 +7,16 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import hotelBg from '../../assets/images/hotel-bg.jpg';
-import axios from 'axios';
-import Swal from 'sweetalert2';
+
 // ── Separate files ──
-import './LoginPage.css';
+import '../../styles/LoginPage.css';
 import {
   IconBed, IconUsers, IconChart, IconHeadphone,
   IconEmail, IconLock, IconEye, IconArrow,
   IconShield, IconBuilding, IconThumb,
   IconGlobe, IconChevron,
   GoogleLogo, MicrosoftLogo, HotelierCrown,
-} from './LoginIcons';
+} from '../../utils/icons/LoginIcons';
 
 // ============================================================
 //  COMPONENT
@@ -37,56 +36,27 @@ function LoginPage() {
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
 
-  setError("");
-
-  if (!formData.email || !formData.password) {
-    setError("Please enter your email and password.");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const response = await axios.post("http://localhost:5000/api/auth/login", {
-      email: formData.email,
-      password: formData.password,
-    });
-
-    if (response.data.token) {
-      localStorage.setItem("token", response.data.token);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
-
-      await Swal.fire({
-        icon: "success",
-        title: "Welcome Back!",
-        text: "You have successfully logged in.",
-        confirmButtonText: "Continue",
-        confirmButtonColor: "#0f1f63",
-      });
-
-      navigate("/dashboard");
+    if (!formData.email || !formData.password) {
+      setError('Please enter your email and password.');
+      return;
     }
-  } catch (err) {
-    const errorMessage =
-      err.response?.data?.message ||
-      err.message ||
-      "Invalid email or password.";
 
-    setError(errorMessage);
-
-    Swal.fire({
-      icon: "error",
-      title: "Login Failed",
-      text: errorMessage,
-      confirmButtonText: "OK",
-    });
-  } finally {
-    setLoading(false);
-  }
-};
+    setLoading(true);
+    try {
+      // TODO: connect to backend API
+      // const res = await axios.post('/api/auth/login', { email: formData.email, password: formData.password });
+      // localStorage.setItem('token', res.data.token);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid email or password.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ── JSX (HTML structure) ──
   return (
@@ -162,14 +132,6 @@ function LoginPage() {
 
         {/* ════════════ RIGHT PANEL ════════════ */}
         <div className="auth-panel-right">
-
-          {/* Language picker */}
-          <div className="auth-lang-selector">
-            <IconGlobe />
-            <span>English</span>
-            <IconChevron />
-          </div>
-
           {/* Form header */}
           <div className="auth-form-header">
             <h2>Sign In</h2>
@@ -242,7 +204,7 @@ function LoginPage() {
                 />
                 <span className="checkbox-label">Remember me</span>
               </label>
-              <Link to="/ForgotPassword" className="auth-forgot-link">Forgot Password?</Link>
+              <Link to="/forgot-password" className="auth-forgot-link">Forgot Password?</Link>
             </div>
 
             {/* Submit button */}
