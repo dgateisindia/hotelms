@@ -9,6 +9,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import '../../styles/Dashboard.css';
 import Bookings from '../Bookings/Bookings';
 import Rooms from '../Rooms/Rooms';
+import Customers from '../Customers/Customers';
 import {
   IcoDashboard, IcoBookings, IcoRooms, IcoCustomers,
   IcoRoomService, IcoBilling, IcoStaff, IcoAttendance,
@@ -296,7 +297,8 @@ function Dashboard({ page = 'dashboard' }) {
 
           {/* ── Render page content ── */}
           {page === 'bookings' ? <Bookings /> :
-          page === 'rooms' ? <Rooms /> : (
+          page === 'rooms'     ? <Rooms /> :
+          page === 'customers' ? <Customers /> : (
           <>
 
           {/* ── Stat Cards ── */}

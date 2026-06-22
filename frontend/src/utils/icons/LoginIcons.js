@@ -103,3 +103,20 @@ export const HotelierCrown = () => (
     <text x="21" y="33" textAnchor="middle" fill="#c9a227" fontSize="11" fontWeight="800" fontFamily="Inter,sans-serif">H</text>
   </svg>
 );
+export const GoogleLogo = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20">
+    <path
+      fill="#4285F4"
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+    />
+  </svg>
+);
+
+export const MicrosoftLogo = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20">
+    <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+    <rect x="13" y="1" width="10" height="10" fill="#7FBA00" />
+    <rect x="1" y="13" width="10" height="10" fill="#00A4EF" />
+    <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
+  </svg>
+);
