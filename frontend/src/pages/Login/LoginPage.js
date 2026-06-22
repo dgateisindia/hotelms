@@ -7,8 +7,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import hotelBg from '../../assets/images/hotel-bg.jpg';
-
-// ── Separate files ──
+import axios from 'axios';
+import Swal from 'sweetalert2';// ── Separate files ──
 import '../../styles/LoginPage.css';
 import {
   IconBed, IconUsers, IconChart, IconHeadphone,
@@ -46,13 +46,67 @@ function LoginPage() {
     }
 
     setLoading(true);
+
     try {
-      // TODO: connect to backend API
-      // const res = await axios.post('/api/auth/login', { email: formData.email, password: formData.password });
-      // localStorage.setItem('token', res.data.token);
-      navigate('/dashboard');
+      const response = await axios.post(
+        'http://localhost:5000/api/auth/login',
+        {
+          email: formData.email,
+          password: formData.password,
+        }
+      );
+
+      // TEMP DEBUG — check this in the browser console after clicking Sign In
+      console.log('STATUS:', response.status);
+      console.log('RESPONSE DATA:', response.data);
+
+      // Login Success
+      if (response.data.success) {
+
+        // Store token
+        if (response.data.token) {
+          localStorage.setItem('token', response.data.token);
+        }
+
+        // Store user
+        if (response.data.user) {
+          localStorage.setItem(
+            'user',
+            JSON.stringify(response.data.user)
+          );
+        }
+
+        // Success Popup
+        Swal.fire({
+          icon: 'success',
+          title: 'Login Successful',
+          text: 'Welcome to Hotel Management System',
+          timer: 1500,
+          showConfirmButton: false
+        });
+
+        // Redirect on success
+        navigate('/dashboard');
+      } else {
+        // TEMP DEBUG — backend responded 200 but success was falsy
+        console.log('Backend responded but success flag was falsy:', response.data);
+        setError(response.data.message || 'Login failed. Please try again.');
+      }
+
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password.');
+
+      console.log('Login Error:', err);
+      console.log('Login Error response:', err.response?.data);
+
+      Swal.fire({
+        icon: 'error',
+        title: 'Login Failed',
+        text:
+          err.response?.data?.message ||
+          'Invalid email or password. Please try again.'
+      });
+      // No navigation here — stay on login page when login fails
+
     } finally {
       setLoading(false);
     }
@@ -158,7 +212,7 @@ function LoginPage() {
                   name="email"
                   type="email"
                   className="form-input"
-                  placeholder="Enter your email address"
+                  placeholder=" Enter your email address"
                   value={formData.email}
                   onChange={handleChange}
                   autoComplete="email"
@@ -176,7 +230,7 @@ function LoginPage() {
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   className="form-input"
-                  placeholder="Enter your password"
+                  placeholder=" Enter your password"
                   value={formData.password}
                   onChange={handleChange}
                   autoComplete="current-password"

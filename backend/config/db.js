@@ -1,19 +1,18 @@
-const mysql = require("mysql2");
-require("dotenv").config();
+const mysql = require('mysql2');
 
-const db = mysql.createConnection({
+const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
 });
 
-db.connect((err) => {
-  if (err) {
-    console.log("Database connection failed:", err);
-  } else {
-    console.log("MySQL connected");
-  }
-});
+// Enable promise-based queries so `await db.query(...)` works in controllers
+const db = pool.promise();
+
+// Quick connectivity check at startup (pools don't need an explicit .connect())
+db.query('SELECT 1')
+  .then(() => console.log('MySQL connected'))
+  .catch((err) => console.log('Database connection failed:', err));
 
 module.exports = db;
