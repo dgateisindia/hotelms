@@ -3,12 +3,14 @@
 //  Icons  → imported from LoginIcons.js
 //  Styles → imported from LoginPage.css
 // ============================================================
-
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import Swal from 'sweetalert2';
+
+import { loginUser } from '../../services/authService';
+import { setAccessToken } from '../../utils/icons/tokenManager';
+
 import hotelBg from '../../assets/images/hotel-bg.jpg';
-import axios from 'axios';
-import Swal from 'sweetalert2';// ── Separate files ──
 import '../../styles/LoginPage.css';
 import {
   IconBed, IconUsers, IconChart, IconHeadphone,
@@ -25,10 +27,10 @@ function LoginPage() {
   const navigate = useNavigate();
 
   // ── State ──
-  const [formData, setFormData]       = useState({ email: '', password: '', rememberMe: false });
+  const [formData, setFormData]         = useState({ email: '', password: '', rememberMe: false });
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]             = useState('');
-  const [loading, setLoading]         = useState(false);
+  const [error, setError]               = useState('');
+  const [loading, setLoading]           = useState(false);
 
   // ── Handlers ──
   const handleChange = (e) => {
@@ -37,79 +39,72 @@ function LoginPage() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+  e.preventDefault();
+  setError('');
 
-    if (!formData.email || !formData.password) {
-      setError('Please enter your email and password.');
-      return;
-    }
+  if (!formData.email || !formData.password) {
+    setError('Please enter your email and password.');
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
 
-    try {
-      const response = await axios.post(
-        'http://localhost:5000/api/auth/login',
-        {
-          email: formData.email,
-          password: formData.password,
-        }
+  try {
+    const res = await loginUser(
+      formData.email,
+      formData.password
+    );
+
+    // Store JWT Token
+    setAccessToken(res.data.accessToken);
+
+    // Store User Details
+    localStorage.setItem(
+      'user',
+      JSON.stringify(res.data.user)
+    );
+
+    // Success Popup
+    await Swal.fire({
+      icon: 'success',
+      title: 'Login Successful',
+      text: `Welcome ${
+        res.data.user?.fullName || 'Admin'
+      }!`,
+      confirmButtonText: 'Continue',
+      timer: 2000,
+      timerProgressBar: true,
+    });
+
+    navigate('/dashboard');
+
+  } catch (err) {
+    console.error('Login Error:', err);
+
+    if (!err.response || err.response.status >= 500) {
+      navigate('/500');
+    } else {
+      setError(
+        err.response?.data?.message ||
+        'Invalid email or password.'
       );
-
-      // TEMP DEBUG — check this in the browser console after clicking Sign In
-      console.log('STATUS:', response.status);
-      console.log('RESPONSE DATA:', response.data);
-
-      // Login Success
-      if (response.data.success) {
-
-        // Store token
-        if (response.data.token) {
-          localStorage.setItem('token', response.data.token);
-        }
-
-        // Store user
-        if (response.data.user) {
-          localStorage.setItem(
-            'user',
-            JSON.stringify(response.data.user)
-          );
-        }
-
-        // Success Popup
-        Swal.fire({
-          icon: 'success',
-          title: 'Login Successful',
-          text: 'Welcome to Hotel Management System',
-          timer: 1500,
-          showConfirmButton: false
-        });
-
-        // Redirect on success
-        navigate('/dashboard');
-      } else {
-        // TEMP DEBUG — backend responded 200 but success was falsy
-        console.log('Backend responded but success flag was falsy:', response.data);
-        setError(response.data.message || 'Login failed. Please try again.');
-      }
-
-    } catch (err) {
-
-      console.log('Login Error:', err);
-      console.log('Login Error response:', err.response?.data);
-
-      Swal.fire({
-        icon: 'error',
-        title: 'Login Failed',
-        text:
-          err.response?.data?.message ||
-          'Invalid email or password. Please try again.'
-      });
-      // No navigation here — stay on login page when login fails
-
-    } finally {
-      setLoading(false);
     }
+  } finally {
+    setLoading(false);
+  }
+};
+  // ── Google login handler ──
+  const handleGoogleLogin = () => {
+    // TODO: connect to Google OAuth
+    // window.location.href = '/api/auth/google';
+    alert('Google login coming soon!');
+  };
+
+  // ── Google register handler ──
+  const handleGoogleRegister = () => {
+    // TODO: connect to Google OAuth register flow
+    // window.location.href = '/api/auth/google?mode=register';
+    navigate('/register');
   };
 
   // ── JSX (HTML structure) ──
@@ -186,6 +181,7 @@ function LoginPage() {
 
         {/* ════════════ RIGHT PANEL ════════════ */}
         <div className="auth-panel-right">
+
           {/* Form header */}
           <div className="auth-form-header">
             <h2>Sign In</h2>
@@ -212,7 +208,7 @@ function LoginPage() {
                   name="email"
                   type="email"
                   className="form-input"
-                  placeholder=" Enter your email address"
+                  placeholder="Enter your email address"
                   value={formData.email}
                   onChange={handleChange}
                   autoComplete="email"
@@ -230,7 +226,7 @@ function LoginPage() {
                   name="password"
                   type={showPassword ? 'text' : 'password'}
                   className="form-input"
-                  placeholder=" Enter your password"
+                  placeholder="Enter your password"
                   value={formData.password}
                   onChange={handleChange}
                   autoComplete="current-password"
@@ -270,6 +266,55 @@ function LoginPage() {
               {loading ? 'Signing in…' : 'Sign In'}
               {!loading && <IconArrow />}
             </button>
+
+            {/* ── Divider ── */}
+            <div className="auth-divider">
+              <span className="auth-divider-line" />
+              <span className="auth-divider-text">or continue with</span>
+              <span className="auth-divider-line" />
+            </div>
+
+            {/* ── Social Login buttons ── */}
+            <div className="auth-social-buttons">
+              <button type="button" className="btn-social" onClick={handleGoogleLogin}>
+                <GoogleLogo />
+                Sign in with Google
+              </button>
+              <button type="button" className="btn-social" onClick={() => {}}>
+                <MicrosoftLogo />
+                Sign in with Microsoft
+              </button>
+            </div>
+
+            {/* ── Divider before register ── */}
+            <div className="auth-divider">
+              <span className="auth-divider-line" />
+              <span className="auth-divider-text">new here?</span>
+              <span className="auth-divider-line" />
+            </div>
+
+            {/* ── Register section ── */}
+            <div className="auth-register-box">
+              <p className="auth-register-text">
+                Don't have an account yet?
+              </p>
+
+              {/* Register with Google */}
+              <button type="button" className="btn-google-register" onClick={handleGoogleRegister}>
+                <GoogleLogo />
+                Register with Google
+              </button>
+
+              {/* Register with email */}
+              <button type="button" className="btn-register-now" onClick={() => navigate('/register')}>
+                Register Now →
+              </button>
+
+              <p className="auth-signin-link">
+                Already have an account?{' '}
+                <Link to="/login" className="auth-link-text">Sign In</Link>
+              </p>
+            </div>
 
           </form>
         </div>

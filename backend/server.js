@@ -1,30 +1,32 @@
-const express = require("express");
-const cors = require("cors");
-require("dotenv").config();
+// backend/server.js
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
 
-const errorHandling = require("./middleware/errorHandling");
-const authRoutes = require("./routes/authRoutes");
-
+const authRoutes = require('./routes/authRoutes');
+const bookingRoutes = require('./routes/bookingRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
+// backend/server.js
+const cookieParser = require('cookie-parser');
 const app = express();
 
-app.use(cors());
+app.use(helmet());
+app.use(cors({
+  origin: process.env.FRONTEND_URL, // matches your Vite env on the other side
+  credentials: true,
+}));
 app.use(express.json());
 
-// ── Routes ──
-app.use("/api/auth", authRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use(cookieParser()); // add this near your other app.use() calls
 
-// ── 404 handler for unmatched routes ──
-app.use((req, res, next) => {
-  const error = new Error("Route not found");
-  error.statusCode = 404;
-  next(error);
+
+app.use((req, res) => {
+  res.status(404).json({ success: false, statusCode: 404, message: 'Route not found' });
 });
-
-// ── Centralized error handler — must be registered LAST ──
-app.use(errorHandling);
 
 const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

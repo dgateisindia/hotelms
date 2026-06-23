@@ -16,6 +16,8 @@ import {
   IcoTrendUp, IcoArrowRight, IcoLogout,
   IcoCalendar, IcoBed, IcoDoor, IcoRupee,
 } from '../../utils/icons/DashboardIcons';
+import { clearTokens } from '../../utils/icons/tokenManager';
+import Swal from "sweetalert2";
 
 // ── Static Data ──────────────────────────────────────────────
 
@@ -225,11 +227,31 @@ function Dashboard({ page = 'dashboard' }) {
   const navigate = useNavigate();
   const [activePath, setActivePath] = useState('/' + page);
 
-  const handleLogout = () => {
-    // TODO: clear token
-    // localStorage.removeItem('token');
-    navigate('/login');
-  };
+  const handleLogout = async () => {
+  const result = await Swal.fire({
+    title: "Confirm Logout",
+    text: "You will need to sign in again to access the dashboard.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#1e3a8a",
+    cancelButtonColor: "#6b7280",
+    confirmButtonText: "Logout",
+    cancelButtonText: "Stay Logged In",
+  });
+
+  if (result.isConfirmed) {
+    clearTokens();
+
+    await Swal.fire({
+      icon: "success",
+      title: "See You Again!",
+      text: "You have been logged out successfully.",
+      confirmButtonText: "OK",
+    });
+
+    navigate("/login");
+  }
+};
 
   return (
     <div className="dash-layout">

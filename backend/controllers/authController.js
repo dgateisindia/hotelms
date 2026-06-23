@@ -1,292 +1,128 @@
-//const bcrypt = require('bcryptjs');
+// backend/controllers/authController.js
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const db = require('../config/db');
-const nodemailer = require("nodemailer");
 
-// ============================================================
-//  LOGIN
-// ============================================================
+const generateAccessToken = (user) => {
+  return jwt.sign(
+    { id: user.User_id, role: user.role },
+    process.env.JWT_ACCESS_SECRET,
+    { expiresIn: '15m' } // short-lived
+  );
+};
+
+const generateRefreshToken = (user) => {
+  return jwt.sign(
+    { id: user.User_id },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: '7d' } // long-lived
+  );
+};
+
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 400 — Missing fields
     if (!email || !password) {
       return res.status(400).json({
         success: false,
         statusCode: 400,
-        message: 'Email and password are required.'
+        message: 'Email and password are required.',
       });
     }
 
-    // Find user
-    const [users] = await db.query(
-      'SELECT * FROM users WHERE email = ?',
-      [email]
-    );
-
-    // 404 — User not found
-    if (users.length === 0) {
-      return res.status(404).json({
-        success: false,
-        statusCode: 404,
-        message: 'User account not found.'
-      });
-    }
-
+    const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
     const user = users[0];
 
-    // 403 — Account inactive (only applies if your users table has a status column)
-    if (user.status === 'inactive') {
-      return res.status(403).json({
-        success: false,
-        statusCode: 403,
-        message: 'Your account is inactive. Please contact support.'
-      });
-    }
-
-    // 401 — Wrong password (plain text check; bcrypt currently disabled)
-    if (password !== user.password) {
+    if (!user) {
       return res.status(401).json({
         success: false,
         statusCode: 401,
-        message: 'Invalid email or password.'
+        message: 'Invalid email or password.',
       });
     }
 
-    // 200 — Login success
+const isMatch = password === user.password;    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        statusCode: 401,
+        message: 'Invalid email or password.',
+      });
+    }
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    // Send refresh token as httpOnly cookie — frontend JS never touches it directly
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // HTTPS only in prod
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     return res.status(200).json({
       success: true,
       statusCode: 200,
       message: 'Login successful.',
-      user: {
-        id: user.user_id,
-        full_name: user.full_name,
-        email: user.email,
-        role: user.role
-      }
+      accessToken, // frontend stores this in memory
+      user: { id: user.id, fullName: user.full_name, role: user.role },
     });
-
   } catch (error) {
-    console.error('Login Error:', error);
-
-    // 500 — Server/database error
-    return res.status(500).json({
-      success: false,
-      statusCode: 500,
-      message: 'Internal Server Error'
-    });
+    console.error('Login error:', error);
+    return res.status(500).json({ success: false, statusCode: 500, message: 'Server error.' });
   }
 };
-
-// ============================================================
-//  REGISTER
-// ============================================================
+//creating Register function to register new user
 exports.register = async (req, res) => {
   try {
-    // TODO: implement register logic
-    res.json({ message: 'Register endpoint' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
+    const { name, email, phone, password, role } = req.body;
 
-// ============================================================
-//  FORGOT PASSWORD
-// ============================================================
-exports.forgotPassword = async (req, res) => {
-  try {
-    // TODO: implement forgot password logic
-    res.json({ message: 'Forgot password endpoint' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
-
-// ============================================================
-//  SEND OTP
-// ============================================================
-exports.sendOTP = async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    if (!email) {
+    if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
         statusCode: 400,
-        message: 'Email is required.'
+        message: 'Name, email, and password are required.',
       });
     }
 
-    console.log("Email received:", email);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    const otp = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
+    const sql = 'INSERT INTO users (full_name, email, phone, password, role) VALUES (?, ?, ?, ?, ?)';
+    const [result] = await db.query(sql, [name, email, phone || null, hashedPassword, role || 'receptionist']);
 
-    console.log("Generated OTP:", otp);
-
-    const expiry = new Date(
-      Date.now() + 5 * 60 * 1000
-    );
-
-    const [result] = await db.query(
-      "UPDATE users SET otp=?, otp_expiry=? WHERE email=?",
-      [otp, expiry, email]
-    );
-
-    console.log("Rows affected:", result.affectedRows);
-
-    // 404 — No user with that email
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        statusCode: 404,
-        message: 'User account not found.'
-      });
-    }
-
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "Password Reset OTP",
-      text: `Your OTP is ${otp}`
-    });
-
-    res.status(200).json({
+    return res.status(201).json({
       success: true,
-      statusCode: 200,
-      message: "OTP Sent"
+      statusCode: 201,
+      message: 'User registered successfully.',
     });
-
   } catch (error) {
-    console.error("OTP Error:", error);
-
-    res.status(500).json({
-      success: false,
-      statusCode: 500,
-      message: error.message
-    });
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, statusCode: 409, message: 'Email already registered.' });
+    }
+    console.error('Register error:', error);
+    return res.status(500).json({ success: false, statusCode: 500, message: 'Server error.' });
   }
 };
+//Refresh token startpoint
+exports.refreshToken = (req, res) => {
+  const token = req.cookies.refreshToken;
 
-// ============================================================
-//  VERIFY OTP
-// ============================================================
-exports.verifyOTP = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
+  if (!token) {
+    return res.status(401).json({ success: false, statusCode: 401, message: 'No refresh token provided.' });
+  }
 
-    if (!email || !otp) {
-      return res.status(400).json({
-        success: false,
-        statusCode: 400,
-        message: 'Email and OTP are required.'
-      });
+  jwt.verify(token, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ success: false, statusCode: 403, message: 'Invalid or expired refresh token.' });
     }
 
-    const [rows] = await db.query(
-      "SELECT * FROM users WHERE email=?",
-      [email]
+    const newAccessToken = jwt.sign(
+      { id: decoded.id },
+      process.env.JWT_ACCESS_SECRET,
+      { expiresIn: '15m' }
     );
 
-    if (!rows.length) {
-      return res.status(404).json({
-        success: false,
-        statusCode: 404,
-        message: "User account not found."
-      });
-    }
-
-    const user = rows[0];
-
-    if (user.otp !== otp) {
-      return res.status(400).json({
-        success: false,
-        statusCode: 400,
-        message: "Invalid OTP."
-      });
-    }
-
-    if (new Date() > new Date(user.otp_expiry)) {
-      return res.status(400).json({
-        success: false,
-        statusCode: 400,
-        message: "OTP Expired."
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      statusCode: 200,
-      message: "OTP verified successfully."
-    });
-
-  } catch (error) {
-    console.error("Verify OTP Error:", error);
-    res.status(500).json({
-      success: false,
-      statusCode: 500,
-      message: "Internal Server Error"
-    });
-  }
-};
-
-// ============================================================
-//  RESET PASSWORD
-// ============================================================
-exports.resetPassword = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        statusCode: 400,
-        message: 'Email and new password are required.'
-      });
-    }
-
-    console.log("Reset Email:", email);
-    console.log("New Password:", password);
-
-    //const hashedPassword = await bcrypt.hash(password, 10);
-
-    const [result] = await db.query(
-      "UPDATE users SET password=?, otp=NULL, otp_expiry=NULL WHERE email=?",
-      [password, email] // plain text for now; swap to hashedPassword once bcrypt is re-enabled
-    );
-
-    console.log("Rows Updated:", result.affectedRows);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        statusCode: 404,
-        message: "User account not found."
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      statusCode: 200,
-      message: "Password Updated"
-    });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      statusCode: 500,
-      message: "Server Error"
-    });
-  }
+    return res.status(200).json({ success: true, statusCode: 200, accessToken: newAccessToken });
+  });
 };

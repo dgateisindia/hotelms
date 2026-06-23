@@ -1,17 +1,12 @@
-// src/components/ProtectedRoute.js
-
-import React from 'react';
+// frontend/src/components/ProtectedRoute.js
 import { Navigate } from 'react-router-dom';
+import { getAccessToken } from '../utils/icons/tokenManager';
 
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem('token');
-
-  console.log('ProtectedRoute Token:', token);
-
+  const token = getAccessToken();
   if (!token) {
     return <Navigate to="/login" replace />;
   }
-
   return children;
 }
 

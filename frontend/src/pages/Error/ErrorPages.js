@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import '../../styles/ErrorPages.css';
+import '../../styles/ErrorPage.css';
 
 // ════════════════════════════════════════════════════════════
 //  SHARED LAYOUT WRAPPER
