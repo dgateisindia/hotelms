@@ -92,23 +92,6 @@ export const IconChevron = () => (
   </svg>
 );
 
-export const GoogleLogo = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24">
-    <path fill="#4285F4" d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
-    <path fill="#34A853" d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.615 24 12.255 24z"/>
-    <path fill="#FBBC05" d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 000 10.76l3.98-3.09z"/>
-    <path fill="#EA4335" d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.64 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
-  </svg>
-);
-
-export const MicrosoftLogo = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24">
-    <rect x="1" y="1" width="10" height="10" fill="#F25022"/>
-    <rect x="13" y="1" width="10" height="10" fill="#7FBA00"/>
-    <rect x="1" y="13" width="10" height="10" fill="#00A4EF"/>
-    <rect x="13" y="13" width="10" height="10" fill="#FFB900"/>
-  </svg>
-);
 
 export const HotelierCrown = () => (
   <svg width="42" height="42" viewBox="0 0 42 42" fill="none">
@@ -118,5 +101,22 @@ export const HotelierCrown = () => (
     <circle cx="21" cy="14" r="2" fill="#c9a227"/>
     <circle cx="32" cy="18" r="2" fill="#c9a227"/>
     <text x="21" y="33" textAnchor="middle" fill="#c9a227" fontSize="11" fontWeight="800" fontFamily="Inter,sans-serif">H</text>
+  </svg>
+);
+export const GoogleLogo = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20">
+    <path
+      fill="#4285F4"
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+    />
+  </svg>
+);
+
+export const MicrosoftLogo = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20">
+    <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+    <rect x="13" y="1" width="10" height="10" fill="#7FBA00" />
+    <rect x="1" y="13" width="10" height="10" fill="#00A4EF" />
+    <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
   </svg>
 );

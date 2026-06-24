@@ -9,14 +9,16 @@ import { useNavigate, Link } from 'react-router-dom';
 import hotelBg from '../../assets/images/hotel-bg.jpg';
 
 // ── Separate files ──
-import './LoginPage.css';
+
+
+import '../../styles/LoginPage.css';
 import {
   IconBed, IconUsers, IconChart, IconHeadphone,
   IconEmail, IconLock, IconEye, IconArrow,
   IconShield, IconBuilding, IconThumb,
   IconGlobe, IconChevron,
   GoogleLogo, MicrosoftLogo, HotelierCrown,
-} from './LoginIcons';
+} from '../../utils/icons/LoginIcons';
 
 // ============================================================
 //  COMPONENT
@@ -25,10 +27,10 @@ function LoginPage() {
   const navigate = useNavigate();
 
   // ── State ──
-  const [formData, setFormData]       = useState({ email: '', password: '', rememberMe: false });
+  const [formData, setFormData]         = useState({ email: '', password: '', rememberMe: false });
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]             = useState('');
-  const [loading, setLoading]         = useState(false);
+  const [error, setError]               = useState('');
+  const [loading, setLoading]           = useState(false);
 
   // ── Handlers ──
   const handleChange = (e) => {
@@ -52,10 +54,28 @@ function LoginPage() {
       // localStorage.setItem('token', res.data.token);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password.');
+      if (!err.response || err.response.status >= 500) {
+        navigate('/500');
+      } else {
+        setError(err.response?.data?.message || 'Invalid email or password.');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── Google login handler ──
+  const handleGoogleLogin = () => {
+    // TODO: connect to Google OAuth
+    // window.location.href = '/api/auth/google';
+    alert('Google login coming soon!');
+  };
+
+  // ── Google register handler ──
+  const handleGoogleRegister = () => {
+    // TODO: connect to Google OAuth register flow
+    // window.location.href = '/api/auth/google?mode=register';
+    navigate('/register');
   };
 
   // ── JSX (HTML structure) ──
@@ -132,13 +152,6 @@ function LoginPage() {
 
         {/* ════════════ RIGHT PANEL ════════════ */}
         <div className="auth-panel-right">
-
-          {/* Language picker */}
-          <div className="auth-lang-selector">
-            <IconGlobe />
-            <span>English</span>
-            <IconChevron />
-          </div>
 
           {/* Form header */}
           <div className="auth-form-header">
@@ -224,6 +237,55 @@ function LoginPage() {
               {loading ? 'Signing in…' : 'Sign In'}
               {!loading && <IconArrow />}
             </button>
+
+            {/* ── Divider ── */}
+            <div className="auth-divider">
+              <span className="auth-divider-line" />
+              <span className="auth-divider-text">or continue with</span>
+              <span className="auth-divider-line" />
+            </div>
+
+            {/* ── Social Login buttons ── */}
+            <div className="auth-social-buttons">
+              <button type="button" className="btn-social" onClick={handleGoogleLogin}>
+                <GoogleLogo />
+                Sign in with Google
+              </button>
+              <button type="button" className="btn-social" onClick={() => {}}>
+                <MicrosoftLogo />
+                Sign in with Microsoft
+              </button>
+            </div>
+
+            {/* ── Divider before register ── */}
+            <div className="auth-divider">
+              <span className="auth-divider-line" />
+              <span className="auth-divider-text">new here?</span>
+              <span className="auth-divider-line" />
+            </div>
+
+            {/* ── Register section ── */}
+            <div className="auth-register-box">
+              <p className="auth-register-text">
+                Don't have an account yet?
+              </p>
+
+              {/* Register with Google */}
+              <button type="button" className="btn-google-register" onClick={handleGoogleRegister}>
+                <GoogleLogo />
+                Register with Google
+              </button>
+
+              {/* Register with email */}
+              <button type="button" className="btn-register-now" onClick={() => navigate('/register')}>
+                Register Now →
+              </button>
+
+              <p className="auth-signin-link">
+                Already have an account?{' '}
+                <Link to="/login" className="auth-link-text">Sign In</Link>
+              </p>
+            </div>
 
           </form>
         </div>
