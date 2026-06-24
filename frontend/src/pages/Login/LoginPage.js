@@ -9,6 +9,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import hotelBg from '../../assets/images/hotel-bg.jpg';
 
 // ── Separate files ──
+
+
 import '../../styles/LoginPage.css';
 import {
   IconBed, IconUsers, IconChart, IconHeadphone,
