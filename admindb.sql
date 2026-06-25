@@ -20,6 +20,27 @@ CREATE TABLE users (
     status ENUM('active','inactive') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- ======================================
+-- HOTEL REGISTRATION PAGE
+-- ======================================
+
+CREATE TABLE hotels (
+    hotel_id INT AUTO_INCREMENT PRIMARY KEY,
+    hotel_name VARCHAR(255) NOT NULL,
+    hotel_type VARCHAR(100),
+    hotel_desc TEXT,
+    star_rating INT,
+    year_established YEAR,
+    gst_number VARCHAR(20),
+    pan_number VARCHAR(20),
+    business_reg_number VARCHAR(100),
+    hotel_logo VARCHAR(255),
+    status ENUM('pending','active','rejected') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+-- ======================================
+-- ROOMS PAGE
+-- ======================================
 
 CREATE TABLE rooms (
     room_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -37,6 +58,9 @@ CREATE TABLE rooms (
     qr_code_url TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- ======================================
+-- CUSTOMER PAGE
+-- ======================================
 
 CREATE TABLE customers (
     customer_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -50,6 +74,9 @@ CREATE TABLE customers (
     profile_image VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- ======================================
+-- BOOKINGS PAGE  
+-- ======================================
 
 CREATE TABLE bookings (
     booking_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -78,6 +105,9 @@ CREATE TABLE bookings (
     FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
     FOREIGN KEY (room_id) REFERENCES rooms(room_id)
 );
+-- ======================================
+-- PAYMENT PAGE
+-- ======================================
 
 CREATE TABLE payments (
     payment_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -100,6 +130,9 @@ CREATE TABLE payments (
     FOREIGN KEY (booking_id)
     REFERENCES bookings(booking_id)
 );
+-- ======================================
+-- FOOD ORDER PAGE
+-- ======================================
 
 CREATE TABLE food_orders (
     order_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -122,6 +155,9 @@ CREATE TABLE food_orders (
     FOREIGN KEY (room_id)
     REFERENCES rooms(room_id)
 );
+-- ======================================
+-- FOOD ITEMS PAGE
+-- ======================================
 
 CREATE TABLE food_order_items (
     item_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -134,6 +170,9 @@ CREATE TABLE food_order_items (
     FOREIGN KEY (order_id)
     REFERENCES food_orders(order_id)
 );
+-- ======================================
+-- SERVICE PAGE
+-- ======================================
 
 CREATE TABLE service_requests (
     request_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -163,6 +202,10 @@ CREATE TABLE service_requests (
     FOREIGN KEY (room_id)
     REFERENCES rooms(room_id)
 );
+-- ======================================
+-- STAFF PAGE
+-- ======================================
+
 
 CREATE TABLE staff (
     staff_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -176,6 +219,9 @@ CREATE TABLE staff (
     FOREIGN KEY (user_id)
     REFERENCES users(user_id)
 );
+-- ======================================
+-- ATTENDANCE PAGE
+-- ======================================
 
 CREATE TABLE attendance (
     attendance_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -193,6 +239,9 @@ CREATE TABLE attendance (
     FOREIGN KEY (staff_id)
     REFERENCES staff(staff_id)
 );
+-- ======================================
+-- PAYROLL PAGE
+-- ======================================
 
 CREATE TABLE payroll (
     payroll_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -211,6 +260,9 @@ CREATE TABLE payroll (
     FOREIGN KEY (staff_id)
     REFERENCES staff(staff_id)
 );
+-- ======================================
+-- INVOICE PAGE
+-- ======================================
 
 CREATE TABLE invoices (
     invoice_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -234,6 +286,9 @@ CREATE TABLE invoices (
     FOREIGN KEY (booking_id)
     REFERENCES bookings(booking_id)
 );
+-- ======================================
+--  NOTIFICATION PAGE
+-- ======================================
 
 CREATE TABLE notifications (
     notification_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -246,6 +301,9 @@ CREATE TABLE notifications (
     FOREIGN KEY (user_id)
     REFERENCES users(user_id)
 );
+-- ======================================
+-- QR CODE PAGE
+-- ======================================
 
 CREATE TABLE qr_codes (
     qr_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -348,3 +406,18 @@ show databases;
 
 select * from users;
 
+-- ====================
+-- VALUES
+-- ====================
+INSERT INTO users (
+  hotel_id,
+  full_name,
+  email,
+  phone,
+  password,
+  role,
+  status
+)VALUES (?,?,?,?,?,
+  'admin',
+  'active'
+);

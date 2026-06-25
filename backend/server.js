@@ -16,13 +16,12 @@ app.use(cors({
   origin: process.env.FRONTEND_URL, // matches your Vite env on the other side
   credentials: true,
 }));
+app.use(cookieParser());
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use(cookieParser()); // add this near your other app.use() calls
-
 
 app.use((req, res) => {
   res.status(404).json({ success: false, statusCode: 404, message: 'Route not found' });

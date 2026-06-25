@@ -7,7 +7,7 @@ const generateAccessToken = (user) => {
   return jwt.sign(
     { id: user.User_id, role: user.role },
     process.env.JWT_ACCESS_SECRET,
-    { expiresIn: '15m' } // short-lived
+    { expiresIn: '5m' } // short-lived
   );
 };
 
@@ -66,7 +66,7 @@ const isMatch = password === user.password;    if (!isMatch) {
       statusCode: 200,
       message: 'Login successful.',
       accessToken, // frontend stores this in memory
-      user: { id: user.id, fullName: user.full_name, role: user.role },
+      user: { id: user.User_id, fullName: user.full_name, role: user.role },
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -76,32 +76,67 @@ const isMatch = password === user.password;    if (!isMatch) {
 //creating Register function to register new user
 exports.register = async (req, res) => {
   try {
-    const { name, email, phone, password, role } = req.body;
+    const {
+      full_name,
+      email,
+      phone,
+      password,
+    } = req.body;
 
-    if (!name || !email || !password) {
+    console.log('Register Body:', req.body);
+
+    if (!full_name || !email || !phone || !password) {
       return res.status(400).json({
         success: false,
-        statusCode: 400,
-        message: 'Name, email, and password are required.',
+        message: 'All fields are required.',
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const [existingUser] = await db.query(
+      'SELECT * FROM users WHERE email = ?',
+      [email]
+    );
 
-    const sql = 'INSERT INTO users (full_name, email, phone, password, role) VALUES (?, ?, ?, ?, ?)';
-    const [result] = await db.query(sql, [name, email, phone || null, hashedPassword, role || 'receptionist']);
+    if (existingUser.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Email already exists.',
+      });
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO users (
+        full_name,
+        email,
+        phone,
+        password,
+        role,
+        status
+      )
+      VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        full_name,
+        email,
+        phone,
+        password,
+        'admin',
+        'active',
+      ]
+    );
+
+    console.log('Inserted User ID:', result.insertId);
 
     return res.status(201).json({
       success: true,
-      statusCode: 201,
-      message: 'User registered successfully.',
+      message: 'Registration successful.',
     });
   } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ success: false, statusCode: 409, message: 'Email already registered.' });
-    }
-    console.error('Register error:', error);
-    return res.status(500).json({ success: false, statusCode: 500, message: 'Server error.' });
+    console.error('Register Error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error.',
+    });
   }
 };
 //Refresh token startpoint
@@ -120,7 +155,7 @@ exports.refreshToken = (req, res) => {
     const newAccessToken = jwt.sign(
       { id: decoded.id },
       process.env.JWT_ACCESS_SECRET,
-      { expiresIn: '15m' }
+      { expiresIn: '5m' }
     );
 
     return res.status(200).json({ success: true, statusCode: 200, accessToken: newAccessToken });
