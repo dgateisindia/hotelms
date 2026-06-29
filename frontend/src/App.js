@@ -3,13 +3,21 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 
 // Auth Pages
 import LoginPage from './pages/Login/LoginPage';
-import RegisterPage from './pages/RegisterPage/RegisterPage';
+import RegisterPage from './pages/RegisterPage/SuperAdminRegisterPage';
 
 // Dashboard
 import Dashboard from './pages/Dashboard/Dashboard';
 
 // Protected Route
 import ProtectedRoute from './components/ProtectedRoute';
+// Role Protected Route
+//import RoleProtectedRoute from './components/RoleProtectedRoute';
+// Staff Management
+import ManageStaff from './pages/ManageStaff';
+// Super Admin Dashboard
+import SuperAdminDashboard from './pages/SuperAdminDashboard';
+// Super Admin Register Page
+import SuperAdminRegisterPage from "./pages/RegisterPage/SuperAdminRegisterPage";
 
 // Error Pages
 import {
@@ -21,6 +29,8 @@ import {
   Error503,
 } from './pages/Error/ErrorPages';
 
+import CreateHotelPage from "./pages/CreateHotelPage/CreateHotelPage";
+import RegisterAdminPage from "./pages/RegisterAdminPage/RegisterAdminPage";
 function App() {
   return (
     <Router>
@@ -29,8 +39,34 @@ function App() {
         {/* ================= AUTH ================= */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/setup/super-admin" element={<SuperAdminRegisterPage />} />
+
 
         {/* ================= PROTECTED ROUTES ================= */}
+        <Route
+  path="/super-admin"
+  element={
+    <ProtectedRoute allowedRoles={['super_admin']}>
+      <SuperAdminDashboard />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/create-hotel"
+  element={
+    <ProtectedRoute allowedRoles={["super_admin"]}>
+      <CreateHotelPage />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/register-admin"
+  element={
+    <ProtectedRoute allowedRoles={["super_admin"]}>
+      <RegisterAdminPage />
+    </ProtectedRoute>
+  }
+/>
 
         <Route
           path="/dashboard"
@@ -89,7 +125,7 @@ function App() {
         <Route
           path="/staff"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'manager']}>
               <Dashboard page="staff" />
             </ProtectedRoute>
           }

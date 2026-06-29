@@ -2,24 +2,49 @@ CREATE DATABASE hotelms;
 
 USE hotelms;
 
+-- =======================================
+-- ADMIN PAGE and SUPER ADMIN PAGE
+-- =======================================
+
+CREATE TABLE admins (
+    admin_id INT AUTO_INCREMENT PRIMARY KEY,
+    full_name VARCHAR(150),
+    email VARCHAR(150) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role ENUM('super_admin')DEFAULT 'super_admin',
+    status ENUM('active','inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE users (
-    user_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+
+    admin_id INT NOT NULL,
+
     full_name VARCHAR(150),
     email VARCHAR(150) UNIQUE,
     phone VARCHAR(20),
     password VARCHAR(255),
+
     role ENUM(
-        'super_admin',
         'admin',
         'receptionist',
         'housekeeping',
         'accountant',
         'customer'
-    ),
+    ) DEFAULT 'admin',
+
     profile_image VARCHAR(255),
+
     status ENUM('active','inactive') DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (admin_id)
+        REFERENCES admins(admin_id)
+        ON DELETE CASCADE
 );
+
 -- ======================================
 -- HOTEL REGISTRATION PAGE
 -- ======================================
@@ -46,7 +71,7 @@ CREATE TABLE rooms (
     room_id INT PRIMARY KEY AUTO_INCREMENT,
     room_number VARCHAR(20) UNIQUE,
     room_type VARCHAR(100),
-    floor_number INT,
+    Floor_number INT,
     price_per_night DECIMAL(10,2),
     capacity INT,
     status ENUM(
@@ -398,26 +423,20 @@ CREATE TABLE role_permissions (
     can_delete BOOLEAN DEFAULT FALSE
 );
 
-UPDATE users
-SET password = 'Admin@123'
-WHERE email = 'admin@gmail.com';
+ALTER TABLE admins ADD COLUMN hotel_id INT NULL;
+ALTER TABLE admins ADD COLUMN created_by INT NULL;
+ALTER TABLE admins ADD COLUMN must_change_password BOOLEAN DEFAULT TRUE;
+ALTER TABLE admins ADD FOREIGN KEY (hotel_id) REFERENCES hotels(hotel_id);
+ALTER TABLE admins ADD FOREIGN KEY (created_by) REFERENCES users(User_id);
 
-show databases;
-
+select * from admins;
 select * from users;
 
--- ====================
--- VALUES
--- ====================
-INSERT INTO users (
-  hotel_id,
-  full_name,
-  email,
-  phone,
-  password,
-  role,
-  status
-)VALUES (?,?,?,?,?,
-  'admin',
-  'active'
-);
+delete from users where user_id=7;
+
+truncate table users;
+
+select * from hotels;
+truncate table hotels;
+
+select * from rooms;

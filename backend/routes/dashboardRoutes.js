@@ -1,9 +1,11 @@
-// backend/routes/dashboardRoutes.js
+
 const express = require('express');
 const router = express.Router();
+const { protect } = require('../middleware/authMiddleware');
+const requireRole = require('../middleware/roleMiddleware');
+const { getSuperAdminStats, getAdminsStatus } = require('../controllers/dashboardController');
 
-router.get('/', (req, res) => {
-  res.status(200).json({ success: true, message: 'Dashboard routes working.' });
-});
+router.get('/super-admin-stats', protect, requireRole('super_admin'), getSuperAdminStats);
+router.get('/admins-status', protect, requireRole('super_admin'), getAdminsStatus);
 
 module.exports = router;

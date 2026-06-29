@@ -1,3 +1,5 @@
+
+console.log('PASSWORD LOADED:', process.env.DB_PASSWORD);
 const mysql = require('mysql2');
 
 const pool = mysql.createPool({

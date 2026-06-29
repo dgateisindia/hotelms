@@ -155,7 +155,7 @@ const handleSubmit = async () => {
   } catch (error) {
     console.error('Register Error:', error);
 
-    Swal.fire({
+    swal.fire({
       icon: 'error',
       title: 'Registration Failed',
       text:

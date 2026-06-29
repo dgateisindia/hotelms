@@ -1,0 +1,2 @@
+After registration super_admin can create one admin
+Admin will login with the credentials given by super_admin

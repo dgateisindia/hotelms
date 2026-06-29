@@ -75,8 +75,24 @@ function LoginPage() {
       timer: 2000,
       timerProgressBar: true,
     });
+    
+const role = res.data.user.role;
 
-    navigate('/dashboard');
+if (role === "super_admin") {
+  navigate("/create-hotel");
+}
+else if (role === "admin") {
+  navigate("/dashboard");
+}
+else if (role === "receptionist") {
+  navigate("/reception-dashboard");
+}
+else if (role === "housekeeping") {
+  navigate("/housekeeping-dashboard");
+}
+else if (role === "accountant") {
+  navigate("/accountant-dashboard");
+}
 
   } catch (err) {
     console.error('Login Error:', err);

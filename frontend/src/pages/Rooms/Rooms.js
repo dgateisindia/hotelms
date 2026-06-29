@@ -3,8 +3,8 @@
 //  Icons  → ../../utils/icons/RoomsIcons.js
 //  Styles → ../../styles/Rooms.css
 // ============================================================
-
-import React, { useState } from 'react';
+import React, { useState,useEffect } from 'react';
+import apiClient from "../../services/apiClient";
 import '../../styles/Rooms.css';
 import {
   IcoPlus, IcoSearch, IcoFilter,
@@ -14,17 +14,18 @@ import {
   IcoBed2, IcoCheck2, IcoUser2, IcoBrush, IcoWrench,
 } from '../../utils/icons/RoomsIcons';
 
+
 // ── Sample Data ───────────────────────────────────────────────
-const INITIAL_ROOMS = [
-  { id: 1, roomNo: '101', type: 'Deluxe Room',        floor: 1, capacity: '2 Adults',           price: '₹ 4,000',  status: 'Available',   amenities: ['wifi','tv','bath','ac'] },
-  { id: 2, roomNo: '102', type: 'Deluxe Room',        floor: 1, capacity: '2 Adults',           price: '₹ 4,000',  status: 'Occupied',    amenities: ['wifi','tv','bath','ac'] },
-  { id: 3, roomNo: '201', type: 'Premium Room',       floor: 2, capacity: '2 Adults + 1 Child', price: '₹ 5,500',  status: 'Occupied',    amenities: ['wifi','tv','bath','ac'] },
-  { id: 4, roomNo: '202', type: 'Premium Room',       floor: 2, capacity: '2 Adults + 1 Child', price: '₹ 5,500',  status: 'Cleaning',    amenities: ['wifi','tv','bath','ac'] },
-  { id: 5, roomNo: '301', type: 'Suite Room',         floor: 3, capacity: '4 Adults',           price: '₹ 8,500',  status: 'Available',   amenities: ['wifi','tv','bath','ac'] },
-  { id: 6, roomNo: '302', type: 'Suite Room',         floor: 3, capacity: '4 Adults',           price: '₹ 8,500',  status: 'Maintenance', amenities: ['wifi','tv','bath','ac'] },
-  { id: 7, roomNo: '401', type: 'Executive Room',     floor: 4, capacity: '2 Adults',           price: '₹ 6,000',  status: 'Available',   amenities: ['wifi','tv','bath','ac'] },
-  { id: 8, roomNo: '501', type: 'Presidential Suite', floor: 5, capacity: '4 Adults + 2 Child', price: '₹ 15,000', status: 'Occupied',    amenities: ['wifi','tv','bath','ac'] },
-];
+/*const INITIAL_ROOMS = [
+  { id: '', roomNo: '101', type: 'Deluxe Room',        floor: 1, capacity: '2 Adults',           price: '₹ 4,000',  status: 'Available',   amenities: ['wifi','tv','bath','ac'] },
+  { id: '', roomNo: '102', type: 'Deluxe Room',        floor: 1, capacity: '2 Adults',           price: '₹ 4,000',  status: 'Occupied',    amenities: ['wifi','tv','bath','ac'] },
+  { id: '', roomNo: '201', type: 'Premium Room',       floor: 2, capacity: '2 Adults + 1 Child', price: '₹ 5,500',  status: 'Occupied',    amenities: ['wifi','tv','bath','ac'] },
+  { id: '', roomNo: '202', type: 'Premium Room',       floor: 2, capacity: '2 Adults + 1 Child', price: '₹ 5,500',  status: 'Cleaning',    amenities: ['wifi','tv','bath','ac'] },
+  { id: '', roomNo: '301', type: 'Suite Room',         floor: 3, capacity: '4 Adults',           price: '₹ 8,500',  status: 'Available',   amenities: ['wifi','tv','bath','ac'] },
+  { id: '', roomNo: '302', type: 'Suite Room',         floor: 3, capacity: '4 Adults',           price: '₹ 8,500',  status: 'Maintenance', amenities: ['wifi','tv','bath','ac'] },
+  { id: '', roomNo: '401', type: 'Executive Room',     floor: 4, capacity: '2 Adults',           price: '₹ 6,000',  status: 'Available',   amenities: ['wifi','tv','bath','ac'] },
+  { id: '', roomNo: '501', type: 'Presidential Suite', floor: 5, capacity: '4 Adults + 2 Child', price: '₹ 15,000', status: 'Occupied',    amenities: ['wifi','tv','bath','ac'] },
+];*/
 
 const EMPTY_FORM = { roomNo: '', type: 'Deluxe Room', floor: '1', capacity: '2 Adults', price: '', status: 'Available' };
 const PER_PAGE = 8;
@@ -39,7 +40,7 @@ const statusClass = (s) => {
 //  COMPONENT
 // ════════════════════════════════════════════════════════════
 function Rooms() {
-  const [rooms, setRooms]               = useState(INITIAL_ROOMS);
+  const [rooms, setRooms]               = useState([]);
   const [search, setSearch]             = useState('');
   const [filterFloor, setFilterFloor]   = useState('All Floors');
   const [filterType, setFilterType]     = useState('All Room Types');
@@ -56,7 +57,9 @@ function Rooms() {
 
   // ── Filter logic ──
   const filtered = rooms.filter(r => {
-    const matchSearch = r.roomNo.includes(search) || r.type.toLowerCase().includes(search.toLowerCase());
+const matchSearch =
+  (r.roomNo || "").includes(search) ||
+  (r.type || "").toLowerCase().includes(search.toLowerCase());
     const matchFloor  = filterFloor  === 'All Floors'     || r.floor === parseInt(filterFloor);
     const matchType   = filterType   === 'All Room Types'  || r.type  === filterType;
     const matchStatus = filterStatus === 'All Status'      || r.status === filterStatus;
@@ -68,10 +71,10 @@ function Rooms() {
 
   // ── Stats ──
   const totalRooms       = rooms.length;
-  const availableRooms   = rooms.filter(r => r.status === 'Available').length;
-  const occupiedRooms    = rooms.filter(r => r.status === 'Occupied').length;
-  const cleaningRooms    = rooms.filter(r => r.status === 'Cleaning').length;
-  const maintenanceRooms = rooms.filter(r => r.status === 'Maintenance').length;
+  const availableRooms   = rooms.filter(r => r.status === 'available').length;
+  const occupiedRooms    = rooms.filter(r => r.status === 'occupied').length;
+  const cleaningRooms    = rooms.filter(r => r.status === 'cleaning').length;
+  const maintenanceRooms = rooms.filter(r => r.status === 'maintenance').length;
 
   // ── Handlers ──
   const openAdd    = () => { setForm(EMPTY_FORM); setShowAdd(true); };
@@ -79,20 +82,100 @@ function Rooms() {
   const openView   = (r) => { setSelected(r); setShowView(true); };
   const openDelete = (r) => { setSelected(r); setShowDelete(true); };
 
-  const handleAdd = () => {
-    setRooms(prev => [{ ...form, id: Date.now(), floor: parseInt(form.floor), amenities: ['wifi','tv','bath','ac'] }, ...prev]);
+const handleAdd = async () => {
+  if (
+    !form.roomNo.trim() ||
+    !form.floor ||
+    !form.type ||
+    !form.capacity ||
+    form.price === "" ||
+    !form.status
+  ) {
+    alert("Please fill all room details.");
+    return;
+  }
+
+  try {
+    const roomData = {
+      roomNo: form.roomNo.trim(),
+      type: form.type,
+      floor: Number(form.floor),
+      capacity: form.capacity,
+      price: Number(form.price),
+      status: form.status,
+    };
+
+    await apiClient.post("/rooms", roomData);
+
+    fetchRooms();
+    setForm(EMPTY_FORM);
     setShowAdd(false);
-  };
 
-  const handleEdit = () => {
-    setRooms(prev => prev.map(r => r.id === selected.id ? { ...r, ...form, floor: parseInt(form.floor) } : r));
+  } catch (error) {
+    console.error("Error adding room:", error);
+  }
+};
+//Fetch rooms from the database
+const fetchRooms = async () => {
+  try {
+    const res = await apiClient.get("/rooms");
+
+    const formattedRooms = res.data.map(room => ({
+      id: room.room_id,
+      roomNo: room.room_number,
+      type: room.room_type,
+      floor: room.floor_number,
+      capacity: room.capacity,
+      price: room.price_per_night,
+      status: room.status,
+      amenities: [], // temporary
+    }));
+
+    setRooms(formattedRooms);
+
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+useEffect(() => {
+  fetchRooms();
+}, []);
+
+  const handleEdit = async () => {
+  try {
+
+    await apiClient.put(`/rooms/${selected.id}`, {
+      roomNo: form.roomNo,
+      type: form.type,
+      floor: form.floor,
+      capacity: form.capacity,
+      price: form.price,
+      status: form.status,
+    });
+
+    await fetchRooms();
+
     setShowEdit(false);
-  };
 
-  const handleDelete = () => {
-    setRooms(prev => prev.filter(r => r.id !== selected.id));
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+  const handleDelete = async () => {
+  try {
+
+    await apiClient.delete(`/rooms/${selected.id}`);
+
+    await fetchRooms();
+
     setShowDelete(false);
-  };
+
+  } catch (err) {
+    console.error(err);
+  }
+};
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -111,7 +194,7 @@ function Rooms() {
           <div className="modal-grid">
             <div className="form-group">
               <label className="form-label">Room No.</label>
-              <input className="form-input" name="roomNo" value={form.roomNo} onChange={handleFormChange} placeholder="e.g. 101" />
+              <input className="form-input" name="roomNo" value={form.roomNo} onChange={handleFormChange} placeholder="e.g. 101" required/>
             </div>
             <div className="form-group">
               <label className="form-label">Floor</label>
@@ -121,7 +204,7 @@ function Rooms() {
             </div>
             <div className="form-group">
               <label className="form-label">Room Type</label>
-              <select className="form-select" name="type" value={form.type} onChange={handleFormChange}>
+              <select className="form-select" name="type" value={form.type} onChange={handleFormChange}required>
                 <option>Deluxe Room</option>
                 <option>Premium Room</option>
                 <option>Suite Room</option>
@@ -131,7 +214,7 @@ function Rooms() {
             </div>
             <div className="form-group">
               <label className="form-label">Capacity</label>
-              <select className="form-select" name="capacity" value={form.capacity} onChange={handleFormChange}>
+              <select className="form-select" name="capacity" value={form.capacity} onChange={handleFormChange}required>
                 <option>2 Adults</option>
                 <option>2 Adults + 1 Child</option>
                 <option>4 Adults</option>
@@ -140,11 +223,20 @@ function Rooms() {
             </div>
             <div className="form-group">
               <label className="form-label">Price / Night</label>
-              <input className="form-input" name="price" value={form.price} onChange={handleFormChange} placeholder="e.g. ₹ 4,000" />
-            </div>
+<input
+  className="form-input"
+  type="number"
+  name="price"
+  step="0.01"
+  min="0.00"
+  value={form.price}
+  onChange={handleFormChange}
+  placeholder="e.g. 4000.00"
+  required
+/>            </div>
             <div className="form-group">
               <label className="form-label">Status</label>
-              <select className="form-select" name="status" value={form.status} onChange={handleFormChange}>
+              <select className="form-select" name="status" value={form.status} onChange={handleFormChange} required>
                 <option>Available</option>
                 <option>Occupied</option>
                 <option>Cleaning</option>
@@ -197,9 +289,13 @@ function Rooms() {
         </select>
         <select className="filter-select" value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }}>
           <option>All Room Types</option>
-          <option>Standard</option>
-          <option>Deluxe</option>
-          <option>Suite</option>
+          <option>Premimum Room</option>
+          <option>Deluxe Room</option>
+          <option>Suite Room</option>
+          <option>Executive Room</option>
+          <option>Presidential Room</option>
+
+
         </select>
         <select className="filter-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }}>
           <option>All Status</option>
@@ -242,10 +338,10 @@ function Rooms() {
                   <td><span className={statusClass(r.status)}>{r.status}</span></td>
                   <td>
                     <div className="amenities">
-                      {r.amenities.includes('wifi') && <IcoWifi />}
-                      {r.amenities.includes('tv')   && <IcoTV />}
-                      {r.amenities.includes('bath') && <IcoBath />}
-                      {r.amenities.includes('ac')   && <IcoAC />}
+                      {(r.amenities || []).includes('wifi') && <IcoWifi />}
+                      {(r.amenities || []).includes('tv') && <IcoTV />}
+                      {(r.amenities || []).includes('bath') && <IcoBath />}
+                      {(r.amenities || []).includes('ac') && <IcoAC />}
                     </div>
                   </td>
                   <td>
@@ -291,7 +387,7 @@ function Rooms() {
           <div className="rstat-info">
             <div className="rstat-label">Available Rooms</div>
             <div className="rstat-value">{availableRooms}</div>
-            <div className="rstat-sub">{Math.round((availableRooms / totalRooms) * 100)}% of Total</div>
+            <div className="rstat-sub">{totalRooms ? Math.round((availableRooms / totalRooms) * 100) : 0}%</div>
           </div>
         </div>
         <div className="rstat-card">
@@ -299,7 +395,7 @@ function Rooms() {
           <div className="rstat-info">
             <div className="rstat-label">Occupied Rooms</div>
             <div className="rstat-value">{occupiedRooms}</div>
-            <div className="rstat-sub">{Math.round((occupiedRooms / totalRooms) * 100)}% of Total</div>
+            <div className="rstat-sub">{totalRooms ? Math.round((occupiedRooms / totalRooms) * 100) : 0}% of Total</div>
           </div>
         </div>
         <div className="rstat-card">
@@ -307,7 +403,7 @@ function Rooms() {
           <div className="rstat-info">
             <div className="rstat-label">Cleaning Rooms</div>
             <div className="rstat-value">{cleaningRooms}</div>
-            <div className="rstat-sub">{Math.round((cleaningRooms / totalRooms) * 100)}% of Total</div>
+            <div className="rstat-sub">{totalRooms ? Math.round((cleaningRooms / totalRooms) * 100) : 0}% of Total</div>
           </div>
         </div>
         <div className="rstat-card">
@@ -315,7 +411,7 @@ function Rooms() {
           <div className="rstat-info">
             <div className="rstat-label">Maintenance Rooms</div>
             <div className="rstat-value">{maintenanceRooms}</div>
-            <div className="rstat-sub">{Math.round((maintenanceRooms / totalRooms) * 100)}% of Total</div>
+            <div className="rstat-sub">{totalRooms ? Math.round((maintenanceRooms / totalRooms) * 100) : 0}% of Total</div>
           </div>
         </div>
       </div>

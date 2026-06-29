@@ -34,6 +34,8 @@ const NAV_ITEMS = [
   { label: 'Reports',         icon: <IcoReports />,      path: '/reports' },
   { label: 'Notifications',   icon: <IcoAttendance />,   path: '/notifications', badge: 6 },
   { label: 'Settings',        icon: <IcoSettings />,     path: '/settings' },
+  { label: 'Manage Staff',     icon: <IcoStaff />,       path: '/manage-staff', roles: ['super_admin'] },
+
 ];
 
 const STAT_CARDS = [
@@ -224,8 +226,11 @@ const CrownLogo = () => (
 //  MAIN COMPONENT
 // ════════════════════════════════════════════════════════════
 function Dashboard({ page = 'dashboard' }) {
+
   const navigate = useNavigate();
   const [activePath, setActivePath] = useState('/' + page);
+
+
 
   const handleLogout = async () => {
   const result = await Swal.fire({
@@ -238,6 +243,7 @@ function Dashboard({ page = 'dashboard' }) {
     confirmButtonText: "Logout",
     cancelButtonText: "Stay Logged In",
   });
+  
 
   if (result.isConfirmed) {
     clearTokens();
