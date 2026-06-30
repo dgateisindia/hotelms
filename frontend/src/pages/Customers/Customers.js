@@ -240,7 +240,7 @@ function Customers() {
           </div>
           <button className="btn-filter-outline"><IcoFilter /> Filter</button>
           <button className="btn-add-customer" onClick={openAdd}>
-            <IcoPlus /> + Add New Customer
+            <IcoPlus />Add New Customer
           </button>
         </div>
       </div>
@@ -322,7 +322,6 @@ function Customers() {
                     <div className="action-btns">
                       <button className="btn-icon btn-icon-view"   title="View"   onClick={() => openView(c)}><IcoEye /></button>
                       <button className="btn-icon btn-icon-edit"   title="Edit"   onClick={() => openEdit(c)}><IcoEdit /></button>
-                      <button className="btn-icon btn-icon-delete" title="Delete" onClick={() => openDelete(c)}><IcoTrash /></button>
                     </div>
                   </td>
                 </tr>

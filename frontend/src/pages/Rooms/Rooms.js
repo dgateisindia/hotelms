@@ -252,7 +252,6 @@ function Rooms() {
                     <div className="action-btns">
                       <button className="btn-icon btn-icon-view"   title="View"   onClick={() => openView(r)}><IcoEye /></button>
                       <button className="btn-icon btn-icon-edit"   title="Edit"   onClick={() => openEdit(r)}><IcoEdit /></button>
-                      <button className="btn-icon btn-icon-delete" title="Delete" onClick={() => openDelete(r)}><IcoTrash /></button>
                     </div>
                   </td>
                 </tr>
