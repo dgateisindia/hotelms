@@ -3,14 +3,14 @@
 //  Icons  → imported from LoginIcons.js
 //  Styles → imported from LoginPage.css
 // ============================================================
+
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import Swal from 'sweetalert2';
-
-import { loginUser } from '../../services/authService';
-import { setAccessToken } from '../../utils/icons/tokenManager';
-
 import hotelBg from '../../assets/images/hotel-bg.jpg';
+
+// ── Separate files ──
+
+
 import '../../styles/LoginPage.css';
 import {
   IconBed, IconUsers, IconChart, IconHeadphone,
@@ -39,76 +39,31 @@ function LoginPage() {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
+    e.preventDefault();
+    setError('');
 
-  if (!formData.email || !formData.password) {
-    setError('Please enter your email and password.');
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const res = await loginUser(
-      formData.email,
-      formData.password
-    );
-
-    // Store JWT Token
-    setAccessToken(res.data.accessToken);
-
-    // Store User Details
-    localStorage.setItem(
-      'user',
-      JSON.stringify(res.data.user)
-    );
-
-    // Success Popup
-    await Swal.fire({
-      icon: 'success',
-      title: 'Login Successful',
-      text: `Welcome ${
-        res.data.user?.fullName || 'Admin'
-      }!`,
-      confirmButtonText: 'Continue',
-      timer: 2000,
-      timerProgressBar: true,
-    });
-    
-const role = res.data.user.role;
-
-if (role === "super_admin") {
-  navigate("/super-admin");
-}
-else if (role === "admin") {
-  navigate("/dashboard");
-}
-else if (role === "receptionist") {
-  navigate("/reception-dashboard");
-}
-else if (role === "housekeeping") {
-  navigate("/housekeeping-dashboard");
-}
-else if (role === "accountant") {
-  navigate("/accountant-dashboard");
-}
-
-  } catch (err) {
-    console.error('Login Error:', err);
-
-    if (!err.response || err.response.status >= 500) {
-      navigate('/500');
-    } else {
-      setError(
-        err.response?.data?.message ||
-        'Invalid email or password.'
-      );
+    if (!formData.email || !formData.password) {
+      setError('Please enter your email and password.');
+      return;
     }
-  } finally {
-    setLoading(false);
-  }
-};
+
+    setLoading(true);
+    try {
+      // TODO: connect to backend API
+      // const res = await axios.post('/api/auth/login', { email: formData.email, password: formData.password });
+      // localStorage.setItem('token', res.data.token);
+      navigate('/dashboard');
+    } catch (err) {
+      if (!err.response || err.response.status >= 500) {
+        navigate('/500');
+      } else {
+        setError(err.response?.data?.message || 'Invalid email or password.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ── Google login handler ──
   const handleGoogleLogin = () => {
     // TODO: connect to Google OAuth

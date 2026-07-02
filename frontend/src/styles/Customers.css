@@ -52,7 +52,7 @@
   cursor: pointer;
   font-family: 'Inter', sans-serif;
   white-space: nowrap;
-  transition: bg 0.2s;
+  transition: background 0.2s;
 }
 .btn-add-customer:hover { background: #243570; }
 

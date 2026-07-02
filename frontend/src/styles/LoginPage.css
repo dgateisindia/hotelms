@@ -342,7 +342,7 @@
   cursor: pointer;
   background: #0d1b4b;
   color: #ffffff;
-  transition: bg 0.2s ease, box-shadow 0.2s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .btn-primary:hover {
@@ -392,7 +392,7 @@
   border: 1.5px solid #e2e6ef;
   border-radius: 10px;
   cursor: pointer;
-  transition: border-color 0.2s ease, bg 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease;
   font-family: 'Inter', sans-serif;
 }
 
@@ -536,7 +536,7 @@
   border: 1.5px solid #e2e6ef;
   border-radius: 10px;
   cursor: pointer;
-  transition: border-color 0.2s, bg 0.2s;
+  transition: border-color 0.2s, background 0.2s;
   font-family: 'Inter', sans-serif;
   white-space: nowrap;
 }
@@ -599,7 +599,7 @@
   border-radius: 10px;
   cursor: pointer;
   font-family: 'Inter', sans-serif;
-  transition: bg 0.2s, transform 0.15s;
+  transition: background 0.2s, transform 0.15s;
   letter-spacing: 0.3px;
 }
 .btn-register-now:hover {

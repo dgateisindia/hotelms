@@ -7,16 +7,13 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import '../../styles/Dashboard.css';
+import Billing from '../Billing/Billing';
 import Bookings from '../Bookings/Bookings';
 import Rooms from '../Rooms/Rooms';
 import Customers from '../Customers/Customers';
-import Sidebar from '../../components/Sidebar';
-import Header from '../../components/Header';
-//import StatCard from '../../components/StatCard';
-//import LineChart from '../../components/LineChart';
-//import DonutChart from '../../components/DonutChart';
-//import RecentBookingsTable from '../../components/RecentBookingsTable';
-
+import Staff from '../Staff/Staff';
+import Reports from '../Reports/Reports';
+import Attendance from '../Attendance/Attendance';
 import {
   IcoDashboard, IcoBookings, IcoRooms, IcoCustomers,
   IcoRoomService, IcoBilling, IcoStaff, IcoAttendance,
@@ -24,8 +21,6 @@ import {
   IcoTrendUp, IcoArrowRight, IcoLogout,
   IcoCalendar, IcoBed, IcoDoor, IcoRupee,
 } from '../../utils/icons/DashboardIcons';
-import { clearTokens } from '../../utils/icons/tokenManager';
-import Swal from "sweetalert2";
 
 // ── Static Data ──────────────────────────────────────────────
 
@@ -34,16 +29,13 @@ const NAV_ITEMS = [
   { label: 'Bookings',        icon: <IcoBookings />,     path: '/bookings' },
   { label: 'Rooms',           icon: <IcoRooms />,        path: '/rooms' },
   { label: 'Customers',       icon: <IcoCustomers />,    path: '/customers' },
-  { label: 'Room Service',    icon: <IcoRoomService />,  path: '/room-service' },
-  { label: 'Billing & Invoice', icon: <IcoBilling />,   path: '/billing' },
+  { label: 'Billing', icon: <IcoBilling />,   path: '/billing' },
   { label: 'Staff',           icon: <IcoStaff />,        path: '/staff' },
   { label: 'Attendance',      icon: <IcoAttendance />,   path: '/attendance' },
   { label: 'Payroll',         icon: <IcoPayroll />,      path: '/payroll' },
   { label: 'Reports',         icon: <IcoReports />,      path: '/reports' },
   { label: 'Notifications',   icon: <IcoAttendance />,   path: '/notifications', badge: 6 },
   { label: 'Settings',        icon: <IcoSettings />,     path: '/settings' },
-  { label: 'Manage Staff',     icon: <IcoStaff />,       path: '/manage-staff', roles: ['super_admin'] },
-
 ];
 
 const STAT_CARDS = [
@@ -188,7 +180,7 @@ const DonutChart = ({ occupied, available }) => {
           {/* Occupied arc */}
           <circle
             cx={CX} cy={CY} r={R}
-            fill="none" 
+            fill="none"
             stroke="#3b82f6"
             strokeWidth="20"
             strokeDasharray={`${occupiedDash} ${circumference}`}
@@ -234,38 +226,14 @@ const CrownLogo = () => (
 //  MAIN COMPONENT
 // ════════════════════════════════════════════════════════════
 function Dashboard({ page = 'dashboard' }) {
-
   const navigate = useNavigate();
   const [activePath, setActivePath] = useState('/' + page);
 
-
-
-  const handleLogout = async () => {
-  const result = await Swal.fire({
-    title: "Confirm Logout",
-    text: "You will need to sign in again to access the dashboard.",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonColor: "#1e3a8a",
-    cancelButtonColor: "#6b7280",
-    confirmButtonText: "Logout",
-    cancelButtonText: "Stay Logged In",
-  });
-  
-
-  if (result.isConfirmed) {
-    clearTokens();
-
-    await Swal.fire({
-      icon: "success",
-      title: "See You Again!",
-      text: "You have been logged out successfully.",
-      confirmButtonText: "OK",
-    });
-
-    navigate("/login");
-  }
-};
+  const handleLogout = () => {
+    // TODO: clear token
+    // localStorage.removeItem('token');
+    navigate('/login');
+  };
 
   return (
     <div className="dash-layout">
@@ -332,7 +300,13 @@ function Dashboard({ page = 'dashboard' }) {
 
           {/* ── Render page content ── */}
           {page === 'bookings' ? <Bookings /> :
-          page === 'rooms' ? <Rooms /> : (
+          page === 'rooms'     ? <Rooms /> :
+          page === 'customers' ? <Customers /> :
+          page === 'billing' ? <Billing /> :
+          page === 'reports'      ? <Reports /> :
+          page === 'attendance'   ? <Attendance /> :
+          page === 'staff'     ? <Staff /> : 
+          (
           <>
 
           {/* ── Stat Cards ── */}

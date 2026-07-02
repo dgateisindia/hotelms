@@ -453,8 +453,6 @@
 @media (max-width: 480px) {
   .booking-stats { grid-template-columns: 1fr; }
 }
-<<<<<<< HEAD
-=======
 /* ============================================================
    APPEND THIS TO YOUR EXISTING Bookings.css
    Multi-room booking additions
@@ -805,4 +803,3 @@
   text-decoration: underline;
 }
 .id-proof-replace-btn:hover { color: #1a2a5e; }
->>>>>>> frontend
