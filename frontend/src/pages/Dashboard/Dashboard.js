@@ -7,9 +7,13 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import '../../styles/Dashboard.css';
+import Billing from '../Billing/Billing';
 import Bookings from '../Bookings/Bookings';
 import Rooms from '../Rooms/Rooms';
 import Customers from '../Customers/Customers';
+import Staff from '../Staff/Staff';
+import Reports from '../Reports/Reports';
+import Attendance from '../Attendance/Attendance';
 import {
   IcoDashboard, IcoBookings, IcoRooms, IcoCustomers,
   IcoRoomService, IcoBilling, IcoStaff, IcoAttendance,
@@ -25,8 +29,7 @@ const NAV_ITEMS = [
   { label: 'Bookings',        icon: <IcoBookings />,     path: '/bookings' },
   { label: 'Rooms',           icon: <IcoRooms />,        path: '/rooms' },
   { label: 'Customers',       icon: <IcoCustomers />,    path: '/customers' },
-  { label: 'Room Service',    icon: <IcoRoomService />,  path: '/room-service' },
-  { label: 'Billing & Invoice', icon: <IcoBilling />,   path: '/billing' },
+  { label: 'Billing', icon: <IcoBilling />,   path: '/billing' },
   { label: 'Staff',           icon: <IcoStaff />,        path: '/staff' },
   { label: 'Attendance',      icon: <IcoAttendance />,   path: '/attendance' },
   { label: 'Payroll',         icon: <IcoPayroll />,      path: '/payroll' },
@@ -298,7 +301,12 @@ function Dashboard({ page = 'dashboard' }) {
           {/* ── Render page content ── */}
           {page === 'bookings' ? <Bookings /> :
           page === 'rooms'     ? <Rooms /> :
-          page === 'customers' ? <Customers /> : (
+          page === 'customers' ? <Customers /> :
+          page === 'billing' ? <Billing /> :
+          page === 'reports'      ? <Reports /> :
+          page === 'attendance'   ? <Attendance /> :
+          page === 'staff'     ? <Staff /> : 
+          (
           <>
 
           {/* ── Stat Cards ── */}
