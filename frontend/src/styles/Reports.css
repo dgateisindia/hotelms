@@ -1,0 +1,126 @@
+/* ============================================================
+   Reports.css — Reports & Analytics Page Styles
+   ============================================================ */
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; width: 100%; }
+.page-header-left h2 { font-size: 20px; font-weight: 700; color: #1a1f36; }
+.page-header-left p  { font-size: 13px; color: #6b7280; margin-top: 2px; }
+.page-header-right   { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.date-range-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1.5px solid #e4e8f0; border-radius: 8px; font-size: 13px; color: #1a1f36; background: #fff; font-weight: 500; cursor: pointer; }
+.date-range-badge svg:last-child { color: #9ca3af; margin-left: 2px; }
+
+.btn-export-report { display: inline-flex; align-items: center; gap: 7px; background: #1a2a5e; color: #fff; border: none; border-radius: 8px; padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: background 0.2s; white-space: nowrap; }
+.btn-export-report:hover { background: #243570; }
+
+/* ── Stat Cards ── */
+.rep-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 20px; width: 100%; }
+.repstat-card { background: #fff; border: 1px solid #e4e8f0; border-radius: 12px; padding: 16px 18px; display: flex; align-items: center; gap: 12px; }
+.repstat-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.repstat-icon.green  { background: #f0fdf4; color: #10b981; }
+.repstat-icon.blue   { background: #eff6ff; color: #3b82f6; }
+.repstat-icon.purple { background: #faf5ff; color: #8b5cf6; }
+.repstat-icon.red    { background: #fef2f2; color: #ef4444; }
+.repstat-icon.teal   { background: #ecfeff; color: #0891b2; }
+.repstat-label { font-size: 11px; color: #6b7280; font-weight: 500; }
+.repstat-value { font-size: 18px; font-weight: 800; color: #1a1f36; line-height: 1.2; }
+.repstat-change { font-size: 10px; color: #10b981; margin-top: 3px; display: flex; align-items: center; gap: 3px; }
+.repstat-change.neg { color: #ef4444; }
+
+/* ── Top row: Revenue + Revenue by Room Type + Occupancy ── */
+.rep-row-1 { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 16px; margin-bottom: 16px; width: 100%; }
+
+.rep-card { background: #fff; border: 1px solid #e4e8f0; border-radius: 12px; padding: 18px 20px; }
+.rep-card-title { font-size: 12px; font-weight: 700; color: #1a1f36; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
+
+.rep-legend-inline { display: flex; align-items: center; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+.rep-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #6b7280; }
+.rep-legend-dash { width: 14px; height: 2px; flex-shrink: 0; }
+.rep-legend-dash.solid { background: #3b82f6; }
+.rep-legend-dash.dashed { background: repeating-linear-gradient(90deg, #9ca3af 0 4px, transparent 4px 7px); }
+
+/* Donut wrap (revenue by room type) */
+.donut-wrap-rep { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.donut-center-rep { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.donut-amt-rep { font-size: 13px; font-weight: 800; color: #1a1f36; }
+.donut-sub-rep { font-size: 9px; color: #6b7280; margin-top: 1px; }
+.donut-legend-rep { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.donut-leg-item-rep { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #1a1f36; }
+.donut-dot-rep { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.donut-pct-rep { margin-left: auto; font-weight: 700; }
+
+/* Occupancy big donut */
+.occ-donut-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+.occ-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.occ-pct { font-size: 26px; font-weight: 800; color: #1a1f36; }
+.occ-label { font-size: 10px; color: #6b7280; margin-top: 2px; }
+.occ-change { font-size: 11px; color: #10b981; margin-top: 10px; display: flex; align-items: center; gap: 4px; }
+
+/* ── Row 2: Occupancy by room type + Daily booking trend + Top channels ── */
+.rep-row-2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; width: 100%; }
+
+/* Horizontal bar chart */
+.hbar-item { margin-bottom: 12px; }
+.hbar-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.hbar-label { font-size: 12px; color: #1a1f36; font-weight: 500; }
+.hbar-pct   { font-size: 12px; font-weight: 700; color: #1a1f36; }
+.hbar-track { height: 8px; background: #f1f4f9; border-radius: 10px; overflow: hidden; }
+.hbar-fill  { height: 100%; border-radius: 10px; background: #3b82f6; }
+.hbar-axis  { display: flex; justify-content: space-between; font-size: 9px; color: #9ca3af; margin-top: 8px; }
+
+/* Vertical bar chart (daily booking trend) */
+.vbar-wrap { display: flex; align-items: flex-end; gap: 4px; height: 110px; padding-top: 10px; }
+.vbar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.vbar-bar { width: 100%; background: #3b82f6; border-radius: 3px 3px 0 0; min-height: 4px; transition: height 0.3s; }
+.vbar-label { font-size: 8px; color: #9ca3af; margin-top: 4px; }
+.vbar-legend { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; color: #6b7280; }
+.vbar-legend-dot { width: 8px; height: 8px; border-radius: 2px; background: #3b82f6; }
+
+/* Top booking channels */
+.channel-item { margin-bottom: 10px; }
+.channel-top { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.channel-label { font-size: 12px; color: #1a1f36; font-weight: 500; }
+.channel-pct   { font-size: 12px; font-weight: 700; color: #1a1f36; }
+.channel-track { height: 7px; background: #f1f4f9; border-radius: 10px; overflow: hidden; }
+.channel-fill  { height: 100%; border-radius: 10px; }
+.channel-axis  { display: flex; justify-content: space-between; font-size: 9px; color: #9ca3af; margin-top: 8px; }
+
+/* ── Row 3: Monthly Summary table + Revenue Forecast + Insights ── */
+.rep-row-3 { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 16px; width: 100%; }
+
+/* Monthly performance table */
+.perf-table { width: 100%; border-collapse: collapse; }
+.perf-table th { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid #e4e8f0; text-align: left; }
+.perf-table td { font-size: 12px; color: #1a1f36; padding: 8px; border-bottom: 1px solid #f1f4f9; }
+.perf-table tr:last-child td { border-bottom: none; }
+.view-detail-link { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 12px; color: #3b82f6; font-weight: 600; cursor: pointer; margin-top: 12px; padding-top: 10px; border-top: 1px solid #f1f4f9; }
+
+/* Forecast mini chart */
+.forecast-legend { display: flex; align-items: center; gap: 14px; margin-top: 8px; font-size: 10px; color: #6b7280; }
+
+/* Insights list */
+.insight-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f1f4f9; font-size: 12px; color: #1a1f36; line-height: 1.45; }
+.insight-item:last-child { border-bottom: none; }
+.insight-icon { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.insight-icon.green  { background: #f0fdf4; color: #10b981; }
+.insight-icon.blue   { background: #eff6ff; color: #3b82f6; }
+.insight-icon.gold   { background: #fffbeb; color: #c9a227; }
+.insight-icon.purple { background: #faf5ff; color: #8b5cf6; }
+.view-all-insights { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #3b82f6; font-weight: 600; cursor: pointer; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1f4f9; justify-content: center; }
+
+/* ── Responsive ── */
+@media (max-width: 1300px) {
+  .rep-row-1, .rep-row-2, .rep-row-3 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 1100px) {
+  .rep-stats { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 900px) {
+  .rep-row-1, .rep-row-2, .rep-row-3 { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .rep-stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .rep-stats { grid-template-columns: 1fr; }
+}

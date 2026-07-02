@@ -9,6 +9,14 @@ import { useNavigate, Link } from 'react-router-dom';
 import '../../styles/Dashboard.css';
 import Bookings from '../Bookings/Bookings';
 import Rooms from '../Rooms/Rooms';
+import Customers from '../Customers/Customers';
+import Sidebar from '../../components/Sidebar';
+import Header from '../../components/Header';
+//import StatCard from '../../components/StatCard';
+//import LineChart from '../../components/LineChart';
+//import DonutChart from '../../components/DonutChart';
+//import RecentBookingsTable from '../../components/RecentBookingsTable';
+
 import {
   IcoDashboard, IcoBookings, IcoRooms, IcoCustomers,
   IcoRoomService, IcoBilling, IcoStaff, IcoAttendance,
@@ -180,7 +188,7 @@ const DonutChart = ({ occupied, available }) => {
           {/* Occupied arc */}
           <circle
             cx={CX} cy={CY} r={R}
-            fill="none"
+            fill="none" 
             stroke="#3b82f6"
             strokeWidth="20"
             strokeDasharray={`${occupiedDash} ${circumference}`}

@@ -6,7 +6,7 @@
 //  Icons  → ../../utils/icons/RegisterIcons.js
 //  Styles → ../../styles/RegisterPage.css
 // ============================================================
-import swal from 'sweetalert2';
+
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import '../../styles/RegisterPage.css';
@@ -16,7 +16,6 @@ import {
   IconCheck, IconEmail, IconLock, IconPhone, IconUser,
   IconEye, GoogleLogo, HotelierCrown,
 } from '../../utils/icons/RegisterIcons';
-import axios from 'axios';
 
 // ── Hotel type options ───────────────────────────────────────
 const HOTEL_TYPES = [
@@ -37,12 +36,14 @@ const STEPS = [
 
 // ── Empty form ───────────────────────────────────────────────
 const EMPTY_FORM = {
+  // Step 1 — Admin account
   adminName: '',
   adminEmail: '',
   adminPhone: '',
   password: '',
   confirmPassword: '',
 
+  // Step 2 — Hotel info
   hotelName: '',
   hotelType: '',
   hotelDesc: '',
@@ -51,8 +52,9 @@ const EMPTY_FORM = {
   gstNumber: '',
   panNumber: '',
   businessRegNumber: '',
-  hotelLogo: null,
+  hotelLogo: null,        // { file, name, url, size }
 
+  // Step 3
   agreeTerms: false,
 };
 
@@ -129,41 +131,13 @@ function RegisterPage() {
 
   const handleNext = () => { if (validate()) setStep(s => s + 1); };
   const handleBack = () => { setStep(s => s - 1); setErrors({}); };
-const handleSubmit = async () => {
-  if (!validate()) return;
 
-  try {
-    const response = await axios.post(
-      'http://localhost:5000/api/auth/register',
-      {
-        full_name: form.adminName,
-        email: form.adminEmail,
-        phone: form.adminPhone,
-        password: form.password,
-      }
-    );
-
-    if (response.data.success) {
-      await swal.fire({
-        icon: 'success',
-        title: 'Registration Successful',
-        text: 'Please login to continue',
-      });
-
-      navigate('/login');
-    }
-  } catch (error) {
-    console.error('Register Error:', error);
-
-    swal.fire({
-      icon: 'error',
-      title: 'Registration Failed',
-      text:
-        error.response?.data?.message ||
-        'Unable to register user.',
-    });
-  }
-};
+  const handleSubmit = () => {
+    if (!validate()) return;
+    // TODO: POST to /api/auth/register
+    console.log('Registering hotel:', form);
+    setSubmitted(true);
+  };
 
   // ── Step circle helper ──
   const stepStatus = (n) => n < step ? 'done' : n === step ? 'active' : '';
