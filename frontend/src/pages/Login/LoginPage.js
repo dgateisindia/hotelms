@@ -79,7 +79,7 @@ function LoginPage() {
 const role = res.data.user.role;
 
 if (role === "super_admin") {
-  navigate("/create-hotel");
+  navigate("/super-admin");
 }
 else if (role === "admin") {
   navigate("/dashboard");
