@@ -8,6 +8,7 @@ const authRoutes = require('./routes/authRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const roomRoutes = require("./routes/roomRoutes");
+const customerRoutes = require("./routes/customerRoutes");
 
 // backend/server.js
 const cookieParser = require('cookie-parser');
@@ -26,6 +27,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use("/api/rooms", roomRoutes);
 app.use('/api/users', userRoutes);
+app.use("/api/customers", customerRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, statusCode: 404, message: 'Route not found' });
