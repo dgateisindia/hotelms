@@ -40,25 +40,23 @@ function CustomerFormModal({
             <div className="form-group">
               <label className="form-label">Email</label>
               <input
-                className="form-input"
                 type="email"
                 name="email"
                 value={form.email}
                 onChange={handleFormChange}
-                placeholder="example@email.com"
-              />
+                disabled={title === "Edit Customer"}
+              />  
             </div>
 
             {/* Phone */}
             <div className="form-group">
               <label className="form-label">Phone Number</label>
               <input
-                className="form-input"
-                type="text"
-                name="phone"
-                value={form.phone}
-                onChange={handleFormChange}
-                placeholder="+91 9876543210"
+                   type="text"
+                   name="phone"
+                   value={form.phone}
+                   onChange={handleFormChange}
+                   disabled={title === "Edit Customer"}
               />
             </div>
 

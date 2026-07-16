@@ -3,9 +3,11 @@
 //  Layout  → Sidebar + Header + Body
 //  Sections→ Stat Cards, Line Chart, Donut Chart, Bookings Table
 // ============================================================
-
+import { useAuth, useClerk } from "@clerk/clerk-react";
+import { useEffect } from "react";
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import '../../styles/Dashboard.css';
 import Billing from '../Billing/Billing';
 import Bookings from '../Bookings/Bookings';
@@ -14,6 +16,9 @@ import Customers from '../Customers/Customers';
 import Staff from '../Staff/Staff';
 import Reports from '../Reports/Reports';
 import Attendance from '../Attendance/Attendance';
+import Payroll from "../Payroll";
+import Notifications from "../Notifications";
+import Settings from "../Settings";
 import {
   IcoDashboard, IcoBookings, IcoRooms, IcoCustomers,
   IcoRoomService, IcoBilling, IcoStaff, IcoAttendance,
@@ -225,68 +230,153 @@ const CrownLogo = () => (
 // ════════════════════════════════════════════════════════════
 //  MAIN COMPONENT
 // ════════════════════════════════════════════════════════════
-function Dashboard({ page = 'dashboard' }) {
+function Dashboard({ page = "dashboard" }) {
   const navigate = useNavigate();
-  const [activePath, setActivePath] = useState('/' + page);
 
-  const handleLogout = () => {
-    // TODO: clear token
-    // localStorage.removeItem('token');
-    navigate('/login');
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { signOut } = useClerk();
+  const [activePath, setActivePath] = useState("/" + page);
+
+  const handleLogout = async () => {
+    const result = await Swal.fire({
+      icon: 'question',
+      title: 'Log out?',
+      text: 'Do you want to log out of your account?',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, logout',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#0d1b4b',
+      cancelButtonColor: '#9ca3af',
+      reverseButtons: true,
+    });
+
+    if (result.isConfirmed) {
+      await signOut();
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Logged out',
+        text: 'You have been successfully logged out.',
+        timer: 1800,
+        timerProgressBar: true,
+        showConfirmButton: false,
+        toast: true,
+        position: 'top-end',
+      });
+
+      navigate("/login");
+    }
   };
+
+  useEffect(() => {
+    const loadUser = async () => {
+      if (!isLoaded) return;
+
+      if (!isSignedIn) {
+        navigate("/login");
+        return;
+      }
+
+      try {
+        const token = await getToken();
+
+        console.log("TOKEN:", token);
+
+        const response = await fetch(
+          "http://localhost:5000/api/users/me",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        console.log("Logged in user:", data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    loadUser();
+  }, [isLoaded, isSignedIn, getToken, navigate]);
 
   return (
     <div className="dash-layout">
 
-      {/* ══════════ SIDEBAR ══════════ */}
+      {/* Sidebar */}
       <aside className="sidebar">
-        {/* Logo */}
+
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon"><CrownLogo /></div>
+          <div className="sidebar-logo-icon">
+            <CrownLogo />
+          </div>
+
           <div className="sidebar-logo-text">
             <span>Hotel Management</span>
             <small>System</small>
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="sidebar-nav">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.path}
-              className={`nav-item ${activePath === item.path ? 'active' : ''}`}
+              className={`nav-item ${
+                activePath === item.path ? "active" : ""
+              }`}
               onClick={() => {
                 setActivePath(item.path);
                 navigate(item.path);
               }}
             >
               {item.icon}
-              <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>
+
+              <span style={{ flex: 1, textAlign: "left" }}>
+                {item.label}
+              </span>
+
               {item.badge && (
-                <span style={{
-                  background: '#ef4444', color: '#fff',
-                  borderRadius: '10px', fontSize: '10px',
-                  fontWeight: 700, padding: '1px 6px', minWidth: 18,
-                  textAlign: 'center'
-                }}>{item.badge}</span>
+                <span
+                  style={{
+                    background: "#ef4444",
+                    color: "#fff",
+                    borderRadius: "10px",
+                    fontSize: "10px",
+                    fontWeight: 700,
+                    padding: "1px 6px",
+                    minWidth: 18,
+                    textAlign: "center",
+                  }}
+                >
+                  {item.badge}
+                </span>
               )}
             </button>
           ))}
 
-          {/* Logout */}
-          <button className="nav-item" onClick={handleLogout} style={{ marginTop: 12, color: '#f87171' }}>
+          <button
+            className="nav-item"
+            onClick={handleLogout}
+            style={{
+              marginTop: 12,
+              color: "#f87171",
+            }}
+          >
             <IcoLogout />
             Logout
           </button>
         </nav>
       </aside>
 
-      {/* ══════════ MAIN ══════════ */}
       <div className="dash-main">
 
-        {/* Header */}
         <header className="dash-header">
-          <h1 className="dash-header-title">{page.charAt(0).toUpperCase() + page.slice(1)}</h1>
+          <h1 className="dash-header-title">
+            {page.charAt(0).toUpperCase() + page.slice(1)}
+          </h1>
+
           <div className="dash-header-right">
             <div className="header-user">
               <span className="header-user-name">Admin</span>
@@ -295,95 +385,130 @@ function Dashboard({ page = 'dashboard' }) {
           </div>
         </header>
 
-        {/* Body */}
         <div className="dash-body">
 
-          {/* ── Render page content ── */}
-          {page === 'bookings' ? <Bookings /> :
-          page === 'rooms'     ? <Rooms /> :
-          page === 'customers' ? <Customers /> :
-          page === 'billing' ? <Billing /> :
-          page === 'reports'      ? <Reports /> :
-          page === 'attendance'   ? <Attendance /> :
-          page === 'staff'     ? <Staff /> : 
-          (
-          <>
+          {page === "dashboard" ? (
+            <>
+              <div className="stats-grid">
+                {STAT_CARDS.map((card) => (
+                  <div className="stat-card" key={card.label}>
+                    <div className={`stat-icon ${card.color}`}>
+                      {card.icon}
+                    </div>
 
-          {/* ── Stat Cards ── */}
-          <div className="stats-grid">
-            {STAT_CARDS.map((card) => (
-              <div className="stat-card" key={card.label}>
-                <div className={`stat-icon ${card.color}`}>{card.icon}</div>
-                <div className="stat-info">
-                  <div className="stat-label">{card.label}</div>
-                  <div className="stat-value">{card.value}</div>
-                  <div className={`stat-change ${card.trend}`}>
-                    <IcoTrendUp />
-                    {card.change}
+                    <div className="stat-info">
+                      <div className="stat-label">{card.label}</div>
+                      <div className="stat-value">{card.value}</div>
+
+                      <div className={`stat-change ${card.trend}`}>
+                        <IcoTrendUp />
+                        {card.change}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="charts-row">
+
+                <div className="chart-card">
+                  <div className="chart-card-title">
+                    Monthly Revenue
+                  </div>
+
+                  <div className="line-chart-wrap">
+                    <LineChart data={MONTHLY_REVENUE} />
                   </div>
                 </div>
+
+                <div className="chart-card">
+                  <div className="chart-card-title">
+                    Room Occupancy
+                  </div>
+
+                  <DonutChart
+                    occupied={32}
+                    available={18}
+                  />
+                </div>
+
               </div>
-            ))}
-          </div>
 
-          {/* ── Charts Row ── */}
-          <div className="charts-row">
-            {/* Line Chart */}
-            <div className="chart-card">
-              <div className="chart-card-title">Monthly Revenue</div>
-              <div className="line-chart-wrap">
-                <LineChart data={MONTHLY_REVENUE} />
+              <div className="table-card">
+
+                <div className="table-card-header">
+                  <span className="table-card-title">
+                    Recent Bookings
+                  </span>
+
+                  <Link
+                    to="/bookings"
+                    className="view-all-link"
+                  >
+                    View All Bookings
+                    <IcoArrowRight />
+                  </Link>
+                </div>
+
+                <table className="bookings-table">
+                  <thead>
+                    <tr>
+                      <th>Booking ID</th>
+                      <th>Customer</th>
+                      <th>Room</th>
+                      <th>Check In</th>
+                      <th>Check Out</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {RECENT_BOOKINGS.map((b) => (
+                      <tr key={b.id}>
+                        <td>{b.id}</td>
+                        <td>{b.customer}</td>
+                        <td>{b.room}</td>
+                        <td>{b.checkIn}</td>
+                        <td>{b.checkOut}</td>
+                        <td>
+                          <span className={statusClass(b.status)}>
+                            {b.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
               </div>
-            </div>
-
-            {/* Donut Chart */}
-            <div className="chart-card">
-              <div className="chart-card-title">Room Occupancy</div>
-              <DonutChart occupied={32} available={18} />
-            </div>
-          </div>
-
-          {/* ── Recent Bookings Table ── */}
-          <div className="table-card">
-            <div className="table-card-header">
-              <span className="table-card-title">Recent Bookings</span>
-              <Link to="/bookings" className="view-all-link">
-                View All Bookings <IcoArrowRight />
-              </Link>
-            </div>
-
-            <table className="bookings-table">
-              <thead>
-                <tr>
-                  <th>Booking ID</th>
-                  <th>Customer</th>
-                  <th>Room</th>
-                  <th>Check In</th>
-                  <th>Check Out</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {RECENT_BOOKINGS.map((b) => (
-                  <tr key={b.id}>
-                    <td>{b.id}</td>
-                    <td>{b.customer}</td>
-                    <td>{b.room}</td>
-                    <td>{b.checkIn}</td>
-                    <td>{b.checkOut}</td>
-                    <td><span className={statusClass(b.status)}>{b.status}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          </>
+            </>
+          ) : page === "bookings" ? (
+            <Bookings />
+          ) : page === "rooms" ? (
+            <Rooms />
+          ) : page === "customers" ? (
+            <Customers />
+          ) : page === "billing" ? (
+            <Billing />
+          ) : page === "staff" ? (
+            <Staff />
+          ) : page === "attendance" ? (
+            <Attendance />
+          ) : page === "payroll" ? (
+            <Payroll />
+          ) : page === "reports" ? (
+            <Reports />
+          ) : page === "notifications" ? (
+            <Notifications />
+          ) : page === "settings" ? (
+            <Settings />
+          ) : (
+            <div>Page Not Found</div>
           )}
-        </div>{/* end dash-body */}
-      </div>{/* end dash-main */}
+
+        </div>
+      </div>
     </div>
   );
 }
-
 export default Dashboard;

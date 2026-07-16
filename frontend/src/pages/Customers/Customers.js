@@ -64,9 +64,13 @@ const PREFERENCES = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────
-const statusClass = (s) => {
-  const map = { 'Active':'badge-active', 'Inactive':'badge-inactive', 'VIP':'badge-vip' };
-  return `badge ${map[s] || ''}`;
+const statusClass = (status) => {
+  const map = {
+    "Checked In": "badge-active",
+    "Checked Out": "badge-inactive",
+  };
+
+  return `badge ${map[status] || ""}`;
 };
 
 const initials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
@@ -125,7 +129,14 @@ const SegmentDonut = ({ segments, total }) => {
 
 // ════════════════════════════════════════════════════════════
 function Customers() {
-const [customers, setCustomers] = useState([]);  const [search, setSearch]       = useState('');
+const [customers, setCustomers] = useState([]);
+const [stats, setStats] = useState({
+  totalCustomers: 0,
+  activeGuests: 0,
+  repeatGuests: 0,
+  vipCustomers: 0,
+});
+ const [search, setSearch]       = useState('');
   const [page, setPage]           = useState(1);
 
   const fetchCustomers = async () => {
@@ -137,6 +148,21 @@ const [customers, setCustomers] = useState([]);  const [search, setSearch]      
     }
   };
 
+
+  const fetchCustomerStats = async () => {
+  try {
+    const res = await axios.get(
+      "http://localhost:5000/api/customers/stats"
+    );
+
+    if (res.data.success) {
+      setStats(res.data.data);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+};
+
   // Modals
   const [showAdd, setShowAdd]       = useState(false);
   const [showEdit, setShowEdit]     = useState(false);
@@ -146,8 +172,9 @@ const [customers, setCustomers] = useState([]);  const [search, setSearch]      
   const [form, setForm]             = useState(EMPTY_FORM);
 //====================================================
 useEffect(() => {
-    fetchCustomers();
-  }, []);
+  fetchCustomers();
+  fetchCustomerStats();
+}, []);
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -192,8 +219,18 @@ const openEdit = (c) => {
 
   setShowEdit(true);
 }; 
-const openView   = (c) => { setSelected(c); setShowView(true); };
-  const openDelete = (c) => { setSelected(c); setShowDelete(true); };
+const openView = async (customer) => {
+  try {
+    const res = await axios.get(
+      `http://localhost:5000/api/customers/${customer.customer_id}`
+    );
+
+    setSelected(res.data);
+    setShowView(true);
+  } catch (err) {
+    console.error(err);
+  }
+}; const openDelete = (c) => { setSelected(c); setShowDelete(true); };
 
 const handleAdd = async () => {
 
@@ -239,6 +276,7 @@ const handleAdd = async () => {
         });
 
         await fetchCustomers();
+        await fetchCustomerStats();
 
         setShowAdd(false);
         setForm(EMPTY_FORM);
@@ -306,7 +344,8 @@ const handleAdd = async () => {
             confirmButtonColor: "#2563eb",
         });
 
-        fetchCustomers();
+await fetchCustomers();
+await fetchCustomerStats();
         setShowEdit(false);
 
     } catch (err) {
@@ -348,7 +387,8 @@ const handleAdd = async () => {
             confirmButtonColor: "#2563eb",
         });
 
-        fetchCustomers();
+await fetchCustomers();
+await fetchCustomerStats();
         setShowDelete(false);
 
     } catch (err) {
@@ -416,41 +456,86 @@ const handleImageChange = (e) => {
       </div>
 
       {/* ── Stat Cards ── */}
-      <div className="cust-stats">
-        <div className="cstat-card">
-          <div className="cstat-icon blue"><IcoUsers /></div>
-          <div className="cstat-info">
-            <div className="cstat-label">Total Customers</div>
-            <div className="cstat-value">856</div>
-            <div className="cstat-change">↑ 12.5% from last month</div>
-          </div>
-        </div>
-        <div className="cstat-card">
-          <div className="cstat-icon green"><IcoRepeat /></div>
-          <div className="cstat-info">
-            <div className="cstat-label">Repeat Guests</div>
-            <div className="cstat-value">342</div>
-            <div className="cstat-change">↑ 8.7% from last month</div>
-          </div>
-        </div>
-        <div className="cstat-card">
-          <div className="cstat-icon orange"><IcoUserNew /></div>
-          <div className="cstat-info">
-            <div className="cstat-label">New Customers</div>
-            <div className="cstat-value">125</div>
-            <div className="cstat-change">↑ 15.3% from last month</div>
-          </div>
-        </div>
-        <div className="cstat-card">
-          <div className="cstat-icon purple"><IcoCalendar /></div>
-          <div className="cstat-info">
-            <div className="cstat-label">Total Bookings</div>
-            <div className="cstat-value">1,248</div>
-            <div className="cstat-change">↑ 10.2% from last month</div>
-          </div>
-        </div>
+    {/* ── Stat Cards ── */}
+<div className="cust-stats">
+
+  {/* Total Customers */}
+  <div className="cstat-card">
+    <div className="cstat-icon blue">
+      <IcoUsers />
+    </div>
+
+    <div className="cstat-info">
+      <div className="cstat-label">Total Customers</div>
+
+      <div className="cstat-value">
+        {stats.totalCustomers}
       </div>
 
+      <div className="cstat-change">
+        Registered Customers
+      </div>
+    </div>
+  </div>
+
+  {/* Active Guests */}
+  <div className="cstat-card">
+    <div className="cstat-icon green">
+      <IcoRepeat />
+    </div>
+
+    <div className="cstat-info">
+      <div className="cstat-label">Active Guests</div>
+
+      <div className="cstat-value">
+        {stats.activeGuests}
+      </div>
+
+      <div className="cstat-change">
+        Currently Checked In
+      </div>
+    </div>
+  </div>
+
+  {/* Repeat Guests */}
+  <div className="cstat-card">
+    <div className="cstat-icon orange">
+      <IcoUserNew />
+    </div>
+
+    <div className="cstat-info">
+      <div className="cstat-label">Repeat Guests</div>
+
+      <div className="cstat-value">
+        {stats.repeatGuests}
+      </div>
+
+      <div className="cstat-change">
+        Returning Guests
+      </div>
+    </div>
+  </div>
+
+  {/* VIP Customers */}
+  <div className="cstat-card">
+    <div className="cstat-icon purple">
+      <IcoCalendar />
+    </div>
+
+    <div className="cstat-info">
+      <div className="cstat-label">VIP Customers</div>
+
+      <div className="cstat-value">
+        {stats.vipCustomers}
+      </div>
+
+      <div className="cstat-change">
+        Premium Members
+      </div>
+    </div>
+  </div>
+
+</div>
       {/* ── Customers Table ── */}
       <div className="customers-card">
         <table className="customers-table">
@@ -525,7 +610,10 @@ const handleImageChange = (e) => {
         {/* Top Customer Segments */}
         <div className="segment-card">
           <h4>Top Customer Segments</h4>
-          <SegmentDonut segments={SEGMENTS} total={856} />
+<SegmentDonut
+  segments={SEGMENTS}
+  total={stats.totalCustomers}
+/>
         </div>
 
         {/* Customer Preferences */}
@@ -563,7 +651,7 @@ const handleImageChange = (e) => {
       </div>
 
       {/* ══════════ MODALS ══════════ */}
-
+      {/* Add Customer */}
 {showAdd && (
   <CustomerFormModal
     title="+ Add New Customer"
@@ -585,43 +673,138 @@ const handleImageChange = (e) => {
     onClose={() => setShowEdit(false)}
   />
 )}
-      {/* View Modal */}
-      {showView && selected && (
-        <div className="modal-overlay" onClick={() => setShowView(false)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Customer Details — {selected.customer_id}</h3>
-              <button className="modal-close" onClick={() => setShowView(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              {[
-                ['Customer ID',    selected.customer_id],
-                ['Full Name',      selected.full_name],
-                ['Email',          selected.email],
-                ['Phone',          selected.phone],
-                ['gender',         selected.gender],
-                ['Address',        selected.address],
-                ['id_proof_type',  selected.id_proof_type],
-                ['id_proof_number',selected.id_proof_number],
-                ['profile_image',  selected.profile_image],
-                ['Nationality',    selected.nationality],
-                ['Total Bookings', selected.bookings],
-                ['Last Stay',      selected.lastStay],
-                ['Status',         selected.status],
-              ].map(([k, v]) => (
-                <div className="detail-row" key={k}>
-                  <span className="detail-key">{k}</span>
-                  <span className="detail-value">{v}</span>
-                </div>
-              ))}
-            </div>
-            <div className="modal-footer">
-              <button className="btn-save" onClick={() => setShowView(false)}>Close</button>
-            </div>
+
+{/* View Modal */}
+{showView && selected && (
+  <div
+    className="modal-overlay"
+    onClick={() => setShowView(false)}
+  >
+    <div
+      className="modal-box"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="modal-header">
+        <h3>Customer Details</h3>
+
+        <button
+          className="modal-close"
+          onClick={() => setShowView(false)}
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="modal-body">
+
+        <div className="detail-section">
+          <h4>Customer Information</h4>
+
+          <div className="detail-row">
+            <span className="detail-key">Customer ID</span>
+            <span className="detail-value">{selected.customer_id}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Full Name</span>
+            <span className="detail-value">{selected.full_name}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Email</span>
+            <span className="detail-value">{selected.email}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Phone</span>
+            <span className="detail-value">{selected.phone}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Gender</span>
+            <span className="detail-value">{selected.gender}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Nationality</span>
+            <span className="detail-value">{selected.nationality}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Customer Type</span>
+            <span className="detail-value">{selected.customer_type}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Address</span>
+            <span className="detail-value">{selected.address}</span>
           </div>
         </div>
-      )}
 
+        <div className="detail-section">
+          <h4>Identity Details</h4>
+
+          <div className="detail-row">
+            <span className="detail-key">ID Proof Type</span>
+            <span className="detail-value">{selected.id_proof_type}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">ID Proof Number</span>
+            <span className="detail-value">{selected.id_proof_number}</span>
+          </div>
+        </div>
+
+        <div className="detail-section">
+          <h4>Booking Summary</h4>
+
+          <div className="detail-row">
+            <span className="detail-key">Total Bookings</span>
+            <span className="detail-value">
+              {selected.bookings ?? 0}
+            </span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Last Stay</span>
+            <span className="detail-value">
+              {selected.lastStay || "No Booking"}
+            </span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Status</span>
+            <span className="detail-value">
+              {selected.status || "-"}
+            </span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Registered On</span>
+            <span className="detail-value">
+              {selected.created_at
+                ? new Date(selected.created_at).toLocaleDateString("en-IN")
+                : "-"}
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      <div className="modal-footer">
+        <button
+          className="btn-save"
+          onClick={() => setShowView(false)}
+        >
+          Close
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+
+{/* Delete Modal */}
       {/* Delete Modal */}
       {showDelete && selected && (
         <div className="modal-overlay" onClick={() => setShowDelete(false)}>

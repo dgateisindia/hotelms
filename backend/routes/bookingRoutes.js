@@ -1,10 +1,45 @@
-// backend/routes/bookingRoutes.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
-// Placeholder route — replace with real controller later
-router.get('/', (req, res) => {
-  res.status(200).json({ success: true, message: 'Booking routes working.' });
+console.log("BOOKING ROUTES LOADED");
+
+const {
+  getBookingStats,
+  getBookings,
+  getBooking,
+  addBooking,
+  updateBooking,
+  cancelBooking,
+  deleteBooking,
+} = require("../controllers/bookingController");
+console.log({
+  getBookingStats,
+  getBookings,
+  getBooking,
+  addBooking,
+  updateBooking,
+  cancelBooking,
+  deleteBooking,
 });
+// Statistics
+router.get("/stats", getBookingStats);
+
+// Get all bookings
+router.get("/", getBookings);
+
+// Get single booking
+router.get("/:id", getBooking);
+
+// Add booking
+router.post("/", addBooking);
+
+// Update booking
+router.put("/:id", updateBooking);
+
+// Cancel booking
+router.put("/:id/cancel", cancelBooking);
+
+// Delete booking
+router.delete("/:id", deleteBooking);
 
 module.exports = router;

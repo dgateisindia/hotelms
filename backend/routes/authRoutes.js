@@ -2,21 +2,36 @@ const express = require('express');
 const router = express.Router();
 
 const {
-  login,
-  register,
-  refreshToken,
   registerSuperAdmin,
   registerAdmin,
   createHotel,
+  clearMustChangePassword,
 } = require('../controllers/authController');
-const { protect, requireRole } = require('../middleware/authMiddleware');
-
-router.post('/register', register);
-router.post('/refresh-token', refreshToken);
-router.post('/login', login);
+const { requireAuth } = require('@clerk/express');
+const { attachDbUser, requireRole } = require('../middleware/roleMiddleware');
 
 router.post('/register-super-admin', registerSuperAdmin);
-router.post('/create-hotel', protect, requireRole('super_admin'), createHotel);
-router.post('/register-admin', protect, requireRole('super_admin'), registerAdmin);
+
+router.post(
+  '/create-hotel',
+  requireAuth(),
+  attachDbUser(),
+  requireRole('super_admin'),   
+  createHotel
+);
+
+router.post(
+  '/register-admin',
+  requireAuth(),
+  attachDbUser(),
+  requireRole('super_admin'),  
+  registerAdmin
+);
+
+router.get('/me', requireAuth(), attachDbUser(), (req, res) => {
+  res.json({ success: true, user: req.dbUser });
+});
+
+router.post('/clear-must-change-password', requireAuth(), attachDbUser(), clearMustChangePassword);
 
 module.exports = router;

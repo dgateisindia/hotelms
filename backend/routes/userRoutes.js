@@ -1,10 +1,45 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { protect } = require('../middleware/authMiddleware');
-const requireRole = require('../middleware/roleMiddleware');
-const { createStaffUser, getStaffUsers } = require('../controllers/userController');
 
-router.post('/create-admin', protect, requireRole('super_admin'), createStaffUser);
-router.get('/staff', protect, requireRole('super_admin'), getStaffUsers);
+const { requireAuth } = require("@clerk/express");
+const { attachDbUser, requireRole } = require("../middleware/roleMiddleware");
+
+const {
+  createStaffUser,
+  getStaffUsers,
+} = require("../controllers/userController");
+
+// Create Admin (Only Super Admin)
+router.post(
+  "/create-admin",
+  requireAuth(),
+  attachDbUser(),
+  requireRole("super_admin"),
+  createStaffUser
+);
+
+// Get All Admins
+/*router.get(
+  "/staff",
+  requireAuth(),
+  attachDbUser(),
+  requireRole("super_admin"),
+  getStaffUsers
+);*/
+
+// Current Logged-in User
+router.get(
+  "/me",
+  requireAuth(),
+  attachDbUser(),
+  async (req, res) => {
+    res.json({
+      success: true,
+      user: req.dbUser,
+    });
+  }
+);
+
+console.log("✅ userRoutes loaded");
 
 module.exports = router;

@@ -9,7 +9,8 @@
 //  - Delete removed — only Cancel remains (admin only)
 // ============================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from "react";
+import axios from "axios";
 import '../../styles/Bookings.css';
 import {
   IcoPlus, IcoSearch, IcoFilter, IcoEye, IcoEdit,
@@ -27,17 +28,7 @@ const IcoHistory= () => <svg width="13" height="13" fill="none" viewBox="0 0 24 
 // ── Sample Data ───────────────────────────────────────────────
 // Each row = ONE room = ONE Booking ID. Rows sharing the same
 // `phone` belong to the same guest/customer.
-const INITIAL_BOOKINGS = [
-  { id: 'BK-1250', phone: '+91 98765 43210', guest: 'John Doe',      roomNo: '101', roomType: 'Deluxe',   checkIn: '20 May 2024', checkOut: '22 May 2024', guests: 2, amount: '₹ 8,000',  status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1251', phone: '+91 98765 43210', guest: 'John Doe',      roomNo: '102', roomType: 'Standard', checkIn: '20 May 2024', checkOut: '23 May 2024', guests: 1, amount: '₹ 4,000',  status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1249', phone: '+91 91234 56789', guest: 'Emily Smith',   roomNo: '205', roomType: 'Suite',    checkIn: '20 May 2024', checkOut: '23 May 2024', guests: 2, amount: '₹ 15,000', status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1248', phone: '+91 99876 54321', guest: 'Michael Brown', roomNo: '302', roomType: 'Standard', checkIn: '20 May 2024', checkOut: '24 May 2024', guests: 3, amount: '₹ 18,000', status: 'Checked-in',  payment: 'Partial',  idProof: null },
-  { id: 'BK-1247', phone: '+91 99123 45678', guest: 'Sarah Wilson',  roomNo: '103', roomType: 'Deluxe',   checkIn: '20 May 2024', checkOut: '21 May 2024', guests: 1, amount: '₹ 8,000',  status: 'Checked-out', payment: 'Paid',     idProof: null },
-  { id: 'BK-1246', phone: '+91 90011 22334', guest: 'David Lee',     roomNo: '401', roomType: 'Suite',    checkIn: '21 May 2024', checkOut: '24 May 2024', guests: 2, amount: '₹ 16,000', status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1245', phone: '+91 88990 11223', guest: 'Priya Sharma',  roomNo: '204', roomType: 'Deluxe',   checkIn: '21 May 2024', checkOut: '22 May 2024', guests: 2, amount: '₹ 11,000', status: 'Pending',     payment: 'Unpaid',   idProof: null },
-  { id: 'BK-1244', phone: '+91 87654 32109', guest: 'Amit Verma',    roomNo: '501', roomType: 'Suite',    checkIn: '22 May 2024', checkOut: '25 May 2024', guests: 2, amount: '₹ 14,000', status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1243', phone: '+91 96543 21098', guest: 'Neha Singh',    roomNo: '201', roomType: 'Standard', checkIn: '22 May 2024', checkOut: '23 May 2024', guests: 1, amount: '₹ 9,000',  status: 'Cancelled',   payment: 'Refunded', idProof: null },
-];
+
 
 const EMPTY_ROOM_FORM = {
   phone: '', guest: '', roomNo: '', roomType: 'Deluxe',
@@ -93,12 +84,86 @@ const IdProofCell = ({ booking, onUpload }) => {
 //  COMPONENT
 // ════════════════════════════════════════════════════════════
 function Bookings() {
-  const [bookings, setBookings]           = useState(INITIAL_BOOKINGS);
+  const [bookings, setBookings] = useState([]);
+const [stats, setStats] = useState({
+    totalBookings: 0,
+    confirmedBookings: 0,
+    pendingBookings: 0,
+    totalRevenue: 0
+});
   const [search, setSearch]               = useState('');
   const [filterStatus, setFilterStatus]   = useState('All Status');
   const [filterPayment, setFilterPayment] = useState('All Payment Status');
   const [page, setPage]                   = useState(1);
+  const [rooms,setRooms]=useState([]);
+  useEffect(() => {
+  fetchBookings();
+  fetchBookingStats();
+  fetchRooms();
+  fetchCustomers();
+}, []);
+const fetchRooms = async () => {
+    const res = await axios.get("http://localhost:5000/api/rooms");
+    setRooms(res.data);
+};
+// Fetch booking statistics from the backend
+const fetchBookings = async () => {
+  try {
+    const res = await axios.get("http://localhost:5000/api/bookings");
 
+    const formatted = res.data.map((b) => ({
+      booking_id: b.booking_id,
+      id: b.booking_code,
+      guest: b.full_name,
+      phone: b.phone,
+      roomNumber: String(b.room_number),
+      roomType: b.room_type,
+      checkIn: b.check_in,
+      checkOut: b.check_out,
+      guests: b.total_guests,
+      amount: b.total_amount,
+      status: b.booking_status,
+      payment: b.payment_status,
+      customer_id: b.customer_id,
+      room_id: b.room_id,
+      idProof: null,
+    }));
+
+    setBookings(formatted);
+
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+
+// Fetch booking statistics from the backend
+const fetchBookingStats = async () => {
+
+    try{
+
+        const res = await axios.get(
+            "http://localhost:5000/api/bookings/stats"
+        );
+
+        setStats(res.data.data);
+
+    }catch(err){
+
+        console.log(err);
+
+    }
+
+}
+
+const fetchCustomers = async () => {
+  try {
+    const res = await axios.get("http://localhost:5000/api/customers");
+    setCustomers(res.data);
+  } catch (err) {
+    console.error(err);
+  }
+};
   // Modals
   const [showAdd, setShowAdd]       = useState(false);
   const [showEdit, setShowEdit]     = useState(false);
@@ -107,6 +172,7 @@ function Bookings() {
   const [showHistory, setShowHistory] = useState(false);
   const [selected, setSelected]     = useState(null);
   const [form, setForm]             = useState(EMPTY_ROOM_FORM);
+  const [customers, setCustomers] = useState([]);
 
   // For "New Booking" modal — extra rooms added in the same session,
   // all sharing the same phone/guest from the first room's form.
@@ -117,7 +183,7 @@ function Bookings() {
     const matchSearch = b.guest.toLowerCase().includes(search.toLowerCase())
       || b.id.toLowerCase().includes(search.toLowerCase())
       || b.phone.includes(search)
-      || b.roomNo.includes(search);
+      || b.roomNumber.includes(search);
     const matchStatus  = filterStatus  === 'All Status'        || b.status  === filterStatus;
     const matchPayment = filterPayment === 'All Payment Status' || b.payment === filterPayment;
     return matchSearch && matchStatus && matchPayment;
@@ -160,7 +226,7 @@ function Bookings() {
 
   const openEdit = (b) => {
     setSelected(b);
-    setForm({ phone: b.phone, guest: b.guest, roomNo: b.roomNo, roomType: b.roomType, checkIn: b.checkIn, checkOut: b.checkOut, guests: b.guests, amount: b.amount, status: b.status, payment: b.payment, idProof: b.idProof });
+    setForm({ phone: b.phone, guest: b.guest, roomNumber: b.roomNumber, roomType: b.roomType, checkIn: b.checkIn, checkOut: b.checkOut, guests: b.guests, amount: b.amount, status: b.status, payment: b.payment, idProof: b.idProof });
     setShowEdit(true);
   };
 
@@ -177,29 +243,79 @@ function Bookings() {
       setForm(prev => ({ ...prev, guest: existing.guest }));
     }
   };
+const handleAdd = async () => {
+  try {
+    const customer = customers.find(
+      (c) => c.phone === form.phone
+    );
 
-  const handleAdd = () => {
-    // Save the room currently in `form`, plus any rooms queued in extraRooms.
-    // Every room gets its OWN id (own Booking ID), all sharing the same phone.
-    const allRooms = [form, ...extraRooms];
-    const newBookings = allRooms
-      .filter(r => r.roomNo) // skip totally empty rows
-      .map(r => ({ ...r, id: genId() }));
-    setBookings(prev => [...newBookings, ...prev]);
+    if (!customer) {
+      alert("Customer not found. Please add the customer first.");
+      return;
+    }
+
+   const room = rooms.find(
+  (r) => Number(r.room_number) === Number(form.roomNumber)
+);
+
+    if (!room) {
+      alert("Room not found.");
+      return;
+    }
+
+    await axios.post("http://localhost:5000/api/bookings", {
+      customer_id: customer.customer_id,
+      room_id: room.room_id,
+      check_in: form.checkIn,
+      check_out: form.checkOut,
+      total_guests: Number(form.guests),
+      booking_status: form.status,
+      payment_status: form.payment,
+      total_amount: Number(form.amount),
+      special_request: ""
+    });
+
+    await fetchBookings();
+    await fetchBookingStats();
+
     setShowAdd(false);
-    setExtraRooms([]);
-    setPage(1);
-  };
+    setForm(EMPTY_ROOM_FORM);
+  } catch (err) {
+    console.error(err);
+  }
+};
 
-  const handleEdit = () => {
-    setBookings(prev => prev.map(b => b.id === selected.id ? { ...b, ...form } : b));
+const handleEdit = async () => {
+  try {
+    await axios.put(
+      `http://localhost:5000/api/bookings/${selected.booking_id}`,
+      form
+    );
+
+    await fetchBookings();
+    await fetchBookingStats();
+
     setShowEdit(false);
-  };
+  } catch (err) {
+    console.error(err);
+  }
+};
+  
+  const handleCancel = async () => {
+  try {
+    await axios.put(
+      `http://localhost:5000/api/bookings/${selected.booking_id}/cancel`
+    );
 
-  const handleCancel = () => {
-    setBookings(prev => prev.map(b => b.id === selected.id ? { ...b, status: 'Cancelled', payment: 'Refunded' } : b));
+    await fetchBookings();
+    await fetchBookingStats();
+
     setShowCancel(false);
-  };
+
+  } catch (err) {
+    console.error(err);
+  }
+};
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -267,7 +383,7 @@ function Bookings() {
               <div className="modal-grid">
                 <div className="form-group">
                   <label className="form-label">Room No.</label>
-                  <input className="form-input" name="roomNo" value={form.roomNo} onChange={handleFormChange} placeholder="e.g. 101" />
+                  <input className="form-input" name="roomNumber" value={form.roomNumber} onChange={handleFormChange} placeholder="e.g. 101" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Room Type</label>
@@ -330,7 +446,7 @@ function Bookings() {
                   <div className="modal-grid">
                     <div className="form-group">
                       <label className="form-label">Room No.</label>
-                      <input className="form-input" value={room.roomNo} onChange={e => handleExtraRoomChange(idx, 'roomNo', e.target.value)} placeholder="e.g. 102" />
+                      <input className="form-input" value={room.roomNumber} onChange={e => handleExtraRoomChange(idx, 'roomNumber', e.target.value)} placeholder="e.g. 102" />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Room Type</label>
@@ -410,7 +526,7 @@ function Bookings() {
             </div>
             <div className="form-group">
               <label className="form-label">Room No.</label>
-              <input className="form-input" name="roomNo" value={form.roomNo} onChange={handleFormChange} placeholder="e.g. 101" />
+              <input className="form-input" name="roomNumber" value={form.roomNumber} onChange={handleFormChange} placeholder="e.g. 101" />
             </div>
             <div className="form-group">
               <label className="form-label">Room Type</label>
@@ -479,15 +595,16 @@ function Bookings() {
           <div className="bstat-icon blue"><IcoCalendar /></div>
           <div className="bstat-info">
             <div className="bstat-label">Total Bookings</div>
-            <div className="bstat-value">1,248</div>
-            <div className="bstat-change">↑ 12.5% from last month</div>
+<div className="bstat-value">
+{stats.totalBookings}
+</div>            <div className="bstat-change">↑ 12.5% from last month</div>
           </div>
         </div>
         <div className="bstat-card">
           <div className="bstat-icon green"><IcoCheck /></div>
           <div className="bstat-info">
             <div className="bstat-label">Confirmed Bookings</div>
-            <div className="bstat-value">{confirmedBookings}</div>
+            <div className="bstat-value">{stats.confirmedBookings}</div>
             <div className="bstat-change">↑ 8.7% from last month</div>
           </div>
         </div>
@@ -495,7 +612,7 @@ function Bookings() {
           <div className="bstat-icon orange"><IcoClock /></div>
           <div className="bstat-info">
             <div className="bstat-label">Pending Bookings</div>
-            <div className="bstat-value">{pendingBookings}</div>
+            <div className="bstat-value">{stats.pendingBookings}</div>
             <div className="bstat-change down">↓ 3.2% from last month</div>
           </div>
         </div>
@@ -503,7 +620,7 @@ function Bookings() {
           <div className="bstat-icon purple"><IcoRupee /></div>
           <div className="bstat-info">
             <div className="bstat-label">Total Revenue</div>
-            <div className="bstat-value">₹ 24,50,000</div>
+            <div className="bstat-value">₹ {Number(stats.totalRevenue).toLocaleString("en-IN")}</div>
             <div className="bstat-change">↑ 15.2% from last month</div>
           </div>
         </div>
@@ -577,10 +694,10 @@ function Bookings() {
                     )}
 
                     <td>{b.guest}</td>
-                    <td style={{ fontWeight: 600 }}>{b.roomNo}</td>
+                    <td style={{ fontWeight: 600 }}>{b.roomNumber}</td>
                     <td>{b.roomType}</td>
-                    <td>{b.checkIn}</td>
-                    <td>{b.checkOut}</td>
+                    <td>{new Date(b.checkIn).toLocaleDateString("en-IN")}</td>
+                    <td>{new Date(b.checkOut).toLocaleDateString("en-IN")}</td>
                     <td>{b.guests}</td>
                     <td style={{ fontWeight: 600 }}>{b.amount}</td>
                     <td><span className={statusClass(b.status)}>{b.status}</span></td>
@@ -622,8 +739,8 @@ function Bookings() {
 
       {/* ══════════ MODALS ══════════ */}
 
-      {showAdd  && <NewBookingModal />}
-      {showEdit && <EditBookingModal />}
+      {showAdd  && NewBookingModal()}
+      {showEdit && EditBookingModal()}
 
       {/* View Modal — single room */}
       {showView && selected && (
@@ -638,7 +755,7 @@ function Bookings() {
                 ['Booking ID',    selected.id],
                 ['Phone Number',  selected.phone],
                 ['Guest Name',    selected.guest],
-                ['Room No.',      selected.roomNo],
+                ['Room Number',   selected.roomNumber],
                 ['Room Type',     selected.roomType],
                 ['Check-in',      selected.checkIn],
                 ['Check-out',     selected.checkOut],
@@ -673,7 +790,7 @@ function Bookings() {
               <div className="modal-section-title">{selected.guest} — All Rooms Booked</div>
               {bookings.filter(b => b.phone === selected.phone).map((r, i) => (
                 <div className="room-view-card" key={r.id}>
-                  <div className="room-view-title">{r.id} — Room {r.roomNo} ({r.roomType})</div>
+                  <div className="room-view-title">{r.id} — Room {r.roomNumber} ({r.roomType})</div>
                   {[
                     ['Check-in',  r.checkIn],
                     ['Check-out', r.checkOut],
@@ -708,7 +825,7 @@ function Bookings() {
             <div className="confirm-body">
               <div className="confirm-icon amber"><IcoWarn /></div>
               <h4>Cancel this booking?</h4>
-              <p>Booking <strong>{selected.id}</strong> (Room {selected.roomNo}) for <strong>{selected.guest}</strong> will be marked as Cancelled and payment set to Refunded.</p>
+              <p>Booking <strong>{selected.id}</strong> (Room {selected.roomNumber}) for <strong>{selected.guest}</strong> will be marked as Cancelled and payment set to Refunded.</p>
             </div>
             <div className="modal-footer">
               <button className="btn-cancel" onClick={() => setShowCancel(false)}>Keep Booking</button>

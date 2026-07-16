@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useClerk } from '@clerk/clerk-react';
+import Swal from 'sweetalert2';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -9,6 +12,8 @@ import './SuperAdminDashboard.css';
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const SuperAdminDashboard = () => {
+  const navigate = useNavigate();
+  const { signOut } = useClerk();
   const [stats, setStats] = useState(null);
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +39,25 @@ const SuperAdminDashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const handleLogoutClick = async () => {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: 'Log out?',
+      text: 'You will need to sign in again to access the dashboard.',
+      showCancelButton: true,
+      confirmButtonText: 'Log out',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280',
+      reverseButtons: true,
+    });
+
+    if (result.isConfirmed) {
+      await signOut();
+      navigate('/login');
+    }
+  };
+
   if (loading) return <div className="dashboard-loading">Loading dashboard...</div>;
   if (!stats) return <div className="dashboard-loading">Could not load dashboard data.</div>;
 
@@ -53,7 +77,17 @@ const SuperAdminDashboard = () => {
 
   return (
     <div className="sa-dashboard">
-      <h1 className="sa-title">Dashboard</h1>
+      <div className="sa-header-row">
+        <h1 className="sa-title">Dashboard</h1>
+        <div className="sa-header-actions">
+          <button className="sa-create-admin-btn" onClick={() => navigate('/create-admin')}>
+            + Create Admin
+          </button>
+          <button className="sa-logout-btn" onClick={handleLogoutClick}>
+            Logout
+          </button>
+        </div>
+      </div>
 
       {/* Stat Cards */}
       <div className="sa-stats-grid">

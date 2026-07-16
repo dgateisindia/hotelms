@@ -9,7 +9,41 @@
   font-size: 26px;
   font-weight: 700;
   color: #111827;
+}
+
+.sa-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 24px;
+}
+
+.sa-create-admin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+  color: #ffffff;
+  background: #0d1b4b;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.sa-create-admin-btn:hover {
+  background: #1a2a6b;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.sa-create-admin-btn:active {
+  transform: translateY(0);
 }
 
 .sa-card {
@@ -215,4 +249,31 @@
 @media (max-width: 1100px) {
   .sa-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .sa-charts-grid { grid-template-columns: 1fr; }
+}
+.sa-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sa-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+  color: #DC2626;
+  background: #ffffff;
+  border: 1.5px solid #FCA5A5;
+  border-radius: 10px;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.sa-logout-btn:hover {
+  background: #FEF2F2;
+  border-color: #DC2626;
 }

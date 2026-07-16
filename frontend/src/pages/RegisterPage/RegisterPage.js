@@ -1,14 +1,12 @@
 // ============================================================
 //  RegisterPage.js — Hotel Registration (logic + JSX only)
-//  Step 1: Admin Account Details
-//  Step 2: Hotel Information (name, type, desc, star, year, GST, PAN, reg no, logo)
-//  Step 3: Review & Submit
-//  Icons  → ../../utils/icons/RegisterIcons.js
-//  Styles → ../../styles/RegisterPage.css
+//  mode="selfRegister"  → public /register, posts to /api/auth/register-admin
+//  mode="createByAdmin" → super_admin's /create-admin, posts to /api/users/create-admin
 // ============================================================
-
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
+import apiClient from '../../services/apiClient'; // already wired to Clerk token
 import '../../styles/RegisterPage.css';
 import {
   IconHotel, IconType, IconDesc, IconStar, IconYear,
@@ -17,51 +15,26 @@ import {
   IconEye, GoogleLogo, HotelierCrown,
 } from '../../utils/icons/RegisterIcons';
 
-// ── Hotel type options ───────────────────────────────────────
+console.log("RegisterPage loaded — build check v2");
+
 const HOTEL_TYPES = [
-  'Resort',
-  'Business Hotel',
-  'Budget Hotel',
-  'Boutique Hotel',
-  'Homestay',
-  'Lodge',
+  'Resort', 'Business Hotel', 'Budget Hotel', 'Boutique Hotel', 'Homestay', 'Lodge',
 ];
 
-// ── Step definitions ─────────────────────────────────────────
 const STEPS = [
-  { label: 'Account',  num: 1 },
+  { label: 'Account',    num: 1 },
   { label: 'Hotel Info', num: 2 },
-  { label: 'Review',   num: 3 },
+  { label: 'Review',     num: 3 },
 ];
 
-// ── Empty form ───────────────────────────────────────────────
 const EMPTY_FORM = {
-  // Step 1 — Admin account
-  adminName: '',
-  adminEmail: '',
-  adminPhone: '',
-  password: '',
-  confirmPassword: '',
-
-  // Step 2 — Hotel info
-  hotelName: '',
-  hotelType: '',
-  hotelDesc: '',
-  starRating: 0,
-  yearEstablished: '',
-  gstNumber: '',
-  panNumber: '',
-  businessRegNumber: '',
-  hotelLogo: null,        // { file, name, url, size }
-
-  // Step 3
+  adminName: '', adminEmail: '', adminPhone: '', password: '', confirmPassword: '',
+  hotelName: '', hotelType: '', hotelDesc: '', starRating: 0, yearEstablished: '',
+  gstNumber: '', panNumber: '', businessRegNumber: '', hotelLogo: null,
   agreeTerms: false,
 };
 
-// ════════════════════════════════════════════════════════════
-//  COMPONENT
-// ════════════════════════════════════════════════════════════
-function RegisterPage() {
+function RegisterPage({ mode = 'selfRegister' }) {
   const navigate = useNavigate();
   const [step, setStep]           = useState(1);
   const [form, setForm]           = useState(EMPTY_FORM);
@@ -69,21 +42,20 @@ function RegisterPage() {
   const [showPass, setShowPass]   = useState(false);
   const [showConf, setShowConf]   = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [submitting, setSubmitting]   = useState(false);
 
-  // ── Field change ──
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
-  // ── Star rating ──
   const handleStar = (val) => {
     setForm(prev => ({ ...prev, starRating: val }));
     setErrors(prev => ({ ...prev, starRating: '' }));
   };
 
-  // ── Logo upload ──
   const handleLogoUpload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -94,13 +66,10 @@ function RegisterPage() {
 
   const removeLogo = () => setForm(prev => ({ ...prev, hotelLogo: null }));
 
-  // ── Google register ──
   const handleGoogleRegister = () => {
-    // TODO: Google OAuth flow
     alert('Google registration coming soon!');
   };
 
-  // ── Validate per step ──
   const validate = () => {
     const e = {};
     if (step === 1) {
@@ -132,42 +101,93 @@ function RegisterPage() {
   const handleNext = () => { if (validate()) setStep(s => s + 1); };
   const handleBack = () => { setStep(s => s - 1); setErrors({}); };
 
-  const handleSubmit = () => {
-    if (!validate()) return;
-    // TODO: POST to /api/auth/register
-    console.log('Registering hotel:', form);
-    setSubmitted(true);
+  const handleSubmit = async () => {
+    console.log("handleSubmit: fired");
+
+    if (!validate()) {
+      console.log("handleSubmit: validation failed", errors);
+      return;
+    }
+    console.log("handleSubmit: validated, building payload");
+
+    setSubmitError('');
+    setSubmitting(true);
+
+    const payload = {
+      fullName: form.adminName,
+      email: form.adminEmail,
+      phone: form.adminPhone,
+      password: form.password,
+      hotel: {
+        hotel_name: form.hotelName,
+        hotel_type: form.hotelType,
+        hotel_desc: form.hotelDesc,
+        star_rating: form.starRating,
+        year_established: form.yearEstablished,
+        gst_number: form.gstNumber,
+        pan_number: form.panNumber,
+        business_reg_number: form.businessRegNumber,
+      },
+      // hotelLogo upload is handled separately (see note below) — not sent in this JSON payload yet
+    };
+    console.log("handleSubmit: payload built", payload);
+
+    try {
+      console.log("handleSubmit: about to call apiClient.post, mode =", mode);
+      if (mode === 'createByAdmin') {
+        // Authenticated call — apiClient attaches the super_admin's Clerk token automatically
+        const res = await apiClient.post('/users/create-admin', payload);
+        console.log("handleSubmit: response received", res.status, res.data);
+      } else {
+        // Public self-registration — no auth token
+        const res = await axios.post('http://localhost:5000/api/auth/register-admin', payload);
+        console.log("handleSubmit: response received", res.status, res.data);
+      }
+      console.log("handleSubmit: setting submitted = true");
+      setSubmitted(true);
+    } catch (err) {
+      console.error("handleSubmit: caught error", err);
+      setSubmitError(
+        err.response?.data?.message || 'Something went wrong. Please try again.'
+      );
+    } finally {
+      console.log("handleSubmit: finally block ran, setting submitting = false");
+      setSubmitting(false);
+    }
   };
 
-  // ── Step circle helper ──
   const stepStatus = (n) => n < step ? 'done' : n === step ? 'active' : '';
   const lineStatus = (n) => n < step ? 'done' : '';
 
-  // ════════════════════════════════════════════════════════════
-  //  RENDER
-  // ════════════════════════════════════════════════════════════
+  const handleDoneNavigate = () => {
+    // Both modes land back on the sign-in page after a successful submission.
+    // (super_admin's own Clerk session is untouched — they created a *different*
+    // user's account, not their own — so PostLoginRedirect will just bounce
+    // them straight back to /superadmin-dashboard if they're still authenticated.)
+    navigate('/login');
+  };
+
   return (
     <div className="register-page">
 
-      {/* ── Top bar ── */}
       <div className="register-topbar">
         <div className="register-logo">
           <HotelierCrown />
           <div className="register-logo-text">
             <h1>Hotel Management System</h1>
-            <p>Register Your Hotel</p>
+            <p>{mode === 'createByAdmin' ? 'Create a New Admin' : 'Register Your Hotel'}</p>
           </div>
         </div>
-        <div className="register-topbar-link">
-          Already registered? <Link to="/login">Sign In</Link>
-        </div>
+        {mode === 'selfRegister' && (
+          <div className="register-topbar-link">
+            Already registered? <Link to="/login">Sign In</Link>
+          </div>
+        )}
       </div>
 
-      {/* ── Main ── */}
       <div className="register-main">
         <div className="register-card">
 
-          {/* ── Card header + steps ── */}
           <div className="register-card-header">
             <h2>
               {submitted ? '🎉 Registration Complete!' :
@@ -176,13 +196,14 @@ function RegisterPage() {
                'Review & Submit'}
             </h2>
             <p>
-              {submitted ? 'Your hotel has been successfully registered.' :
-               step === 1 ? 'Set up your administrator login credentials.' :
-               step === 2 ? 'Tell us about your hotel — all fields marked * are required.' :
-               'Review your details before submitting.'}
+              {submitted ? (mode === 'createByAdmin'
+                  ? 'The new admin account and hotel have been created.'
+                  : 'Your hotel has been successfully registered.') :
+               step === 1 ? 'Set up the administrator login credentials.' :
+               step === 2 ? 'Tell us about the hotel — all fields marked * are required.' :
+               'Review the details before submitting.'}
             </p>
 
-            {/* Step indicator */}
             {!submitted && (
               <div className="register-steps">
                 {STEPS.map((s, i) => (
@@ -202,49 +223,51 @@ function RegisterPage() {
             )}
           </div>
 
-          {/* ══════════ SUCCESS ══════════ */}
           {submitted && (
             <div className="reg-success">
               <div className="reg-success-icon">✅</div>
-              <h3>Hotel Registered Successfully!</h3>
+              <h3>{mode === 'createByAdmin' ? 'Admin Created Successfully!' : 'Hotel Registered Successfully!'}</h3>
               <p>
-                Your hotel <strong>{form.hotelName}</strong> has been registered. Our team will review your details and activate your account within 24 hours.
+                {mode === 'createByAdmin'
+                  ? <>The admin account for <strong>{form.hotelName}</strong> is ready. They can now sign in with the credentials you set.</>
+                  : <>Your hotel <strong>{form.hotelName}</strong> has been registered. Our team will review your details and activate your account within 24 hours.</>
+                }
               </p>
-              <button className="btn-next" onClick={() => navigate('/login')}>
-                Go to Login <IconArrow />
+              <button className="btn-next" onClick={handleDoneNavigate}>
+                {mode === 'createByAdmin' ? 'Go to Sign In' : 'Go to Login'} <IconArrow />
               </button>
             </div>
           )}
 
-          {/* ══════════ STEP 1 — Admin Account ══════════ */}
           {!submitted && step === 1 && (
             <>
               <div className="register-card-body">
-                {/* Google register */}
-                <button className="btn-google-reg" onClick={handleGoogleRegister}>
-                  <GoogleLogo />
-                  Register with Google
-                </button>
-                <div className="or-divider">
-                  <span className="or-divider-line" />
-                  <span className="or-divider-text">or fill in your details</span>
-                  <span className="or-divider-line" />
-                </div>
+                {mode === 'selfRegister' && (
+                  <>
+                    <button className="btn-google-reg" onClick={handleGoogleRegister}>
+                      <GoogleLogo />
+                      Register with Google
+                    </button>
+                    <div className="or-divider">
+                      <span className="or-divider-line" />
+                      <span className="or-divider-text">or fill in your details</span>
+                      <span className="or-divider-line" />
+                    </div>
+                  </>
+                )}
 
                 <div className="reg-section-title"><IconUser /> Admin Account Details</div>
 
                 <div className="reg-grid">
-                  {/* Full Name */}
                   <div className="form-group full">
                     <label className="form-label"><span className="req">*</span> Full Name</label>
                     <div className="input-wrapper">
                       <span className="input-icon"><IconUser /></span>
-                      <input className={`form-input ${errors.adminName ? 'error-input' : ''}`} name="adminName" value={form.adminName} onChange={handleChange} placeholder="Enter your full name" />
+                      <input className={`form-input ${errors.adminName ? 'error-input' : ''}`} name="adminName" value={form.adminName} onChange={handleChange} placeholder="Enter full name" />
                     </div>
                     {errors.adminName && <span className="field-error">{errors.adminName}</span>}
                   </div>
 
-                  {/* Email */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> Email Address</label>
                     <div className="input-wrapper">
@@ -254,7 +277,6 @@ function RegisterPage() {
                     {errors.adminEmail && <span className="field-error">{errors.adminEmail}</span>}
                   </div>
 
-                  {/* Phone */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> Phone Number</label>
                     <div className="input-wrapper">
@@ -264,7 +286,6 @@ function RegisterPage() {
                     {errors.adminPhone && <span className="field-error">{errors.adminPhone}</span>}
                   </div>
 
-                  {/* Password */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> Password</label>
                     <div className="input-wrapper">
@@ -276,7 +297,6 @@ function RegisterPage() {
                     <span className="field-hint">At least 8 characters</span>
                   </div>
 
-                  {/* Confirm Password */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> Confirm Password</label>
                     <div className="input-wrapper">
@@ -298,16 +318,11 @@ function RegisterPage() {
             </>
           )}
 
-          {/* ══════════ STEP 2 — Hotel Information ══════════ */}
           {!submitted && step === 2 && (
             <>
               <div className="register-card-body">
-
-                {/* ── Basic Info ── */}
                 <div className="reg-section-title"><IconHotel /> Basic Hotel Information</div>
                 <div className="reg-grid">
-
-                  {/* Hotel Name */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> Hotel Name</label>
                     <div className="input-wrapper">
@@ -317,7 +332,6 @@ function RegisterPage() {
                     {errors.hotelName && <span className="field-error">{errors.hotelName}</span>}
                   </div>
 
-                  {/* Hotel Type */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> Hotel Type</label>
                     <div className="input-wrapper">
@@ -330,7 +344,6 @@ function RegisterPage() {
                     {errors.hotelType && <span className="field-error">{errors.hotelType}</span>}
                   </div>
 
-                  {/* Star Rating */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> Star Rating</label>
                     <div className={`star-rating ${errors.starRating ? 'error-input' : ''}`}>
@@ -346,7 +359,6 @@ function RegisterPage() {
                     {errors.starRating && <span className="field-error">{errors.starRating}</span>}
                   </div>
 
-                  {/* Year Established */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> Year Established</label>
                     <div className="input-wrapper">
@@ -356,20 +368,16 @@ function RegisterPage() {
                     {errors.yearEstablished && <span className="field-error">{errors.yearEstablished}</span>}
                   </div>
 
-                  {/* Hotel Description */}
                   <div className="form-group full">
                     <label className="form-label"><span className="req">*</span> Hotel Description</label>
-                    <textarea className={`form-textarea ${errors.hotelDesc ? 'error-input' : ''}`} name="hotelDesc" value={form.hotelDesc} onChange={handleChange} placeholder="Describe your hotel — location, facilities, unique features..." rows={4} />
+                    <textarea className={`form-textarea ${errors.hotelDesc ? 'error-input' : ''}`} name="hotelDesc" value={form.hotelDesc} onChange={handleChange} placeholder="Describe the hotel — location, facilities, unique features..." rows={4} />
                     {errors.hotelDesc && <span className="field-error">{errors.hotelDesc}</span>}
                     <span className="field-hint">{form.hotelDesc.length}/500 characters</span>
                   </div>
                 </div>
 
-                {/* ── Legal & Tax Info ── */}
                 <div className="reg-section-title"><IconReg /> Legal & Tax Information</div>
                 <div className="reg-grid three">
-
-                  {/* GST Number */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> GST Number</label>
                     <div className="input-wrapper">
@@ -380,7 +388,6 @@ function RegisterPage() {
                     <span className="field-hint">15-digit GST Identification Number</span>
                   </div>
 
-                  {/* PAN Number */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> PAN Number</label>
                     <div className="input-wrapper">
@@ -391,7 +398,6 @@ function RegisterPage() {
                     <span className="field-hint">10-character PAN</span>
                   </div>
 
-                  {/* Business Registration Number */}
                   <div className="form-group">
                     <label className="form-label"><span className="req">*</span> Business Registration No.</label>
                     <div className="input-wrapper">
@@ -402,13 +408,12 @@ function RegisterPage() {
                   </div>
                 </div>
 
-                {/* ── Hotel Logo ── */}
                 <div className="reg-section-title"><IconUpload /> Hotel Logo</div>
                 {!form.hotelLogo ? (
                   <div className="logo-upload-box">
                     <input type="file" accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp" onChange={handleLogoUpload} />
                     <div className="logo-upload-icon"><IconUpload /></div>
-                    <div className="logo-upload-title">Click or drag to upload your hotel logo</div>
+                    <div className="logo-upload-title">Click or drag to upload the hotel logo</div>
                     <div className="logo-upload-sub">PNG, JPG, SVG, WEBP — Max 5MB</div>
                   </div>
                 ) : (
@@ -421,7 +426,6 @@ function RegisterPage() {
                     <button className="logo-preview-remove" onClick={removeLogo}>Remove</button>
                   </div>
                 )}
-
               </div>
 
               <div className="register-card-footer">
@@ -434,17 +438,22 @@ function RegisterPage() {
             </>
           )}
 
-          {/* ══════════ STEP 3 — Review & Submit ══════════ */}
           {!submitted && step === 3 && (
             <>
               <div className="register-card-body">
+                {submitError && (
+                  <div className="alert alert-error" style={{ marginBottom: 16 }}>
+                    <span>⚠</span> {submitError}
+                  </div>
+                )}
+
                 <div className="reg-section-title"><IconUser /> Admin Account</div>
                 <div className="reg-grid">
                   {[
-                    ['Full Name',    form.adminName],
-                    ['Email',        form.adminEmail],
-                    ['Phone',        form.adminPhone],
-                    ['Password',     '••••••••'],
+                    ['Full Name', form.adminName],
+                    ['Email',     form.adminEmail],
+                    ['Phone',     form.adminPhone],
+                    ['Password',  '••••••••'],
                   ].map(([k, v]) => (
                     <div className="form-group" key={k}>
                       <label className="form-label" style={{ color: '#9ca3af', fontWeight: 500 }}>{k}</label>
@@ -456,14 +465,14 @@ function RegisterPage() {
                 <div className="reg-section-title"><IconHotel /> Hotel Information</div>
                 <div className="reg-grid">
                   {[
-                    ['Hotel Name',        form.hotelName],
-                    ['Hotel Type',        form.hotelType],
-                    ['Star Rating',       form.starRating ? `${'★'.repeat(form.starRating)} (${form.starRating} Star${form.starRating > 1 ? 's' : ''})` : '—'],
-                    ['Year Established',  form.yearEstablished],
-                    ['GST Number',        form.gstNumber],
-                    ['PAN Number',        form.panNumber],
-                    ['Business Reg No.',  form.businessRegNumber],
-                    ['Hotel Logo',        form.hotelLogo ? form.hotelLogo.name : 'Not uploaded'],
+                    ['Hotel Name',       form.hotelName],
+                    ['Hotel Type',       form.hotelType],
+                    ['Star Rating',      form.starRating ? `${'★'.repeat(form.starRating)} (${form.starRating} Star${form.starRating > 1 ? 's' : ''})` : '—'],
+                    ['Year Established', form.yearEstablished],
+                    ['GST Number',       form.gstNumber],
+                    ['PAN Number',       form.panNumber],
+                    ['Business Reg No.', form.businessRegNumber],
+                    ['Hotel Logo',       form.hotelLogo ? form.hotelLogo.name : 'Not uploaded'],
                   ].map(([k, v]) => (
                     <div className="form-group" key={k}>
                       <label className="form-label" style={{ color: '#9ca3af', fontWeight: 500 }}>{k}</label>
@@ -476,7 +485,6 @@ function RegisterPage() {
                   </div>
                 </div>
 
-                {/* Logo preview in review */}
                 {form.hotelLogo && (
                   <div style={{ marginBottom: 24 }}>
                     <div className="reg-section-title">Hotel Logo Preview</div>
@@ -484,12 +492,14 @@ function RegisterPage() {
                   </div>
                 )}
 
-                {/* Terms */}
                 <div className="form-group">
                   <div className="terms-group">
                     <input type="checkbox" name="agreeTerms" checked={form.agreeTerms} onChange={handleChange} />
                     <span className="terms-text">
-                      I agree to the <a href="/terms">Terms &amp; Conditions</a> and <a href="/privacy">Privacy Policy</a>. I confirm that all the information provided is accurate and complete.
+                      {mode === 'createByAdmin'
+                        ? <>I confirm that all the information provided is accurate and complete.</>
+                        : <>I agree to the <a href="/terms">Terms &amp; Conditions</a> and <a href="/privacy">Privacy Policy</a>. I confirm that all the information provided is accurate and complete.</>
+                      }
                     </span>
                   </div>
                   {errors.agreeTerms && <span className="field-error">{errors.agreeTerms}</span>}
@@ -499,15 +509,14 @@ function RegisterPage() {
               <div className="register-card-footer">
                 <button className="btn-back" onClick={handleBack}>← Back</button>
                 <span className="footer-step-info">Step 3 of 3</span>
-                <button className="btn-submit" onClick={handleSubmit}>
-                  ✓ Submit Registration
+                <button className="btn-submit" onClick={handleSubmit} disabled={submitting}>
+                  {submitting ? 'Submitting...' : '✓ Submit Registration'}
                 </button>
               </div>
             </>
           )}
 
-          {/* ── Bottom sign in link ── */}
-          {!submitted && (
+          {!submitted && mode === 'selfRegister' && (
             <div className="register-signin-link">
               Already have an account? <Link to="/login">Sign In</Link>
             </div>

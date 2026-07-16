@@ -1,27 +1,37 @@
-/*import { Navigate } from 'react-router-dom';
-import { getAccessToken } from '../utils/icons/tokenManager';
+import { useAuth } from '@clerk/clerk-react';
+import { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import axios from '../services/axiosInstance';
 
 function ProtectedRoute({ children, allowedRoles }) {
-  const token = getAccessToken();
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const [status, setStatus] = useState('loading');
+  const [dbUser, setDbUser] = useState(null);
 
-  // Not logged in at all
-  if (!token || !user) {
-    return <Navigate to="/login" replace />;
-  }
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn) { setStatus('unauth'); return; }
 
-  // If this route restricts by role, and user's role isn't allowed
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
-  }
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await axios.get('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setDbUser(res.data.user);
+        setStatus(allowedRoles.includes(res.data.user.role) ? 'ok' : 'denied');
+      } catch {
+        setStatus('unauth');
+      }
+    })();
+  }, [isLoaded, isSignedIn]);
+
+  if (status === 'loading') return <div>Loading...</div>;
+  if (status === 'unauth') return <Navigate to="/login" replace />;
+  if (status === 'denied') return <Navigate to="/unauthorized" replace />;
+  if (dbUser?.mustChangePassword) return <Navigate to="/change-password" replace />;
 
   return children;
 }
-
-export default ProtectedRoute;*/
-
-const ProtectedRoute = ({ children }) => {
-  return children;
-};
 
 export default ProtectedRoute;

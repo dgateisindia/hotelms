@@ -3,9 +3,40 @@ const db = require("../config/db");
 // Get All Customers
 exports.getCustomers = async (req, res) => {
   try {
-    const [customers] = await db.query(
-      "SELECT * FROM customers ORDER BY customer_id DESC"
-    );
+   const [customers] = await db.query(`
+SELECT
+    c.customer_id,
+    c.full_name,
+    c.email,
+    c.phone,
+    c.gender,
+    c.address,
+    c.id_proof_type,
+    c.id_proof_number,
+    c.profile_image,
+    c.nationality,
+    c.customer_type,
+    c.created_at,
+
+    COUNT(b.booking_id) AS bookings,
+
+    DATE_FORMAT(MAX(b.check_out), '%d %b %Y') AS lastStay,
+
+    CASE
+        WHEN SUM(CASE WHEN b.booking_status='checked_in' THEN 1 ELSE 0 END) > 0
+        THEN 'Checked In'
+        ELSE 'Checked Out'
+    END AS status
+
+FROM customers c
+
+LEFT JOIN bookings b
+ON c.customer_id = b.customer_id
+
+GROUP BY c.customer_id
+
+ORDER BY c.customer_id ASC
+`);
 
     res.status(200).json(customers);
   } catch (error) {
@@ -181,5 +212,132 @@ exports.deleteCustomer = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server Error" });
+  }
+};
+// Customer Dashboard Statistics
+// Get All Customers
+// Get Customer By ID
+exports.getCustomer = async (req, res) => {
+  try {
+
+    const [[customer]] = await db.query(`
+      SELECT
+
+        c.customer_id,
+        c.full_name,
+        c.email,
+        c.phone,
+        c.gender,
+        c.address,
+        c.id_proof_type,
+        c.id_proof_number,
+        c.profile_image,
+        c.nationality,
+        c.customer_type,
+        c.created_at,
+
+        COUNT(b.booking_id) AS totalBookings,
+
+        IFNULL(SUM(b.total_amount),0) AS totalSpent,
+
+        DATE_FORMAT(MAX(b.check_out),'%d %b %Y') AS lastStay,
+
+        CASE
+          WHEN SUM(CASE WHEN b.booking_status='checked_in' THEN 1 ELSE 0 END) > 0
+          THEN 'Checked In'
+          ELSE 'Checked Out'
+        END AS currentStatus
+
+      FROM customers c
+
+      LEFT JOIN bookings b
+      ON c.customer_id=b.customer_id
+
+      WHERE c.customer_id=?
+
+      GROUP BY
+        c.customer_id,
+        c.full_name,
+        c.email,
+        c.phone,
+        c.gender,
+        c.address,
+        c.id_proof_type,
+        c.id_proof_number,
+        c.profile_image,
+        c.nationality,
+        c.customer_type,
+        c.created_at
+    `, [req.params.id]);
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: customer,
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+
+  }
+};
+// Customer Dashboard Statistics
+exports.getCustomerStats = async (req, res) => {
+  try {
+
+    const [[stats]] = await db.query(`
+      SELECT
+
+      (SELECT COUNT(*) FROM customers) AS totalCustomers,
+
+      (
+        SELECT COUNT(*)
+        FROM bookings
+        WHERE booking_status='checked_in'
+      ) AS activeGuests,
+
+      (
+        SELECT COUNT(*)
+        FROM (
+          SELECT customer_id
+          FROM bookings
+          GROUP BY customer_id
+          HAVING COUNT(*) > 1
+        ) repeatGuests
+      ) AS repeatGuests,
+
+      (
+        SELECT COUNT(*)
+        FROM customers
+        WHERE customer_type='VIP'
+      ) AS vipCustomers
+    `);
+
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+
   }
 };

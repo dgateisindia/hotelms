@@ -1,25 +1,31 @@
-const jwt = require('jsonwebtoken');
+const { getAuth } = require("@clerk/express");
+const db = require("../config/db");
 
-const protect = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ message: 'Not authorized, no token' });
-
+const protect = async (req, res, next) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    req.user = decoded;
+    const { userId } = getAuth(req);
+
+    if (!userId) {
+      return res.status(401).json({ message: "Not authorized, no token" });
+    }
+
+    const [rows] = await db.query(
+      `SELECT user_id, full_name, email, role, clerk_id
+       FROM users
+       WHERE clerk_id = ?`,
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(401).json({ message: "Not authorized, user not found" });
+    }
+
+    req.user = rows[0]; // now has .role for requireRole to check
     next();
   } catch (error) {
-    res.status(401).json({ message: 'Not authorized, token failed' });
+    console.error(error);
+    res.status(401).json({ message: "Not authorized, token failed" });
   }
 };
 
-const requireRole = (...allowedRoles) => {
-  return (req, res, next) => {
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ message: 'Forbidden: insufficient permissions' });
-    }
-    next();
-  };
-};
-
-module.exports = { protect, requireRole };
+module.exports = { protect };
