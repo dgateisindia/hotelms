@@ -6,6 +6,8 @@
 //  - Generate/Edit Bill form: booking dropdown autofills guest/room/
 //    dates/status; Room Charges rate is left blank for manual entry
 //  - Full client-side validation before submit
+//  - Date range badge (defaults to current month → today) drives
+//    invoice table + dashboard widgets via dateFrom/dateTo params
 //  Icons  → ../../utils/icons/BillingIcons.js
 //  Styles → ../../styles/Billing.css
 // ============================================================
@@ -21,9 +23,6 @@ import {
 } from '../../utils/icons/Billingicons';
 
 // ── API client ────────────────────────────────────────────────
-// Adjust baseURL / auth header wiring to match how the rest of the
-// app talks to the backend (e.g. an existing axios instance with
-// a Clerk session token interceptor already attached).
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/api/billing` : '/api/billing',
   withCredentials: true,
@@ -42,6 +41,18 @@ const emptyItem = () => ({desc:'', qty:1, rate:'', amount:0});
 const EMPTY_FORM = {guest:'', bookingId:'', room:'', checkIn:'', checkOut:'', method:'Cash', status:'Unpaid', items:[emptyItem()]};
 const PER_PAGE = 8;
 const TABS = ['All Bills','Paid','Partial','Unpaid','Cancelled'];
+
+// ── Date range helpers ──────────────────────────────────────
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const firstOfMonthISO = () => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+};
+const fmtDateBadge = (isoStr) => {
+  if (!isoStr) return '';
+  const d = new Date(`${isoStr}T00:00:00`);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 // ── Helpers ───────────────────────────────────────────────────
 const statusClass = (s) => {
@@ -144,7 +155,6 @@ const InvoiceModal = ({invoice, onClose}) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box modal-box-lg" style={{maxWidth:660}} onClick={e=>e.stopPropagation()}>
 
-        {/* Modal header with Print + Download */}
         <div className="modal-header">
           <h3>Invoice — {invoice.id}</h3>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
@@ -158,10 +168,8 @@ const InvoiceModal = ({invoice, onClose}) => {
           </div>
         </div>
 
-        {/* Invoice content — printable */}
         <div id="invoice-print-area" style={{padding:'24px 28px'}}>
 
-          {/* Hotel header */}
           <div className="ih" style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:14}}>
             <div className="ilogo" style={{width:44,height:44,background:'#c9a227',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,color:'#fff',fontWeight:900,flexShrink:0}}>H</div>
             <div>
@@ -175,7 +183,6 @@ const InvoiceModal = ({invoice, onClose}) => {
 
           <div className="invoice-divider"/>
 
-          {/* Title + meta */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
             <div className="invoice-title">INVOICE</div>
             <div style={{textAlign:'right'}}>
@@ -185,7 +192,6 @@ const InvoiceModal = ({invoice, onClose}) => {
             </div>
           </div>
 
-          {/* Bill To + Stay Details */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:14}}>
             <div>
               <div className="invoice-bill-label">Bill To.</div>
@@ -201,7 +207,6 @@ const InvoiceModal = ({invoice, onClose}) => {
             </div>
           </div>
 
-          {/* Items */}
           <table className="invoice-items-table" style={{marginTop:18}}>
             <thead>
               <tr>
@@ -223,7 +228,6 @@ const InvoiceModal = ({invoice, onClose}) => {
             </tbody>
           </table>
 
-          {/* Totals */}
           <div style={{marginTop:12,borderTop:'1px solid #e4e8f0',paddingTop:10}}>
             <div className="invoice-total-row"><span>Subtotal</span><span>₹ {subtotal.toLocaleString('en-IN')}</span></div>
             <div className="invoice-total-row"><span>Tax (12%)</span><span>₹ {tax.toLocaleString('en-IN')}</span></div>
@@ -231,7 +235,6 @@ const InvoiceModal = ({invoice, onClose}) => {
             <div className="invoice-total-row total"><span>Total Amount</span><span>₹ {total.toLocaleString('en-IN')}</span></div>
           </div>
 
-          {/* Payment info */}
           <div className="invoice-payment-info" style={{marginTop:14}}>
             <div className="invoice-payment-title">Payment Information</div>
             {[['Payment Method',invoice.method||'—'],['Paid Amount',`₹ ${invoice.paid.toLocaleString('en-IN')}`],['Payment Status',invoice.status]].map(([k,v])=>(
@@ -250,11 +253,6 @@ const InvoiceModal = ({invoice, onClose}) => {
 };
 
 // ── Bill Form Modal (Generate / Edit) ──────────────────────────
-// IMPORTANT: This must live OUTSIDE the Billing component. Defining it
-// inside Billing() would create a brand-new component function on every
-// render (e.g. every keystroke), which makes React unmount + remount the
-// whole modal DOM tree — losing input focus and making fields look like
-// they "reset" after typing a single character.
 const BillFormModal = ({
   title, form, formErrors, formError, bookings, saving,
   onFormChange, onItemChange, onBookingChange, onAddItem, onRemoveItem,
@@ -408,6 +406,11 @@ function Billing() {
   const [activeTab, setActiveTab]     = useState('All Bills');
   const [page, setPage]               = useState(1);
 
+  // Date range — defaults to current month start → today
+  const [dateRange, setDateRange]     = useState({ from: firstOfMonthISO(), to: todayISO() });
+  const [draftRange, setDraftRange]   = useState({ from: firstOfMonthISO(), to: todayISO() });
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
   const [showAdd, setShowAdd]         = useState(false);
   const [showEdit, setShowEdit]       = useState(false);
   const [showView, setShowView]       = useState(false);
@@ -419,35 +422,35 @@ function Billing() {
   const [formError, setFormError]     = useState(null);
   const [formErrors, setFormErrors]   = useState({}); // field-level validation errors
 
-  // ── Fetch invoice table (server search / filter / pagination) ──
-
+  // ── Fetch bookings (for the Generate/Edit Bill dropdown) ──
   const fetchBookings = async () => {
-
     try {
-
-const res = await bookingApi.get("/");
-        setBookings(res.data);
-
+      const res = await bookingApi.get("/");
+      setBookings(res.data);
     }
     catch (err) {
-
-        console.log(err);
-
+      console.log(err);
     }
+  };
 
-};
-
-useEffect(() => {
+  useEffect(() => {
     fetchBookings();
-}, []);
+  }, []);
 
-//fetch invoice
+  // ── Fetch invoice table (server search / filter / pagination / date range) ──
   const fetchInvoices = useCallback(async () => {
     setLoadingTable(true);
     setTableError(null);
     try {
       const { data } = await api.get('/invoices', {
-        params: { search, status: activeTab, page, limit: PER_PAGE },
+        params: {
+          search,
+          status: activeTab === 'All Bills' ? undefined : activeTab,
+          page,
+          limit: PER_PAGE,
+          dateFrom: dateRange.from,
+          dateTo: dateRange.to,
+        },
       });
       setInvoices(data.invoices || []);
       setTotalInvoices(data.total || 0);
@@ -459,7 +462,7 @@ useEffect(() => {
     } finally {
       setLoadingTable(false);
     }
-  }, [search, activeTab, page]);
+  }, [search, activeTab, page, dateRange]);
 
   // debounce search so we don't fire a request per keystroke
   useEffect(() => {
@@ -467,20 +470,17 @@ useEffect(() => {
     return () => clearTimeout(t);
   }, [fetchInvoices]);
 
-  // ── Fetch dashboard widgets (stats, chart, breakdown, recent) ──
+  // ── Fetch dashboard widgets (stats, chart, breakdown, recent) — same date range ──
   const fetchWidgets = useCallback(async () => {
     setLoadingWidgets(true);
     try {
+      const rangeParams = { dateFrom: dateRange.from, dateTo: dateRange.to };
       const [statsRes, revenueRes, methodsRes, recentRes] = await Promise.all([
-        api.get('/stats'),
-        api.get('/revenue-chart'),
-        api.get('/payment-methods'),
-        api.get('/recent-payments', { params: { limit: 4 } }),
+        api.get('/stats', { params: rangeParams }),
+        api.get('/revenue-chart', { params: rangeParams }),
+        api.get('/payment-methods', { params: rangeParams }),
+        api.get('/recent-payments', { params: { ...rangeParams, limit: 4 } }),
       ]);
-      // Accept either a flat stats shape ({ totalBills, totalRevenue, ... })
-      // or a nested one ({ stats: { totalBills, ... }, revenue, ... }) —
-      // whichever the /stats endpoint actually returns — and always merge
-      // onto safe defaults so a missing field never crashes the UI.
       const rawStats = statsRes.data?.stats ?? statsRes.data ?? {};
       setStats({
         totalBills: 0,
@@ -498,11 +498,16 @@ useEffect(() => {
     } finally {
       setLoadingWidgets(false);
     }
-  }, []);
+  }, [dateRange]);
 
   useEffect(() => { fetchWidgets(); }, [fetchWidgets]);
 
   const refreshAll = () => { fetchInvoices(); fetchWidgets(); };
+
+  // ── Date range handlers ──
+  const openDatePicker = () => { setDraftRange(dateRange); setShowDatePicker(v => !v); };
+  const applyDateRange = () => { setDateRange(draftRange); setPage(1); setShowDatePicker(false); };
+  const cancelDateRange = () => setShowDatePicker(false);
 
   // ── Handlers ──
   const openAdd     = () => { setForm(EMPTY_FORM); setFormError(null); setFormErrors({}); setShowAdd(true); };
@@ -515,7 +520,6 @@ useEffect(() => {
   };
   const openView    = (inv) => { setSelected(inv); setShowView(true); };
 
-  // Full invoice detail (line items) is only needed for print/view — fetch on demand
   const openInvoice = async (inv) => {
     setSelected(inv);
     setShowInvoice(true);
@@ -531,8 +535,6 @@ useEffect(() => {
   };
 
   // ── Validation ──
-  // Returns { bookingId, guest, room, checkIn, checkOut, method, status, items, itemErrors[] }
-  // Any truthy top-level key (besides itemErrors) or any non-empty itemErrors entry means invalid.
   const validateForm = (f) => {
     const errors = { itemErrors: f.items.map(() => ({})) };
 
@@ -565,7 +567,7 @@ useEffect(() => {
     Object.entries(errors).some(([k, v]) => k !== 'itemErrors' && v) ||
     errors.itemErrors.some((ie) => Object.keys(ie).length > 0);
 
-const handleAdd = async () => {
+  const handleAdd = async () => {
 
     const errs = validateForm(form);
     setFormErrors(errs);
@@ -575,34 +577,30 @@ const handleAdd = async () => {
     }
 
     setSaving(true);
-
     setFormError(null);
 
     try {
-
         const subtotal = form.items.reduce(
-            (sum, item) =>
-                sum + Number(item.qty) * Number(item.rate),
+            (sum, item) => sum + Number(item.qty) * Number(item.rate),
             0
         );
 
         const tax = subtotal * 0.12;
 
-        const payload = {
+        const methodMap = { Cash: 'cash', Card: 'card', UPI: 'upi', 'Net Banking': 'bank_transfer' };
 
+        const payload = {
             booking_id: form.bookingId,
+            payment_method: methodMap[form.method] || 'cash',
 
             room_charges:
-                form.items.find(i => i.desc === "Room Charges")
-                    ?.amount || 0,
+                form.items.find(i => i.desc === "Room Charges")?.amount || 0,
 
             food_charges:
-                form.items.find(i => i.desc === "Food Charges")
-                    ?.amount || 0,
+                form.items.find(i => i.desc === "Food Charges")?.amount || 0,
 
             laundry_charges:
-                form.items.find(i => i.desc === "Laundry Charges")
-                    ?.amount || 0,
+                form.items.find(i => i.desc === "Laundry Charges")?.amount || 0,
 
             extra_service_charges:
                 form.items
@@ -612,100 +610,88 @@ const handleAdd = async () => {
                             i.desc !== "Food Charges" &&
                             i.desc !== "Laundry Charges"
                     )
-                    .reduce(
-                        (s, i) => s + Number(i.amount),
-                        0
-                    ),
+                    .reduce((s, i) => s + Number(i.amount), 0),
 
             tax_amount: tax,
 
             paid_amount:
-                form.status === "Paid"
-                    ? subtotal + tax
-                    : 0
-
+                form.status === "Paid" ? subtotal + tax : 0
         };
 
         await api.post("/invoices", payload);
 
         setShowAdd(false);
-
         refreshAll();
 
     } catch (err) {
-
         console.log(err);
-
         setFormError(
             err.response?.data?.message ||
             "Unable to generate invoice"
         );
-
     } finally {
-
         setSaving(false);
+    }
+  };
 
+  const handleEdit = async () => {
+    if (!selected) return;
+
+    const errs = validateForm(form);
+    setFormErrors(errs);
+    if (hasBlockingErrors(errs)) {
+      setFormError('Please fix the highlighted fields before saving.');
+      return;
     }
 
-};
-const handleEdit = async () => {
-  if (!selected) return;
+    setSaving(true);
+    setFormError(null);
 
-  const errs = validateForm(form);
-  setFormErrors(errs);
-  if (hasBlockingErrors(errs)) {
-    setFormError('Please fix the highlighted fields before saving.');
-    return;
-  }
+    try {
+      const subtotal = form.items.reduce(
+        (sum, item) => sum + Number(item.qty) * Number(item.rate),
+        0
+      );
+      const tax = subtotal * 0.12;
 
-  setSaving(true);
-  setFormError(null);
+      const methodMap = { Cash: 'cash', Card: 'card', UPI: 'upi', 'Net Banking': 'bank_transfer' };
 
-  try {
-    const subtotal = form.items.reduce(
-      (sum, item) => sum + Number(item.qty) * Number(item.rate),
-      0
-    );
-    const tax = subtotal * 0.12;
+      const payload = {
+        booking_id: form.bookingId,
+        payment_method: methodMap[form.method] || 'cash',
 
-    const methodMap = { Cash: 'cash', Card: 'card', UPI: 'upi', 'Net Banking': 'bank_transfer' };
+        room_charges:
+          form.items.find(i => i.desc === "Room Charges")?.amount || 0,
 
-    const payload = {
-      booking_id: form.bookingId,
-      payment_method: methodMap[form.method] || 'cash',
+        food_charges:
+          form.items.find(i => i.desc === "Food Charges")?.amount || 0,
 
-      room_charges:
-        form.items.find(i => i.desc === "Room Charges")?.amount || 0,
+        laundry_charges:
+          form.items.find(i => i.desc === "Laundry Charges")?.amount || 0,
 
-      food_charges:
-        form.items.find(i => i.desc === "Food Charges")?.amount || 0,
+        extra_service_charges:
+          form.items
+            .filter(i => !["Room Charges", "Food Charges", "Laundry Charges"].includes(i.desc))
+            .reduce((s, i) => s + Number(i.amount), 0),
 
-      laundry_charges:
-        form.items.find(i => i.desc === "Laundry Charges")?.amount || 0,
+        tax_amount: tax,
 
-      extra_service_charges:
-        form.items
-          .filter(i => !["Room Charges", "Food Charges", "Laundry Charges"].includes(i.desc))
-          .reduce((s, i) => s + Number(i.amount), 0),
+        paid_amount:
+          form.status === "Paid" ? subtotal + tax
+          : form.status === "Partial" ? Math.round((subtotal + tax) / 2)
+          : 0,
+      };
 
-      tax_amount: tax,
-
-      paid_amount:
-        form.status === "Paid" ? subtotal + tax
-        : form.status === "Partial" ? Math.round((subtotal + tax) / 2) // or whatever partial-amount logic you use
-        : 0,
-    };
-
-    await api.put(`/invoices/${selected.invoice_id}`, payload);
-    setShowEdit(false);
-    refreshAll();
-  } catch (err) {
-    console.error('Failed to update invoice:', err);
-    setFormError(err.response?.data?.message || 'Failed to update invoice. Please try again.');
-  } finally {
-    setSaving(false);
-  }
-};
+      await api.put(`/invoices/${selected.invoice_id}`, payload);
+      setShowEdit(false);
+      refreshAll();
+    } catch (err) {
+      console.error('Failed to update invoice:', err);
+      setFormError(err.response?.data?.message || 'Failed to update invoice. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -740,8 +726,6 @@ const handleEdit = async () => {
     return <span className={up ? '' : 'neg'}>{up ? '↑' : '↓'} {Math.abs(pct)}% from last month</span>;
   };
 
-  // Booking selected → autofill everything EXCEPT the Room Charges rate/amount,
-  // which the user enters manually.
   const handleBookingChange = async (e) => {
     const bookingId = e.target.value;
     setFormError(null);
@@ -774,7 +758,7 @@ const handleEdit = async () => {
                 {
                     desc: "Room Charges",
                     qty: nights,
-                    rate: '',   // left blank — entered manually
+                    rate: '',
                     amount: 0,
                 },
             ],
@@ -786,14 +770,62 @@ const handleEdit = async () => {
         setFormError("Unable to load booking details");
         setFormErrors(prev => ({ ...prev, bookingId: 'Booking not found' }));
     }
-};
+  };
+
   return (
     <>
       {/* Page Header */}
       <div className="page-header">
         <div className="page-header-left"><h2>Billing &amp; Invoices</h2><p>Manage bills, payments and invoices</p></div>
         <div className="page-header-right">
-          <div className="date-range-badge"><IcoCalendar/> 01 May 2024 – 31 May 2024</div>
+
+          {/* Date range badge — clickable, opens a from/to picker */}
+          <div style={{ position: 'relative' }}>
+            <button
+              className="date-range-badge"
+              style={{ cursor: 'pointer', border: 'none' }}
+              onClick={openDatePicker}
+            >
+              <IcoCalendar/> {fmtDateBadge(dateRange.from)} – {fmtDateBadge(dateRange.to)}
+            </button>
+
+            {showDatePicker && (
+              <div
+                style={{
+                  position: 'absolute', top: '110%', right: 0, zIndex: 20,
+                  background: '#fff', border: '1px solid #e4e8f0', borderRadius: 10,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.08)', padding: 16, width: 260,
+                }}
+              >
+                <div className="form-group" style={{ marginBottom: 10 }}>
+                  <label className="form-label">From</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={draftRange.from}
+                    max={draftRange.to}
+                    onChange={e => setDraftRange(prev => ({ ...prev, from: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">To</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={draftRange.to}
+                    min={draftRange.from}
+                    max={todayISO()}
+                    onChange={e => setDraftRange(prev => ({ ...prev, to: e.target.value }))}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button className="btn-cancel" onClick={cancelDateRange}>Cancel</button>
+                  <button className="btn-save" onClick={applyDateRange}>Apply</button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <button className="btn-generate" onClick={openAdd}><IcoPlus/>Generate New Bill</button>
         </div>
       </div>
@@ -858,7 +890,6 @@ const handleEdit = async () => {
                   <div className="action-btns">
                     <button className="btn-icon btn-icon-view"  title="View Details" onClick={()=>openView(inv)}><IcoEye/></button>
                     <button className="btn-icon btn-icon-edit"  title="Edit"         onClick={()=>openEdit(inv)}><IcoEdit/></button>
-                    {/* Print icon — opens invoice modal */}
                     <button className="btn-icon btn-icon-print" title="Print / Download Invoice" onClick={()=>openInvoice(inv)}><IcoPrint/></button>
                   </div>
                 </td>
@@ -943,13 +974,11 @@ const handleEdit = async () => {
         />
       )}
 
-      {/* Invoice modal — only opens on Print button click */}
       {showInvoice && selected && (
         invoiceLoading
           ? <div className="modal-overlay" onClick={()=>setShowInvoice(false)}><div className="modal-box" onClick={e=>e.stopPropagation()} style={{padding:40,textAlign:'center',color:'#9ca3af'}}>Loading invoice…</div></div>
           : <InvoiceModal invoice={selected} onClose={()=>setShowInvoice(false)}/>
       )}
-      {/* View Details modal */}
       {showView && selected && (
         <div className="modal-overlay" onClick={()=>setShowView(false)}>
           <div className="modal-box" onClick={e=>e.stopPropagation()}>

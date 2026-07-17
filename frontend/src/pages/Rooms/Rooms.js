@@ -32,8 +32,14 @@ const PER_PAGE = 8;
 
 // ── Helpers ───────────────────────────────────────────────────
 const statusClass = (s) => {
-  const map = { 'Available':'badge-available', 'Occupied':'badge-occupied', 'Cleaning':'badge-cleaning', 'Maintenance':'badge-maintenance', 'Reserved':'badge-reserved' };
-  return `badge ${map[s] || ''}`;
+  const map = {
+    available: 'badge-available',
+    occupied: 'badge-occupied',
+    cleaning: 'badge-cleaning',
+    maintenance: 'badge-maintenance',
+    reserved: 'badge-reserved',
+  };
+  return `badge ${map[(s || '').toLowerCase()] || ''}`;
 };
 
 // ════════════════════════════════════════════════════════════

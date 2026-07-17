@@ -12,36 +12,57 @@ const METHOD_MAP = {
 
 /* ===========================================================
    BILLING DASHBOARD
+   Accepts optional ?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD.
+   Invoice-based figures (stats, revenue) filter on generated_at;
+   payment-based figures (methods, recent payments) filter on payment_date.
 =========================================================== */
 
 exports.getBillingDashboard = async (req, res) => {
   try {
-    const [[stats]] = await db.query(`
+    const { dateFrom, dateTo } = req.query;
+    const hasRange = Boolean(dateFrom && dateTo);
+
+    const invoiceDateFilter = hasRange ? `WHERE DATE(generated_at) BETWEEN ? AND ?` : "";
+    const paymentDateFilter = hasRange ? `WHERE DATE(payment_date) BETWEEN ? AND ?` : "";
+    const rangeParams = hasRange ? [dateFrom, dateTo] : [];
+
+    const [[stats]] = await db.query(
+      `
       SELECT
         COUNT(*) AS totalBills,
         IFNULL(SUM(total_amount),0) AS totalRevenue,
         IFNULL(SUM(paid_amount),0) AS paidAmount,
         IFNULL(SUM(pending_amount),0) AS outstanding
       FROM invoices
-    `);
+      ${invoiceDateFilter}
+    `,
+      rangeParams
+    );
 
-    const [revenue] = await db.query(`
+    const [revenue] = await db.query(
+      `
       SELECT
         DATE_FORMAT(generated_at,'%b') AS month,
         SUM(total_amount) AS val
       FROM invoices
+      ${invoiceDateFilter}
       GROUP BY MONTH(generated_at), DATE_FORMAT(generated_at,'%b')
       ORDER BY MONTH(generated_at)
-    `);
+    `,
+      rangeParams
+    );
 
-    const [methods] = await db.query(`
+    const [methods] = await db.query(
+      `
       SELECT
         payment_method,
         COUNT(*) total
       FROM payments
-      WHERE payment_status='success'
+      ${hasRange ? `WHERE payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?` : `WHERE payment_status='success'`}
       GROUP BY payment_method
-    `);
+    `,
+      rangeParams
+    );
 
     const totalMethodCount = methods.reduce((sum, m) => sum + Number(m.total), 0);
 
@@ -58,7 +79,8 @@ exports.getBillingDashboard = async (req, res) => {
       color: colors[m.payment_method] || "#64748b",
     }));
 
-    const [recentPayments] = await db.query(`
+    const [recentPayments] = await db.query(
+      `
       SELECT
           c.full_name guest,
           i.invoice_number inv,
@@ -69,9 +91,12 @@ exports.getBillingDashboard = async (req, res) => {
       JOIN bookings b ON p.booking_id=b.booking_id
       JOIN customers c ON b.customer_id=c.customer_id
       JOIN invoices i ON i.booking_id=b.booking_id
+      ${paymentDateFilter}
       ORDER BY p.payment_date DESC
       LIMIT 5
-    `);
+    `,
+      rangeParams
+    );
 
     res.json({ stats, revenue, paymentMethods, recentPayments });
   } catch (err) {
@@ -86,14 +111,23 @@ exports.getBillingDashboard = async (req, res) => {
 
 exports.getRevenueChart = async (req, res) => {
   try {
-    const [rows] = await db.query(`
+    const { dateFrom, dateTo } = req.query;
+    const hasRange = Boolean(dateFrom && dateTo);
+    const dateFilter = hasRange ? `WHERE DATE(generated_at) BETWEEN ? AND ?` : "";
+    const rangeParams = hasRange ? [dateFrom, dateTo] : [];
+
+    const [rows] = await db.query(
+      `
       SELECT
         DATE_FORMAT(generated_at,'%b') month,
         SUM(total_amount) val
       FROM invoices
+      ${dateFilter}
       GROUP BY MONTH(generated_at), DATE_FORMAT(generated_at,'%b')
       ORDER BY MONTH(generated_at)
-    `);
+    `,
+      rangeParams
+    );
 
     res.json(rows);
   } catch (err) {
@@ -108,14 +142,24 @@ exports.getRevenueChart = async (req, res) => {
 
 exports.getPaymentMethods = async (req, res) => {
   try {
-    const [rows] = await db.query(`
+    const { dateFrom, dateTo } = req.query;
+    const hasRange = Boolean(dateFrom && dateTo);
+    const whereClause = hasRange
+      ? `WHERE payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?`
+      : `WHERE payment_status='success'`;
+    const rangeParams = hasRange ? [dateFrom, dateTo] : [];
+
+    const [rows] = await db.query(
+      `
         SELECT
             payment_method,
             COUNT(*) total
         FROM payments
-        WHERE payment_status='success'
+        ${whereClause}
         GROUP BY payment_method
-    `);
+    `,
+      rangeParams
+    );
 
     const total = rows.reduce((s, r) => s + Number(r.total), 0);
 
@@ -145,7 +189,13 @@ exports.getPaymentMethods = async (req, res) => {
 
 exports.getRecentPayments = async (req, res) => {
   try {
-    const [rows] = await db.query(`
+    const { dateFrom, dateTo, limit = 5 } = req.query;
+    const hasRange = Boolean(dateFrom && dateTo);
+    const dateFilter = hasRange ? `WHERE DATE(payment_date) BETWEEN ? AND ?` : "";
+    const rangeParams = hasRange ? [dateFrom, dateTo] : [];
+
+    const [rows] = await db.query(
+      `
       SELECT
         c.full_name guest,
         i.invoice_number inv,
@@ -156,9 +206,12 @@ exports.getRecentPayments = async (req, res) => {
       JOIN bookings b ON p.booking_id=b.booking_id
       JOIN customers c ON b.customer_id=c.customer_id
       JOIN invoices i ON b.booking_id=i.booking_id
+      ${dateFilter}
       ORDER BY payment_date DESC
-      LIMIT 5
-    `);
+      LIMIT ?
+    `,
+      [...rangeParams, Number(limit)]
+    );
 
     res.json(rows);
   } catch (err) {
@@ -168,12 +221,12 @@ exports.getRecentPayments = async (req, res) => {
 };
 
 /* ===========================================================
-   GET ALL INVOICES (search + status filter + pagination)
+   GET ALL INVOICES (search + status filter + date range + pagination)
 =========================================================== */
 
 exports.getAllInvoices = async (req, res) => {
   try {
-    const { search = "", status, page = 1, limit = 8 } = req.query;
+    const { search = "", status, page = 1, limit = 8, dateFrom, dateTo } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
 
     const conditions = [];
@@ -191,6 +244,11 @@ exports.getAllInvoices = async (req, res) => {
       params.push(status.toLowerCase());
     }
 
+    if (dateFrom && dateTo) {
+      conditions.push(`DATE(i.generated_at) BETWEEN ? AND ?`);
+      params.push(dateFrom, dateTo);
+    }
+
     const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const [[{ total }]] = await db.query(
@@ -202,32 +260,32 @@ exports.getAllInvoices = async (req, res) => {
       params
     );
 
-  const [rows] = await db.query(
-  `SELECT
-    i.invoice_id,
-    i.invoice_number,
+    const [rows] = await db.query(
+      `SELECT
+        i.invoice_id,
+        i.invoice_number,
 
-    b.booking_id,
-    DATE_FORMAT(b.check_in, '%Y-%m-%d')  AS check_in,
-    DATE_FORMAT(b.check_out, '%Y-%m-%d') AS check_out,
+        b.booking_id,
+        DATE_FORMAT(b.check_in, '%Y-%m-%d')  AS check_in,
+        DATE_FORMAT(b.check_out, '%Y-%m-%d') AS check_out,
 
-    c.full_name, r.room_number,
-    i.total_amount, i.paid_amount, i.pending_amount,
-    i.invoice_status,
+        c.full_name, r.room_number,
+        i.total_amount, i.paid_amount, i.pending_amount,
+        i.invoice_status,
 
-    (SELECT payment_method FROM payments
-     WHERE booking_id = b.booking_id
-     ORDER BY payment_date DESC LIMIT 1) AS payment_method
+        (SELECT payment_method FROM payments
+         WHERE booking_id = b.booking_id
+         ORDER BY payment_date DESC LIMIT 1) AS payment_method
 
-  FROM invoices i
-  JOIN bookings b ON i.booking_id = b.booking_id
-  JOIN customers c ON b.customer_id = c.customer_id
-  JOIN rooms r ON b.room_id = r.room_id
-  ${whereClause}
-  ORDER BY i.generated_at DESC
-  LIMIT ? OFFSET ?`,
-  [...params, Number(limit), offset]
-);
+      FROM invoices i
+      JOIN bookings b ON i.booking_id = b.booking_id
+      JOIN customers c ON b.customer_id = c.customer_id
+      JOIN rooms r ON b.room_id = r.room_id
+      ${whereClause}
+      ORDER BY i.generated_at DESC
+      LIMIT ? OFFSET ?`,
+      [...params, Number(limit), offset]
+    );
 
     const invoices = rows.map((row) => ({
       invoice_id: row.invoice_id,
@@ -275,8 +333,8 @@ exports.getInvoiceById = async (req, res) => {
         i.invoice_number,
 
         b.booking_id,
-        b.check_in,
-        b.check_out,
+        DATE_FORMAT(b.check_in, '%Y-%m-%d')  AS check_in,
+        DATE_FORMAT(b.check_out, '%Y-%m-%d') AS check_out,
 
         c.full_name,
         c.phone,

@@ -22,6 +22,19 @@ import {
   Error503,
 } from "./pages/Error/ErrorPages";
 
+// Small helper so every protected Dashboard page follows the same
+// SignedIn / SignedOut pattern instead of repeating it per route.
+const ProtectedDashboard = ({ page }) => (
+  <>
+    <SignedIn>
+      <Dashboard page={page} />
+    </SignedIn>
+    <SignedOut>
+      <Navigate to="/login" replace />
+    </SignedOut>
+  </>
+);
+
 function App() {
   return (
     <Router>
@@ -97,157 +110,31 @@ function App() {
         />
 
         {/* Regular Admin Dashboard */}
-        <Route
-          path="/admin-dashboard"
-          element={
-            <>
-              <SignedIn>
-                <Dashboard page="dashboard" />
-              </SignedIn>
-              <SignedOut>
-                <Navigate to="/login" replace />
-              </SignedOut>
-            </>
-          }
-        />
+        <Route path="/admin-dashboard" element={<ProtectedDashboard page="dashboard" />} />
 
         {/* Dashboard (staff roles / fallback) */}
-        <Route
-          path="/dashboard"
-          element={
-            <>
-              <SignedIn>
-                <Dashboard page="dashboard" />
-              </SignedIn>
+        <Route path="/dashboard" element={<ProtectedDashboard page="dashboard" />} />
 
-              <SignedOut>
-                <Navigate to="/login" replace />
-              </SignedOut>
-            </>
-          }
-        />
+        <Route path="/bookings" element={<ProtectedDashboard page="bookings" />} />
 
-        <Route
-          path="/bookings"
-          element={
-            <SignedIn>
-              <Dashboard page="bookings" />
-            </SignedIn>
-          }
-        />
+        <Route path="/rooms" element={<ProtectedDashboard page="rooms" />} />
 
-        <Route
-          path="/rooms"
-          element={
-            <SignedIn>
-              <Dashboard page="rooms" />
-            </SignedIn>
-          }
-        />
+        <Route path="/customers" element={<ProtectedDashboard page="customers" />} />
 
-        <Route
-          path="/customers"
-          element={
-            <SignedIn>
-              <Dashboard page="customers" />
-            </SignedIn>
-          }
-        />
+        <Route path="/billing" element={<ProtectedDashboard page="billing" />} />
 
-        <Route
-          path="/billing"
-          element={
-            <SignedIn>
-              <Dashboard page="billing" />
-            </SignedIn>
-          }
-        />
+        {/* Staff */}
+        <Route path="/staff" element={<ProtectedDashboard page="staff" />} />
 
-        <Route
-          path="/staff"
-          element={
-            <SignedIn>
-              <Dashboard page="staff" />
-            </SignedIn>
-          }
-        />
+        <Route path="/attendance" element={<ProtectedDashboard page="attendance" />} />
 
-        <Route
-          path="/attendance"
-          element={
-            <SignedIn>
-              <Dashboard page="attendance" />
-            </SignedIn>
-          }
-        />
-        <Route
-  path="/payroll"
-  element={
-    <>
-      <SignedIn>
-        <Dashboard page="payroll" />
-      </SignedIn>
-      <SignedOut>
-        <Navigate to="/login" replace />
-      </SignedOut>
-    </>
-  }
-/>
+        <Route path="/payroll" element={<ProtectedDashboard page="payroll" />} />
 
-<Route
-  path="/notifications"
-  element={
-    <>
-      <SignedIn>
-        <Dashboard page="notifications" />
-      </SignedIn>
-      <SignedOut>
-        <Navigate to="/login" replace />
-      </SignedOut>
-    </>
-  }
-/>
+        <Route path="/reports" element={<ProtectedDashboard page="reports" />} />
 
-<Route
-  path="/settings"
-  element={
-    <>
-      <SignedIn>
-        <Dashboard page="settings" />
-      </SignedIn>
-      <SignedOut>
-        <Navigate to="/login" replace />
-      </SignedOut>
-    </>
-  }
-/>
+        <Route path="/notifications" element={<ProtectedDashboard page="notifications" />} />
 
-        <Route
-          path="/reports"
-          element={
-            <SignedIn>
-              <Dashboard page="reports" />
-            </SignedIn>
-          }
-        />
-
-        <Route
-          path="/notifications"
-          element={
-            <SignedIn>
-              <Dashboard page="notifications" />
-            </SignedIn>
-          }
-        />
-
-        <Route
-          path="/settings"
-          element={
-            <SignedIn>
-              <Dashboard page="settings" />
-            </SignedIn>
-          }
-        />
+        <Route path="/settings" element={<ProtectedDashboard page="settings" />} />
 
         <Route path="/400" element={<Error400 />} />
         <Route path="/401" element={<Error401 />} />
