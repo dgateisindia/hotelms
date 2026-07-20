@@ -10,4 +10,11 @@ const getAdminsStatus = async () => {
   return res.data;
 };
 
-export default { getSuperAdminStats, getAdminsStatus };
+const getAdminDailyStats = async (date) => {
+  const res = await apiClient.get('/dashboard/admin-daily-stats', {
+    params: { date },
+  });
+  return res.data;
+};
+
+export default { getSuperAdminStats, getAdminsStatus, getAdminDailyStats };

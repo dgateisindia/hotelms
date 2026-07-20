@@ -12,6 +12,8 @@ import RequireSuperAdmin from "./routes/RequireSuperAdmin";
 import { setupApiClientAuth } from "./services/apiClient";
 import QRCodePage from './pages/QRCodePage';
 import Payroll from './pages/Payroll'
+import Staff from './pages/Staff/Staff'
+import Attendance from './pages/Attendance/Attendance'
 
 import {
   Error400,

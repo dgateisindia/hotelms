@@ -13,6 +13,7 @@ const superAdmin = require("./routes/superAdmin");
 const billingRoutes = require("./routes/billingRoutes");
 const payrollRoutes = require("./routes/payrollRoutes");
 const staffRoutes = require("./routes/staffRoutes");
+const AttendanceRoutes = require("./routes/attendanceRoutes");
 // backend/server.js
 const cookieParser = require('cookie-parser');
 const app = express();
@@ -38,6 +39,7 @@ app.use("/api/superadmin", superAdmin);
 app.use("/api/billing", billingRoutes);
 app.use("/api/payroll", payrollRoutes);
 app.use("/api/staff", staffRoutes);
+app.use("/api/attendance", AttendanceRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, statusCode: 404, message: 'Route not found' });

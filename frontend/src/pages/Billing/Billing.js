@@ -14,7 +14,7 @@
 
 
 import axios from "axios";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import '../../styles/Billing.css';
 import {
   IcoPlus, IcoSearch, IcoFilter, IcoEye, IcoEdit,
@@ -406,10 +406,15 @@ function Billing() {
   const [activeTab, setActiveTab]     = useState('All Bills');
   const [page, setPage]               = useState(1);
 
-  // Date range — defaults to current month start → today
-  const [dateRange, setDateRange]     = useState({ from: firstOfMonthISO(), to: todayISO() });
-  const [draftRange, setDraftRange]   = useState({ from: firstOfMonthISO(), to: todayISO() });
+  // Date range — defaults to current month start → today.
+  // Lazy initializers so a fresh mount (new login/page load) always
+  // starts from the real current date, not a stale closure.
+  const [dateRange, setDateRange]     = useState(() => ({ from: firstOfMonthISO(), to: todayISO() }));
+  const [draftRange, setDraftRange]   = useState(() => ({ from: firstOfMonthISO(), to: todayISO() }));
   const [showDatePicker, setShowDatePicker] = useState(false);
+  // Tracks whether the user manually applied a custom range, so the
+  // midnight/month-rollover effect below never overrides an explicit choice.
+  const userPickedRangeRef = useRef(false);
 
   const [showAdd, setShowAdd]         = useState(false);
   const [showEdit, setShowEdit]       = useState(false);
@@ -421,6 +426,21 @@ function Billing() {
   const [saving, setSaving]           = useState(false);
   const [formError, setFormError]     = useState(null);
   const [formErrors, setFormErrors]   = useState({}); // field-level validation errors
+
+  // If this tab is left open across midnight (or across a month
+  // boundary), roll the default "current month → today" range forward
+  // automatically — but only while the user hasn't manually applied a
+  // custom range via the date picker.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (userPickedRangeRef.current || showDatePicker) return;
+      const freshFrom = firstOfMonthISO();
+      const freshTo = todayISO();
+      setDateRange(prev => (prev.from !== freshFrom || prev.to !== freshTo) ? { from: freshFrom, to: freshTo } : prev);
+      setDraftRange(prev => (prev.from !== freshFrom || prev.to !== freshTo) ? { from: freshFrom, to: freshTo } : prev);
+    }, 60 * 1000); // check once a minute
+    return () => clearInterval(interval);
+  }, [showDatePicker]);
 
   // ── Fetch bookings (for the Generate/Edit Bill dropdown) ──
   const fetchBookings = async () => {
@@ -506,8 +526,23 @@ function Billing() {
 
   // ── Date range handlers ──
   const openDatePicker = () => { setDraftRange(dateRange); setShowDatePicker(v => !v); };
-  const applyDateRange = () => { setDateRange(draftRange); setPage(1); setShowDatePicker(false); };
+  const applyDateRange = () => {
+    userPickedRangeRef.current = true;
+    setDateRange(draftRange);
+    setPage(1);
+    setShowDatePicker(false);
+  };
   const cancelDateRange = () => setShowDatePicker(false);
+  // Lets the user opt back into the auto-updating "current month → today"
+  // default instead of a manually pinned range.
+  const resetToCurrentRange = () => {
+    userPickedRangeRef.current = false;
+    const fresh = { from: firstOfMonthISO(), to: todayISO() };
+    setDateRange(fresh);
+    setDraftRange(fresh);
+    setPage(1);
+    setShowDatePicker(false);
+  };
 
   // ── Handlers ──
   const openAdd     = () => { setForm(EMPTY_FORM); setFormError(null); setFormErrors({}); setShowAdd(true); };
@@ -818,9 +853,16 @@ function Billing() {
                     onChange={e => setDraftRange(prev => ({ ...prev, to: e.target.value }))}
                   />
                 </div>
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button className="btn-cancel" onClick={cancelDateRange}>Cancel</button>
-                  <button className="btn-save" onClick={applyDateRange}>Apply</button>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+                  {userPickedRangeRef.current && (
+                    <button className="btn-cancel" onClick={resetToCurrentRange} title="Back to current month → today, auto-updating">
+                      Use current range
+                    </button>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                    <button className="btn-cancel" onClick={cancelDateRange}>Cancel</button>
+                    <button className="btn-save" onClick={applyDateRange}>Apply</button>
+                  </div>
                 </div>
               </div>
             )}
