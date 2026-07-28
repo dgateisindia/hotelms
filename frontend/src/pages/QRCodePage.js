@@ -2,7 +2,7 @@ import React from "react";
 import { QRCodeCanvas } from "qrcode.react";
 
 const QRCodePage = () => {
-  const url = "http://192.168.1.15:3000/customer-request"; // Change after deployment
+  const url = "http://192.168.1.21:3000/customer-request"; // Change after deployment
 
   return (
     <div style={{ textAlign: "center", marginTop: "50px" }}>

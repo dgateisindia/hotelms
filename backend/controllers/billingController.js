@@ -1,7 +1,6 @@
 // controllers/billingController.js
 
-const db = require("../config/db");
-
+const db = require('../config/db').promisePool;
 // Maps the frontend's payment method labels to the DB's payment_method enum
 const METHOD_MAP = {
   Cash: "cash",

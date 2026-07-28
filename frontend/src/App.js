@@ -14,6 +14,9 @@ import QRCodePage from './pages/QRCodePage';
 import Payroll from './pages/Payroll'
 import Staff from './pages/Staff/Staff'
 import Attendance from './pages/Attendance/Attendance'
+import Reports from './pages/Reports/Reports'
+import Notifications from './pages/Notifications'
+import CustomerRequestPage from './pages/CustomerRequestPage'
 
 import {
   Error400,
@@ -110,6 +113,26 @@ function App() {
             </>
           }
         />
+
+{/* QR Code Page */}
+<Route
+  path="/qrcode"
+  element={
+    <>
+      <SignedIn>
+        <QRCodePage />
+      </SignedIn>
+      <SignedOut>
+        <Navigate to="/login" replace />
+      </SignedOut>
+    </>
+  }
+/>
+{/* Customer Request Page */}
+<Route
+  path="/customer-request"
+  element={<CustomerRequestPage />}
+/>
 
         {/* Regular Admin Dashboard */}
         <Route path="/admin-dashboard" element={<ProtectedDashboard page="dashboard" />} />

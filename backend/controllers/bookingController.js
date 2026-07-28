@@ -1,4 +1,4 @@
-const db = require("../config/db");
+const db = require("../config/db").promisePool;
 
 // ===============================
 // GET ALL BOOKINGS
@@ -178,6 +178,9 @@ exports.getBooking = async (req, res) => {
 // ===============================
 // BOOKING DASHBOARD STATS
 // ===============================
+// ===============================
+// BOOKING DASHBOARD STATS
+// ===============================
 exports.getBookingStats = async (req,res)=>{
 
   try{
@@ -188,11 +191,11 @@ exports.getBookingStats = async (req,res)=>{
       COUNT(*) AS totalBookings,
 
       SUM(
-        booking_status='confirmed'
+        booking_status='Confirmed'
       ) AS confirmedBookings,
 
       SUM(
-        booking_status='pending'
+        booking_status='Pending'
       ) AS pendingBookings,
 
       IFNULL(
@@ -202,6 +205,7 @@ exports.getBookingStats = async (req,res)=>{
 
       FROM bookings
     `);
+    // ...unchanged below
 
     res.json({
 
@@ -240,25 +244,53 @@ exports.getBookingStats = async (req,res)=>{
 // ADD BOOKING
 // ========================================
 
+// ========================================
+// ADD BOOKING
+// ========================================
 exports.addBooking = async (req, res) => {
-    console.log("POST BODY");
+  console.log("POST BODY");
   console.log(req.body);
+
+  const formatMySQLDate = (value) => {
+  if (!value) return null;
+
+  return new Date(value)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
+};
+
+const formattedCheckIn = formatMySQLDate(check_in);
+const formattedCheckOut = check_out
+  ? formatMySQLDate(check_out)
+  : null;
+
   const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();
+const {
+  customer_id,
+  room_id,
+  check_in,
+  check_out,
+  total_guests,
+  booking_status,
+  payment_status,
+  total_amount,
+  special_request,
+} = req.body;
+    // -----------------------------
+    // Validate Required Fields
+    // -----------------------------
+    if (!customer_id || !room_id || !check_in) {
+      await connection.rollback();
 
-    const {
-      customer_id,
-      room_id,
-      check_in,
-      check_out,
-      total_guests,
-      booking_status,
-      payment_status,
-      total_amount,
-      special_request,
-    } = req.body;
+      return res.status(400).json({
+        success: false,
+        message: "customer_id, room_id, and check_in are required.",
+      });
+    }
 
     // -----------------------------
     // Validate Customer
@@ -295,14 +327,58 @@ exports.addBooking = async (req, res) => {
     }
 
     // -----------------------------
-    // Check Availability
+    // Check Room Not Under Maintenance
+    // (status column is only a hard gate for maintenance now — a
+    // room's day-to-day "occupied/available" state is date-specific
+    // and handled by the overlap check below, not this static field)
     // -----------------------------
-    if (room[0].status !== "available") {
+    if (room[0].status === "maintenance") {
       await connection.rollback();
 
       return res.status(400).json({
         success: false,
-        message: "Room is not available.",
+        message: "Room is under maintenance and cannot be booked.",
+      });
+    }
+
+    // -----------------------------
+    // Check Date-Overlap Availability
+    // Mirrors the logic in getAvailableRooms: check-out is optional
+    // (open-ended stay), and an existing booking with a NULL
+    // check-out is treated as still ongoing.
+    // -----------------------------
+    let overlapCondition;
+    let overlapParams;
+
+    if (check_out) {
+      overlapCondition = `
+        check_in < ?
+        AND (check_out IS NULL OR check_out > ?)
+      `;
+      overlapParams = [room_id, check_out, check_in];
+    } else {
+      overlapCondition = `
+        (check_out IS NULL OR check_out > ?)
+      `;
+      overlapParams = [room_id, check_in];
+    }
+
+    const [conflicts] = await connection.query(
+      `
+      SELECT booking_id FROM bookings
+      WHERE room_id = ?
+        AND LOWER(booking_status) != 'cancelled'
+        AND ${overlapCondition}
+      `,
+      overlapParams
+    );
+
+    if (conflicts.length > 0) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        success: false,
+        message: "Room is not available for the selected dates.",
       });
     }
 
@@ -348,8 +424,8 @@ exports.addBooking = async (req, res) => {
         bookingCode,
         customer_id,
         room_id,
-        check_in,
-        check_out,
+       formattedCheckIn,
+      formattedCheckOut,
         total_guests,
         booking_status,
         payment_status,
@@ -358,21 +434,9 @@ exports.addBooking = async (req, res) => {
       ]
     );
 
-    // -----------------------------
-    // Update Room Status
-    // -----------------------------
-    await connection.query(
-      `
-      UPDATE rooms
-      SET status='occupied'
-      WHERE room_id=?
-      `,
-      [room_id]
-    );
-
     await connection.commit();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Booking created successfully.",
       booking_id: result.insertId,
@@ -385,9 +449,9 @@ exports.addBooking = async (req, res) => {
 
     console.error(err);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Server Error",
+      message: "Server Error while creating booking.",
     });
 
   } finally {
@@ -396,10 +460,10 @@ exports.addBooking = async (req, res) => {
 
   }
 };
+
 // ========================================
 // UPDATE BOOKING
 // ========================================
-
 exports.updateBooking = async (req, res) => {
 
   const connection = await db.getConnection();
@@ -422,6 +486,15 @@ exports.updateBooking = async (req, res) => {
       special_request,
     } = req.body;
 
+    if (!customer_id || !room_id || !check_in) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        success: false,
+        message: "customer_id, room_id, and check_in are required.",
+      });
+    }
+
     // Existing booking
     const [existing] = await connection.query(
       "SELECT * FROM bookings WHERE booking_id=?",
@@ -437,22 +510,71 @@ exports.updateBooking = async (req, res) => {
       });
     }
 
-    const oldRoom = existing[0].room_id;
+    // -----------------------------
+    // Validate Room
+    // -----------------------------
+    const [room] = await connection.query(
+      "SELECT room_id, status FROM rooms WHERE room_id = ?",
+      [room_id]
+    );
 
-    // Room changed
-    if (oldRoom != room_id) {
+    if (room.length === 0) {
+      await connection.rollback();
 
-      // Old room available
-      await connection.query(
-        "UPDATE rooms SET status='available' WHERE room_id=?",
-        [oldRoom]
-      );
+      return res.status(404).json({
+        success: false,
+        message: "Room not found",
+      });
+    }
 
-      // New room occupied
-      await connection.query(
-        "UPDATE rooms SET status='occupied' WHERE room_id=?",
-        [room_id]
-      );
+    if (room[0].status === "maintenance") {
+      await connection.rollback();
+
+      return res.status(400).json({
+        success: false,
+        message: "Room is under maintenance and cannot be booked.",
+      });
+    }
+
+    // -----------------------------
+    // Check Date-Overlap Availability
+    // Exclude THIS booking itself from the conflict check, since
+    // we're updating it, not creating a new one.
+    // -----------------------------
+    let overlapCondition;
+    let overlapParams;
+
+    if (check_out) {
+      overlapCondition = `
+        check_in < ?
+        AND (check_out IS NULL OR check_out > ?)
+      `;
+      overlapParams = [room_id, bookingId, check_out, check_in];
+    } else {
+      overlapCondition = `
+        (check_out IS NULL OR check_out > ?)
+      `;
+      overlapParams = [room_id, bookingId, check_in];
+    }
+
+    const [conflicts] = await connection.query(
+      `
+      SELECT booking_id FROM bookings
+      WHERE room_id = ?
+        AND booking_id != ?
+        AND LOWER(booking_status) != 'cancelled'
+        AND ${overlapCondition}
+      `,
+      overlapParams
+    );
+
+    if (conflicts.length > 0) {
+      await connection.rollback();
+
+      return res.status(400).json({
+        success: false,
+        message: "Room is not available for the selected dates.",
+      });
     }
 
     await connection.query(
@@ -478,7 +600,7 @@ exports.updateBooking = async (req, res) => {
         customer_id,
         room_id,
         check_in,
-        check_out,
+        check_out || null,
         total_guests,
         booking_status,
         payment_status,
@@ -492,7 +614,7 @@ exports.updateBooking = async (req, res) => {
 
     await connection.commit();
 
-    res.json({
+    return res.json({
 
       success: true,
       message: "Booking updated successfully"
@@ -505,10 +627,10 @@ exports.updateBooking = async (req, res) => {
 
     console.error(err);
 
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
-      message: "Server Error"
+      message: "Server Error while updating booking."
 
     });
 
@@ -519,10 +641,10 @@ exports.updateBooking = async (req, res) => {
   }
 
 };
+
 // ========================================
 // CANCEL BOOKING
 // ========================================
-
 exports.cancelBooking = async (req, res) => {
 
   const connection = await db.getConnection();
@@ -535,7 +657,7 @@ exports.cancelBooking = async (req, res) => {
 
     const [rows] = await connection.query(
 
-      "SELECT room_id FROM bookings WHERE booking_id=?",
+      "SELECT booking_id, booking_status FROM bookings WHERE booking_id=?",
 
       [bookingId]
 
@@ -555,13 +677,25 @@ exports.cancelBooking = async (req, res) => {
 
     }
 
-    const roomId = rows[0].room_id;
+    if (rows[0].booking_status && rows[0].booking_status.toLowerCase() === "cancelled") {
+
+      await connection.rollback();
+
+      return res.status(400).json({
+
+        success: false,
+
+        message: "Booking is already cancelled."
+
+      });
+
+    }
 
     await connection.query(
 
       `UPDATE bookings
 
-       SET booking_status='cancelled'
+       SET booking_status='Cancelled'
 
        WHERE booking_id=?`,
 
@@ -569,21 +703,9 @@ exports.cancelBooking = async (req, res) => {
 
     );
 
-    await connection.query(
-
-      `UPDATE rooms
-
-       SET status='available'
-
-       WHERE room_id=?`,
-
-      [roomId]
-
-    );
-
     await connection.commit();
 
-    res.json({
+    return res.json({
 
       success: true,
 
@@ -597,11 +719,11 @@ exports.cancelBooking = async (req, res) => {
 
     console.error(err);
 
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
-      message: "Server Error"
+      message: "Server Error while cancelling booking."
 
     });
 
@@ -612,10 +734,10 @@ exports.cancelBooking = async (req, res) => {
   }
 
 };
+
 // ========================================
 // DELETE BOOKING
 // ========================================
-
 exports.deleteBooking = async (req, res) => {
 
   const connection = await db.getConnection();
@@ -628,7 +750,7 @@ exports.deleteBooking = async (req, res) => {
 
     const [booking] = await connection.query(
 
-      "SELECT room_id FROM bookings WHERE booking_id=?",
+      "SELECT booking_id FROM bookings WHERE booking_id=?",
 
       [bookingId]
 
@@ -648,8 +770,6 @@ exports.deleteBooking = async (req, res) => {
 
     }
 
-    const roomId = booking[0].room_id;
-
     await connection.query(
 
       "DELETE FROM bookings WHERE booking_id=?",
@@ -658,17 +778,9 @@ exports.deleteBooking = async (req, res) => {
 
     );
 
-    await connection.query(
-
-      "UPDATE rooms SET status='available' WHERE room_id=?",
-
-      [roomId]
-
-    );
-
     await connection.commit();
 
-    res.json({
+    return res.json({
 
       success: true,
 
@@ -682,11 +794,11 @@ exports.deleteBooking = async (req, res) => {
 
     console.error(err);
 
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
-      message: "Server Error"
+      message: "Server Error while deleting booking."
 
     });
 

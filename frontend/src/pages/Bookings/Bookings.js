@@ -7,10 +7,26 @@
 //  - Typing an existing phone in "New Booking" auto-fills guest
 //    info and lets admin add more rooms under new Booking IDs
 //  - Delete removed — only Cancel remains (admin only)
+//  - Room No. is now a live dropdown of rooms actually available
+//    for the selected check-in/check-out range (status +
+//    date-overlap check against /api/rooms/available)
+//  - Check-in is mandatory, check-out is optional. Available
+//    rooms load as soon as check-in is picked.
+//  - Selecting a room auto-fills Amount (price/night × nights;
+//    defaults to 1 night if check-out isn't set yet, and
+//    recalculates if check-out is added/changed afterward).
+//  - New Booking modal validates Phone, Guest Name, and
+//    Check-in Date; errors show inline under each field.
+//  - readOnly prop (passed by Dashboard.js for super_admin):
+//    hides New Booking / Edit / Cancel / ID upload controls,
+//    View + History stay available.
+//  - Success/failure messages now use SweetAlert2 instead of
+//    native alert()/browser errors.
 // ============================================================
 
 import React, { useState, useMemo, useEffect } from "react";
 import axios from "axios";
+import Swal from 'sweetalert2';
 import '../../styles/Bookings.css';
 import {
   IcoPlus, IcoSearch, IcoFilter, IcoEye, IcoEdit,
@@ -38,6 +54,30 @@ const EMPTY_ROOM_FORM = {
 
 const PER_PAGE = 8;
 
+// ── SweetAlert helpers ──────────────────────────────────────────
+const showSuccess = (title, text) => {
+  Swal.fire({
+    icon: 'success',
+    title,
+    text,
+    timer: 2000,
+    timerProgressBar: true,
+    showConfirmButton: false,
+    toast: true,
+    position: 'top-end',
+  });
+};
+
+const showError = (title, err) => {
+  const text = err?.response?.data?.message || err?.message || 'Something went wrong. Please try again.';
+  Swal.fire({
+    icon: 'error',
+    title,
+    text,
+    confirmButtonColor: '#0d1b4b',
+  });
+};
+
 // ── Helpers ───────────────────────────────────────────────────
 const statusClass = (s) => {
   const map = { 'Confirmed':'badge-confirmed','Pending':'badge-pending','Checked-in':'badge-checkedin','Checked-out':'badge-checkedout','Cancelled':'badge-cancelled' };
@@ -49,12 +89,34 @@ const payClass = (p) => {
 };
 const genId = () => `BK-${Math.floor(1000 + Math.random() * 9000)}`;
 
+// Number of nights between check-in and check-out. If check-out
+// isn't set yet (it's optional), default to 1 night so the amount
+// field has a sane starting value instead of ₹0.
+const calcNights = (checkIn, checkOut) => {
+  if (!checkIn || !checkOut) return 1;
+  const inD = new Date(checkIn);
+  const outD = new Date(checkOut);
+  const diff = Math.round((outD - inD) / (1000 * 60 * 60 * 24));
+  return diff > 0 ? diff : 1;
+};
+
+// Validate only the fields that are actually mandatory:
+// Phone Number, Guest Name, Check-in Date. Everything else
+// (room, guests, amount, check-out, etc.) is optional at this stage.
+const validateRoomForm = (data) => {
+  const errs = {};
+  if (!data.phone || !data.phone.trim()) errs.phone = 'Phone number is required';
+  if (!data.guest || !data.guest.trim()) errs.guest = 'Guest name is required';
+  if (!data.checkIn) errs.checkIn = 'Check-in date is required';
+  return errs;
+};
+
 // Brand color band per unique phone number (cycles through palette)
 const GROUP_COLORS = ['#eff6ff', '#f0fdf4', '#fff7ed', '#faf5ff', '#fef2f2', '#ecfeff'];
 const groupColorFor = (phone, phoneOrder) => GROUP_COLORS[phoneOrder.indexOf(phone) % GROUP_COLORS.length];
 
 // ── ID Proof Cell ─────────────────────────────────────────────
-const IdProofCell = ({ booking, onUpload }) => {
+const IdProofCell = ({ booking, onUpload, readOnly }) => {
   const inputId = `id-proof-${booking.id}`;
   const handleChange = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -67,8 +129,19 @@ const IdProofCell = ({ booking, onUpload }) => {
         <a href={booking.idProof.url} target="_blank" rel="noopener noreferrer" className="id-proof-filename" title={booking.idProof.name}>
           <IcoFile /><span>{booking.idProof.name}</span>
         </a>
-        <label htmlFor={inputId} className="id-proof-replace-btn">Replace</label>
-        <input id={inputId} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleChange} style={{ display: 'none' }} />
+        {!readOnly && (
+          <>
+            <label htmlFor={inputId} className="id-proof-replace-btn">Replace</label>
+            <input id={inputId} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleChange} style={{ display: 'none' }} />
+          </>
+        )}
+      </div>
+    );
+  }
+  if (readOnly) {
+    return (
+      <div className="id-proof-cell">
+        <span style={{ color: '#9ca3af', fontSize: 12 }}>Not uploaded</span>
       </div>
     );
   }
@@ -80,10 +153,16 @@ const IdProofCell = ({ booking, onUpload }) => {
   );
 };
 
+// ── Inline field error ──────────────────────────────────────────
+const FieldError = ({ message }) => {
+  if (!message) return null;
+  return <span className="field-error">{message}</span>;
+};
+
 // ════════════════════════════════════════════════════════════
 //  COMPONENT
 // ════════════════════════════════════════════════════════════
-function Bookings() {
+function Bookings({ readOnly = false }) {
   const [bookings, setBookings] = useState([]);
 const [stats, setStats] = useState({
     totalBookings: 0,
@@ -96,6 +175,16 @@ const [stats, setStats] = useState({
   const [filterPayment, setFilterPayment] = useState('All Payment Status');
   const [page, setPage]                   = useState(1);
   const [rooms,setRooms]=useState([]);
+
+  // Available rooms per date-range, keyed by which room slot is asking:
+  // 'main' for Room 1, or the numeric index of an extra room.
+  const [roomAvailability, setRoomAvailability] = useState({});
+
+  // Field-level validation errors for the New Booking modal.
+  // formErrors covers Room 1; extraRoomErrors is keyed by extra-room index.
+  const [formErrors, setFormErrors] = useState({});
+  const [extraRoomErrors, setExtraRoomErrors] = useState({});
+
   useEffect(() => {
   fetchBookings();
   fetchBookingStats();
@@ -106,6 +195,28 @@ const fetchRooms = async () => {
     const res = await axios.get("http://localhost:5000/api/rooms");
     setRooms(res.data);
 };
+
+// Fetch rooms actually available (status + no date overlap) for a
+// given check-in date, optionally narrowed by check-out. Check-out
+// is optional — if it isn't set yet, we still ask the backend for
+// rooms free starting from check-in. Stash the result under `key`
+// so Room 1 and each extra-room row have independent lists.
+const loadAvailableRooms = async (key, checkIn, checkOut) => {
+  if (!checkIn) {
+    setRoomAvailability(prev => ({ ...prev, [key]: [] }));
+    return;
+  }
+  try {
+    const res = await axios.get("http://localhost:5000/api/rooms/available", {
+      params: checkOut ? { checkIn, checkOut } : { checkIn }
+    });
+    setRoomAvailability(prev => ({ ...prev, [key]: res.data.data }));
+  } catch (err) {
+    console.error(err);
+    setRoomAvailability(prev => ({ ...prev, [key]: [] }));
+  }
+};
+
 // Fetch booking statistics from the backend
 const fetchBookings = async () => {
   try {
@@ -113,10 +224,13 @@ const fetchBookings = async () => {
 
     const formatted = res.data.map((b) => ({
       booking_id: b.booking_id,
-      id: b.booking_code,
-      guest: b.full_name,
-      phone: b.phone,
-      roomNumber: String(b.room_number),
+      id: b.booking_code || '',
+      guest: b.full_name || '',
+      phone: b.phone || '',
+      // Guard against a null room_number so we don't end up with the
+      // literal text "null" (String(null) === "null") being displayed
+      // or matched against in search.
+      roomNumber: b.room_number != null ? String(b.room_number) : '',
       roomType: b.room_type,
       checkIn: b.check_in,
       checkOut: b.check_out,
@@ -133,6 +247,7 @@ const fetchBookings = async () => {
 
   } catch (err) {
     console.error(err);
+    showError('Could not load bookings', err);
   }
 };
 
@@ -178,12 +293,66 @@ const fetchCustomers = async () => {
   // all sharing the same phone/guest from the first room's form.
   const [extraRooms, setExtraRooms] = useState([]);
 
+  // Reload the Room 1 availability list whenever its dates change
+  // (check-in alone is enough to trigger it — check-out is optional),
+  // but only while the New Booking modal is actually open.
+  useEffect(() => {
+    if (showAdd) loadAvailableRooms('main', form.checkIn, form.checkOut);
+  }, [form.checkIn, form.checkOut, showAdd]);
+
+  // Reload each extra room's availability list whenever any of their
+  // dates change.
+  useEffect(() => {
+    extraRooms.forEach((r, idx) => {
+      loadAvailableRooms(idx, r.checkIn, r.checkOut);
+    });
+  }, [extraRooms.map(r => `${r.checkIn}|${r.checkOut}`).join(',')]);
+
+  // If check-out is added or changed AFTER a room has already been
+  // picked for Room 1, recalculate the amount using the new night
+  // count instead of leaving it at the 1-night default.
+  useEffect(() => {
+    if (!showAdd || !form.roomNumber) return;
+    const picked = (roomAvailability.main || []).find(
+      r => String(r.room_number) === String(form.roomNumber)
+    );
+    if (picked) {
+      setForm(prev => ({
+        ...prev,
+        amount: picked.price_per_night * calcNights(prev.checkIn, prev.checkOut),
+      }));
+    }
+  }, [form.checkOut]);
+
+  useEffect(() => {
+    if (!showAdd) return;
+    setExtraRooms(prev => prev.map((r, idx) => {
+      if (!r.roomNumber) return r;
+      const picked = (roomAvailability[idx] || []).find(
+        opt => String(opt.room_number) === String(r.roomNumber)
+      );
+      if (!picked) return r;
+      return { ...r, amount: picked.price_per_night * calcNights(r.checkIn, r.checkOut) };
+    }));
+  }, [extraRooms.map(r => r.checkOut).join(',')]);
+
   // ── Filter ──
+  // NOTE: guest/id/phone/roomNumber can be null/undefined if a booking's
+  // linked customer or room record is missing (LEFT JOINs on the backend
+  // return null for unmatched rows). Guard every field with `|| ''`
+  // before calling string methods on it, or this crashes the whole page
+  // with "Cannot read properties of null (reading 'toLowerCase')".
   const filtered = bookings.filter(b => {
-    const matchSearch = b.guest.toLowerCase().includes(search.toLowerCase())
-      || b.id.toLowerCase().includes(search.toLowerCase())
-      || b.phone.includes(search)
-      || b.roomNumber.includes(search);
+    const guest      = b.guest || '';
+    const id         = b.id || '';
+    const phone      = b.phone || '';
+    const roomNumber = b.roomNumber || '';
+    const searchTerm = search.toLowerCase();
+
+    const matchSearch = guest.toLowerCase().includes(searchTerm)
+      || id.toLowerCase().includes(searchTerm)
+      || phone.includes(search)
+      || roomNumber.includes(search);
     const matchStatus  = filterStatus  === 'All Status'        || b.status  === filterStatus;
     const matchPayment = filterPayment === 'All Payment Status' || b.payment === filterPayment;
     return matchSearch && matchStatus && matchPayment;
@@ -221,6 +390,9 @@ const fetchCustomers = async () => {
   const openAdd = () => {
     setForm(EMPTY_ROOM_FORM);
     setExtraRooms([]);
+    setRoomAvailability({});
+    setFormErrors({});
+    setExtraRoomErrors({});
     setShowAdd(true);
   };
 
@@ -244,13 +416,33 @@ const fetchCustomers = async () => {
     }
   };
 const handleAdd = async () => {
+  // Validate Room 1 and every extra room. Mandatory fields are only
+  // Phone Number, Guest Name, and Check-in Date — everything else
+  // (room, guests, amount, check-out) is optional at submit time.
+  const mainErrors = validateRoomForm(form);
+  const allExtraErrors = {};
+  extraRooms.forEach((r, idx) => {
+    // Extra rooms share phone/guest with Room 1, so only check-in
+    // needs separate validation per row.
+    const errs = {};
+    if (!r.checkIn) errs.checkIn = 'Check-in date is required';
+    if (Object.keys(errs).length) allExtraErrors[idx] = errs;
+  });
+
+  setFormErrors(mainErrors);
+  setExtraRoomErrors(allExtraErrors);
+
+  if (Object.keys(mainErrors).length || Object.keys(allExtraErrors).length) {
+    return; // stop submit — inline errors are now shown under each field
+  }
+
   try {
     const customer = customers.find(
       (c) => c.phone === form.phone
     );
 
     if (!customer) {
-      alert("Customer not found. Please add the customer first.");
+      showError('Customer not found', { message: 'Please add the customer first before creating a booking.' });
       return;
     }
 
@@ -259,7 +451,7 @@ const handleAdd = async () => {
 );
 
     if (!room) {
-      alert("Room not found.");
+      showError('Room not selected', { message: 'Please select a room before saving the booking.' });
       return;
     }
 
@@ -267,7 +459,7 @@ const handleAdd = async () => {
       customer_id: customer.customer_id,
       room_id: room.room_id,
       check_in: form.checkIn,
-      check_out: form.checkOut,
+      check_out: form.checkOut || null,
       total_guests: Number(form.guests),
       booking_status: form.status,
       payment_status: form.payment,
@@ -280,24 +472,66 @@ const handleAdd = async () => {
 
     setShowAdd(false);
     setForm(EMPTY_ROOM_FORM);
+
+    showSuccess('Booking created', `${1 + extraRooms.length} booking${(1 + extraRooms.length) > 1 ? 's' : ''} saved successfully.`);
   } catch (err) {
     console.error(err);
+    showError('Could not create booking', err);
   }
 };
 
+// ── EDIT ──────────────────────────────────────────────────────
+// The `form` state uses frontend field names (phone, guest, roomNumber,
+// checkIn, checkOut, guests, amount, status, payment). The backend's
+// updateBooking controller expects a different shape entirely
+// (customer_id, room_id, check_in, check_out, total_guests,
+// booking_status, payment_status, total_amount, special_request).
+// Previously this sent `form` straight through, so every field arrived
+// as undefined server-side. Fixed by resolving customer_id/room_id the
+// same way handleAdd does, and mapping every field to its backend name.
 const handleEdit = async () => {
   try {
+    const customer = customers.find(
+      (c) => c.phone === form.phone
+    );
+
+    if (!customer) {
+      showError('Customer not found', { message: 'Please add the customer first before saving changes.' });
+      return;
+    }
+
+    const room = rooms.find(
+      (r) => Number(r.room_number) === Number(form.roomNumber)
+    );
+
+    if (!room) {
+      showError('Room not found', { message: 'The selected room number does not match any existing room.' });
+      return;
+    }
+
     await axios.put(
       `http://localhost:5000/api/bookings/${selected.booking_id}`,
-      form
+      {
+        customer_id: customer.customer_id,
+        room_id: room.room_id,
+        check_in: form.checkIn,
+        check_out: form.checkOut || null,
+        total_guests: Number(form.guests),
+        booking_status: form.status,
+        payment_status: form.payment,
+        total_amount: Number(form.amount),
+        special_request: form.special_request || "",
+      }
     );
 
     await fetchBookings();
     await fetchBookingStats();
 
     setShowEdit(false);
+    showSuccess('Booking updated', `Booking ${selected?.id || ''} was updated successfully.`);
   } catch (err) {
     console.error(err);
+    showError('Could not update booking', err);
   }
 };
   
@@ -311,22 +545,108 @@ const handleEdit = async () => {
     await fetchBookingStats();
 
     setShowCancel(false);
-
+    showSuccess('Booking cancelled', `Booking ${selected?.id || ''} has been cancelled.`);
   } catch (err) {
     console.error(err);
+    showError('Could not cancel booking', err);
   }
 };
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
+
+    // Changing either date invalidates whatever room was picked under
+    // the old range, since it may no longer be available (or a
+    // previously-unavailable room may now be free). Clear the
+    // selection so the admin can't submit a stale room/date pairing.
+    const clearsRoom = name === 'checkIn' || name === 'checkOut';
+
+    setForm(prev => ({
+      ...prev,
+      [name]: value,
+      ...(clearsRoom ? { roomNumber: '' } : {}),
+    }));
+
+    // Clear that field's error as soon as the user starts fixing it.
+    if (formErrors[name]) {
+      setFormErrors(prev => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+    }
+  };
+
+  // When Room 1's room number changes, auto-fill Room Type to match
+  // the selected room's actual type, and auto-fill Amount from the
+  // room's price/night × number of nights (defaults to 1 night if
+  // check-out hasn't been set yet).
+  const handleMainRoomSelect = (e) => {
+    const value = e.target.value;
+    const picked = (roomAvailability.main || []).find(
+      r => String(r.room_number) === String(value)
+    );
+    setForm(prev => ({
+      ...prev,
+      roomNumber: value,
+      ...(picked ? {
+        roomType: picked.room_type,
+        amount: picked.price_per_night * calcNights(prev.checkIn, prev.checkOut),
+      } : {}),
+    }));
   };
 
   // ── Extra room queue (only inside "New Booking" modal) ──
   const addExtraRoom    = () => setExtraRooms(prev => [...prev, { ...EMPTY_ROOM_FORM, phone: form.phone, guest: form.guest }]);
-  const removeExtraRoom = (idx) => setExtraRooms(prev => prev.filter((_, i) => i !== idx));
+  const removeExtraRoom = (idx) => {
+    setExtraRooms(prev => prev.filter((_, i) => i !== idx));
+    setRoomAvailability(prev => {
+      const next = { ...prev };
+      delete next[idx];
+      return next;
+    });
+    setExtraRoomErrors(prev => {
+      const next = { ...prev };
+      delete next[idx];
+      return next;
+    });
+  };
   const handleExtraRoomChange = (idx, field, value) => {
-    setExtraRooms(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+    setExtraRooms(prev => prev.map((r, i) => {
+      if (i !== idx) return r;
+      const clearsRoom = field === 'checkIn' || field === 'checkOut';
+      return { ...r, [field]: value, ...(clearsRoom ? { roomNumber: '' } : {}) };
+    }));
+
+    if (extraRoomErrors[idx]?.[field]) {
+      setExtraRoomErrors(prev => {
+        const next = { ...prev };
+        const rowErrs = { ...next[idx] };
+        delete rowErrs[field];
+        if (Object.keys(rowErrs).length) next[idx] = rowErrs;
+        else delete next[idx];
+        return next;
+      });
+    }
+  };
+
+  // Same auto-fill behavior as the main room (type + amount), but for
+  // an extra-room row.
+  const handleExtraRoomSelect = (idx, value) => {
+    const picked = (roomAvailability[idx] || []).find(
+      r => String(r.room_number) === String(value)
+    );
+    setExtraRooms(prev => prev.map((r, i) => i === idx
+      ? {
+          ...r,
+          roomNumber: value,
+          ...(picked ? {
+            roomType: picked.room_type,
+            amount: picked.price_per_night * calcNights(r.checkIn, r.checkOut),
+          } : {}),
+        }
+      : r
+    ));
   };
 
   const handleIdProofUpload = (bookingId, file) => {
@@ -339,6 +659,10 @@ const handleEdit = async () => {
   // ════════════════════════════════════════════════════════════
   const NewBookingModal = () => {
     const existingGuest = lookupByPhone(form.phone);
+    // Only check-in is required to start showing available rooms —
+    // check-out is optional and can be added/changed later.
+    const mainDatesSet = Boolean(form.checkIn);
+    const mainRoomOptions = roomAvailability.main || [];
 
     return (
       <div className="modal-overlay" onClick={() => setShowAdd(false)}>
@@ -353,19 +677,27 @@ const handleEdit = async () => {
             <div className="modal-section-title">Guest Lookup</div>
             <div className="modal-grid">
               <div className="form-group">
-                <label className="form-label">Phone Number</label>
+                <label className="form-label">Phone Number *</label>
                 <input
-                  className="form-input"
+                  className={`form-input${formErrors.phone ? ' input-error' : ''}`}
                   name="phone"
                   value={form.phone}
                   onChange={handleFormChange}
                   onBlur={handlePhoneBlur}
                   placeholder="+91 00000 00000"
                 />
+                <FieldError message={formErrors.phone} />
               </div>
               <div className="form-group">
-                <label className="form-label">Guest Name</label>
-                <input className="form-input" name="guest" value={form.guest} onChange={handleFormChange} placeholder="Enter guest name" />
+                <label className="form-label">Guest Name *</label>
+                <input
+                  className={`form-input${formErrors.guest ? ' input-error' : ''}`}
+                  name="guest"
+                  value={form.guest}
+                  onChange={handleFormChange}
+                  placeholder="Enter guest name"
+                />
+                <FieldError message={formErrors.guest} />
               </div>
             </div>
 
@@ -381,9 +713,52 @@ const handleEdit = async () => {
             </div>
             <div className="room-row-card">
               <div className="modal-grid">
+                {/* Dates come first so the room dropdown below can react to them */}
+                <div className="form-group">
+                  <label className="form-label">Check-in Date *</label>
+                  <input
+                    className={`form-input${formErrors.checkIn ? ' input-error' : ''}`}
+                    type="date"
+                    name="checkIn"
+                    value={form.checkIn}
+                    onChange={handleFormChange}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                  <FieldError message={formErrors.checkIn} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Check-out Date</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    name="checkOut"
+                    value={form.checkOut}
+                    onChange={handleFormChange}
+                    min={form.checkIn || new Date().toISOString().split('T')[0]}
+                  />
+                </div>
                 <div className="form-group">
                   <label className="form-label">Room No.</label>
-                  <input className="form-input" name="roomNumber" value={form.roomNumber} onChange={handleFormChange} placeholder="e.g. 101" />
+                  <select
+                    className="form-select"
+                    name="roomNumber"
+                    value={form.roomNumber}
+                    onChange={handleMainRoomSelect}
+                    disabled={!mainDatesSet}
+                  >
+                    <option value="">
+                      {!mainDatesSet
+                        ? 'Select check-in date first'
+                        : mainRoomOptions.length === 0
+                          ? 'No rooms available'
+                          : 'Select a room'}
+                    </option>
+                    {mainRoomOptions.map(r => (
+  <option key={r.room_id} value={r.room_number}>
+    {r.room_number} · {r.room_type}
+  </option>
+))}
+                  </select>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Room Type</label>
@@ -391,14 +766,6 @@ const handleEdit = async () => {
                     <option>Standard</option><option>Deluxe</option><option>Suite</option>
                     <option>Executive</option><option>Presidential Suite</option>
                   </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Check-in Date</label>
-                  <input className="form-input" type="date" name="checkIn" value={form.checkIn} onChange={handleFormChange} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Check-out Date</label>
-                  <input className="form-input" type="date" name="checkOut" value={form.checkOut} onChange={handleFormChange} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">No. of Guests</label>
@@ -434,7 +801,12 @@ const handleEdit = async () => {
             </div>
 
             {/* ── Extra rooms queued for the same phone number ── */}
-            {extraRooms.map((room, idx) => (
+            {extraRooms.map((room, idx) => {
+              // Only check-in gates room availability — check-out is optional.
+              const datesSet = Boolean(room.checkIn);
+              const options = roomAvailability[idx] || [];
+              const rowErrors = extraRoomErrors[idx] || {};
+              return (
               <div key={idx}>
                 <div className="modal-section-header">
                   <span className="modal-section-title">Room {idx + 2}</span>
@@ -445,8 +817,47 @@ const handleEdit = async () => {
                 <div className="room-row-card">
                   <div className="modal-grid">
                     <div className="form-group">
+                      <label className="form-label">Check-in Date *</label>
+                      <input
+                        className={`form-input${rowErrors.checkIn ? ' input-error' : ''}`}
+                        type="date"
+                        value={room.checkIn}
+                        onChange={e => handleExtraRoomChange(idx, 'checkIn', e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                      <FieldError message={rowErrors.checkIn} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Check-out Date</label>
+                      <input
+                        className="form-input"
+                        type="date"
+                        value={room.checkOut}
+                        onChange={e => handleExtraRoomChange(idx, 'checkOut', e.target.value)}
+                        min={room.checkIn || new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div className="form-group">
                       <label className="form-label">Room No.</label>
-                      <input className="form-input" value={room.roomNumber} onChange={e => handleExtraRoomChange(idx, 'roomNumber', e.target.value)} placeholder="e.g. 102" />
+                      <select
+                        className="form-select"
+                        value={room.roomNumber}
+                        onChange={e => handleExtraRoomSelect(idx, e.target.value)}
+                        disabled={!datesSet}
+                      >
+                        <option value="">
+                          {!datesSet
+                            ? 'Select check-in date first'
+                            : options.length === 0
+                              ? 'No rooms available'
+                              : 'Select a room'}
+                        </option>
+                        {options.map(r => (
+  <option key={r.room_id} value={r.room_number}>
+    {r.room_number} · {r.room_type}
+  </option>
+))}
+                      </select>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Room Type</label>
@@ -454,14 +865,6 @@ const handleEdit = async () => {
                         <option>Standard</option><option>Deluxe</option><option>Suite</option>
                         <option>Executive</option><option>Presidential Suite</option>
                       </select>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Check-in Date</label>
-                      <input className="form-input" type="date" value={room.checkIn} onChange={e => handleExtraRoomChange(idx, 'checkIn', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Check-out Date</label>
-                      <input className="form-input" type="date" value={room.checkOut} onChange={e => handleExtraRoomChange(idx, 'checkOut', e.target.value)} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">No. of Guests</label>
@@ -486,7 +889,8 @@ const handleEdit = async () => {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             <button className="btn-add-room-row" onClick={addExtraRoom} style={{ marginTop: 8 }}>
               <IcoPlusSm /> Add Another Room (same phone)
@@ -584,9 +988,11 @@ const handleEdit = async () => {
           <h2>Bookings</h2>
           <p>Manage all reservations and bookings</p>
         </div>
-        <button className="btn-new-booking" onClick={openAdd}>
-          <IcoPlus /> New Booking
-        </button>
+        {!readOnly && (
+          <button className="btn-new-booking" onClick={openAdd}>
+            <IcoPlus /> New Booking
+          </button>
+        )}
       </div>
 
       {/* ── Stat Cards ── */}
@@ -697,17 +1103,19 @@ const handleEdit = async () => {
                     <td style={{ fontWeight: 600 }}>{b.roomNumber}</td>
                     <td>{b.roomType}</td>
                     <td>{new Date(b.checkIn).toLocaleDateString("en-IN")}</td>
-                    <td>{new Date(b.checkOut).toLocaleDateString("en-IN")}</td>
+                    <td>{b.checkOut ? new Date(b.checkOut).toLocaleDateString("en-IN") : '—'}</td>
                     <td>{b.guests}</td>
                     <td style={{ fontWeight: 600 }}>{b.amount}</td>
                     <td><span className={statusClass(b.status)}>{b.status}</span></td>
                     <td><span className={payClass(b.payment)}>{b.payment}</span></td>
-                    <td><IdProofCell booking={b} onUpload={handleIdProofUpload} /></td>
+                    <td><IdProofCell booking={b} onUpload={handleIdProofUpload} readOnly={readOnly} /></td>
                     <td>
                       <div className="action-btns">
                         <button className="btn-icon btn-icon-view" title="View" onClick={() => openView(b)}><IcoEye /></button>
-                        <button className="btn-icon btn-icon-edit" title="Edit" onClick={() => openEdit(b)}><IcoEdit /></button>
-                        {b.status !== 'Cancelled' && b.status !== 'Checked-out' && (
+                        {!readOnly && (
+                          <button className="btn-icon btn-icon-edit" title="Edit" onClick={() => openEdit(b)}><IcoEdit /></button>
+                        )}
+                        {!readOnly && b.status !== 'Cancelled' && b.status !== 'Checked-out' && (
                           <button className="btn-icon btn-icon-delete" title="Cancel"
                             style={{ background: '#fffbeb', color: '#f59e0b' }} onClick={() => openCancel(b)}>
                             <IcoCancel />
@@ -739,8 +1147,8 @@ const handleEdit = async () => {
 
       {/* ══════════ MODALS ══════════ */}
 
-      {showAdd  && NewBookingModal()}
-      {showEdit && EditBookingModal()}
+      {!readOnly && showAdd  && NewBookingModal()}
+      {!readOnly && showEdit && EditBookingModal()}
 
       {/* View Modal — single room */}
       {showView && selected && (
@@ -758,7 +1166,7 @@ const handleEdit = async () => {
                 ['Room Number',   selected.roomNumber],
                 ['Room Type',     selected.roomType],
                 ['Check-in',      selected.checkIn],
-                ['Check-out',     selected.checkOut],
+                ['Check-out',     selected.checkOut || 'Not set'],
                 ['No. of Guests', selected.guests],
                 ['Amount',        selected.amount],
                 ['Status',        selected.status],
@@ -793,7 +1201,7 @@ const handleEdit = async () => {
                   <div className="room-view-title">{r.id} — Room {r.roomNumber} ({r.roomType})</div>
                   {[
                     ['Check-in',  r.checkIn],
-                    ['Check-out', r.checkOut],
+                    ['Check-out', r.checkOut || 'Not set'],
                     ['Guests',    r.guests],
                     ['Amount',    r.amount],
                     ['Status',    r.status],
@@ -815,7 +1223,7 @@ const handleEdit = async () => {
       )}
 
       {/* Cancel Modal */}
-      {showCancel && selected && (
+      {!readOnly && showCancel && selected && (
         <div className="modal-overlay" onClick={() => setShowCancel(false)}>
           <div className="modal-box confirm-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">

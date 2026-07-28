@@ -1,8 +1,7 @@
 // backend/controllers/authController.js
 const { createClerkClient } = require("@clerk/backend");
 const crypto = require('crypto');
-const db = require('../config/db');
-
+const pool = require('../config/db').promisePool;
 const clerkClient = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY,
 });

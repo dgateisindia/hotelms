@@ -14,19 +14,6 @@ import {
   IcoBed2, IcoCheck2, IcoUser2, IcoBrush, IcoWrench,
 } from '../../utils/icons/RoomsIcons';
 
-
-// ── Sample Data ───────────────────────────────────────────────
-/*const INITIAL_ROOMS = [
-  { id: '', roomNo: '101', type: 'Deluxe Room',        floor: 1, capacity: '2 Adults',           price: '₹ 4,000',  status: 'Available',   amenities: ['wifi','tv','bath','ac'] },
-  { id: '', roomNo: '102', type: 'Deluxe Room',        floor: 1, capacity: '2 Adults',           price: '₹ 4,000',  status: 'Occupied',    amenities: ['wifi','tv','bath','ac'] },
-  { id: '', roomNo: '201', type: 'Premium Room',       floor: 2, capacity: '2 Adults + 1 Child', price: '₹ 5,500',  status: 'Occupied',    amenities: ['wifi','tv','bath','ac'] },
-  { id: '', roomNo: '202', type: 'Premium Room',       floor: 2, capacity: '2 Adults + 1 Child', price: '₹ 5,500',  status: 'Cleaning',    amenities: ['wifi','tv','bath','ac'] },
-  { id: '', roomNo: '301', type: 'Suite Room',         floor: 3, capacity: '4 Adults',           price: '₹ 8,500',  status: 'Available',   amenities: ['wifi','tv','bath','ac'] },
-  { id: '', roomNo: '302', type: 'Suite Room',         floor: 3, capacity: '4 Adults',           price: '₹ 8,500',  status: 'Maintenance', amenities: ['wifi','tv','bath','ac'] },
-  { id: '', roomNo: '401', type: 'Executive Room',     floor: 4, capacity: '2 Adults',           price: '₹ 6,000',  status: 'Available',   amenities: ['wifi','tv','bath','ac'] },
-  { id: '', roomNo: '501', type: 'Presidential Suite', floor: 5, capacity: '4 Adults + 2 Child', price: '₹ 15,000', status: 'Occupied',    amenities: ['wifi','tv','bath','ac'] },
-];*/
-
 const EMPTY_FORM = { roomNo: '', type: 'Deluxe Room', floor: '1', capacity: '2 Adults', price: '', status: 'Available' };
 const PER_PAGE = 8;
 
@@ -63,9 +50,9 @@ function Rooms() {
 
   // ── Filter logic ──
   const filtered = rooms.filter(r => {
-const matchSearch =
-  (r.roomNo || "").includes(search) ||
-  (r.type || "").toLowerCase().includes(search.toLowerCase());
+    const matchSearch =
+      (r.roomNo || "").includes(search) ||
+      (r.type || "").toLowerCase().includes(search.toLowerCase());
     const matchFloor  = filterFloor  === 'All Floors'     || r.floor === parseInt(filterFloor);
     const matchType   = filterType   === 'All Room Types'  || r.type  === filterType;
     const matchStatus = filterStatus === 'All Status'      || r.status === filterStatus;
@@ -88,100 +75,99 @@ const matchSearch =
   const openView   = (r) => { setSelected(r); setShowView(true); };
   const openDelete = (r) => { setSelected(r); setShowDelete(true); };
 
-const handleAdd = async () => {
-  if (
-    !form.roomNo.trim() ||
-    !form.floor ||
-    !form.type ||
-    !form.capacity ||
-    form.price === "" ||
-    !form.status
-  ) {
-    alert("Please fill all room details.");
-    return;
-  }
+  const handleAdd = async () => {
+    if (
+      !form.roomNo.trim() ||
+      !form.floor ||
+      !form.type ||
+      !form.capacity ||
+      form.price === "" ||
+      !form.status
+    ) {
+      alert("Please fill all room details.");
+      return;
+    }
 
-  try {
-    const roomData = {
-      roomNo: form.roomNo.trim(),
-      type: form.type,
-      floor: Number(form.floor),
-      capacity: form.capacity,
-      price: Number(form.price),
-      status: form.status,
-    };
+    try {
+      const roomData = {
+        roomNo: form.roomNo.trim(),
+        type: form.type,
+        floor: Number(form.floor),
+        capacity: form.capacity,
+        price: Number(form.price),
+        status: form.status,
+      };
 
-    await apiClient.post("/rooms", roomData);
+      await apiClient.post("/rooms", roomData);
 
+      fetchRooms();
+      setForm(EMPTY_FORM);
+      setShowAdd(false);
+
+    } catch (error) {
+      console.error("Error adding room:", error);
+    }
+  };
+
+  // Fetch rooms from the database
+  const fetchRooms = async () => {
+    try {
+      const res = await apiClient.get("/rooms");
+
+      const formattedRooms = res.data.map(room => ({
+        id: room.room_id,
+        roomNo: room.room_number,
+        type: room.room_type,
+        floor: room.floor_number,
+        capacity: room.capacity,
+        price: room.price_per_night,
+        status: room.status,
+        amenities: [], // temporary
+      }));
+
+      setRooms(formattedRooms);
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
     fetchRooms();
-    setForm(EMPTY_FORM);
-    setShowAdd(false);
-
-  } catch (error) {
-    console.error("Error adding room:", error);
-  }
-};
-//Fetch rooms from the database
-const fetchRooms = async () => {
-  try {
-    const res = await apiClient.get("/rooms");
-
-    const formattedRooms = res.data.map(room => ({
-      id: room.room_id,
-      roomNo: room.room_number,
-      type: room.room_type,
-      floor: room.floor_number,
-      capacity: room.capacity,
-      price: room.price_per_night,
-      status: room.status,
-      amenities: [], // temporary
-    }));
-
-    setRooms(formattedRooms);
-
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-useEffect(() => {
-  fetchRooms();
-}, []);
+  }, []);
 
   const handleEdit = async () => {
-  try {
+    try {
+      await apiClient.put(`/rooms/${selected.id}`, {
+        roomNo: form.roomNo,
+        type: form.type,
+        floor: form.floor,
+        capacity: form.capacity,
+        price: form.price,
+        status: form.status,
+      });
 
-    await apiClient.put(`/rooms/${selected.id}`, {
-      roomNo: form.roomNo,
-      type: form.type,
-      floor: form.floor,
-      capacity: form.capacity,
-      price: form.price,
-      status: form.status,
-    });
+      await fetchRooms();
 
-    await fetchRooms();
+      setShowEdit(false);
 
-    setShowEdit(false);
-
-  } catch (err) {
-    console.error(err);
-  }
-};
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleDelete = async () => {
-  try {
+    try {
+      await apiClient.delete(`/rooms/${selected.id}`);
 
-    await apiClient.delete(`/rooms/${selected.id}`);
+      await fetchRooms();
 
-    await fetchRooms();
+      setShowDelete(false);
 
-    setShowDelete(false);
-
-  } catch (err) {
-    console.error(err);
-  }
-};
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -210,7 +196,7 @@ useEffect(() => {
             </div>
             <div className="form-group">
               <label className="form-label">Room Type</label>
-              <select className="form-select" name="type" value={form.type} onChange={handleFormChange}required>
+              <select className="form-select" name="type" value={form.type} onChange={handleFormChange} required>
                 <option>Deluxe Room</option>
                 <option>Premium Room</option>
                 <option>Suite Room</option>
@@ -220,7 +206,7 @@ useEffect(() => {
             </div>
             <div className="form-group">
               <label className="form-label">Capacity</label>
-              <select className="form-select" name="capacity" value={form.capacity} onChange={handleFormChange}required>
+              <select className="form-select" name="capacity" value={form.capacity} onChange={handleFormChange} required>
                 <option>2 Adults</option>
                 <option>2 Adults + 1 Child</option>
                 <option>4 Adults</option>
@@ -229,17 +215,18 @@ useEffect(() => {
             </div>
             <div className="form-group">
               <label className="form-label">Price / Night</label>
-<input
-  className="form-input"
-  type="number"
-  name="price"
-  step="0.01"
-  min="0.00"
-  value={form.price}
-  onChange={handleFormChange}
-  placeholder="e.g. 4000.00"
-  required
-/>            </div>
+              <input
+                className="form-input"
+                type="number"
+                name="price"
+                step="0.01"
+                min="0.00"
+                value={form.price}
+                onChange={handleFormChange}
+                placeholder="e.g. 4000.00"
+                required
+              />
+            </div>
             <div className="form-group">
               <label className="form-label">Status</label>
               <select className="form-select" name="status" value={form.status} onChange={handleFormChange} required>
@@ -295,13 +282,11 @@ useEffect(() => {
         </select>
         <select className="filter-select" value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }}>
           <option>All Room Types</option>
-          <option>Premimum Room</option>
           <option>Deluxe Room</option>
+          <option>Premium Room</option>
           <option>Suite Room</option>
           <option>Executive Room</option>
-          <option>Presidential Room</option>
-
-
+          <option>Presidential Suite</option>
         </select>
         <select className="filter-select" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }}>
           <option>All Status</option>
@@ -352,9 +337,29 @@ useEffect(() => {
                   </td>
                   <td>
                     <div className="action-btns">
-                      <button className="btn-icon btn-icon-view"   title="View"   onClick={() => openView(r)}><IcoEye /></button>
-                      <button className="btn-icon btn-icon-edit"   title="Edit"   onClick={() => openEdit(r)}><IcoEdit /></button>
-                      <button className="btn-icon btn-icon-delete" title="Delete" onClick={() => openDelete(r)}><IcoTrash /></button>
+                      <button
+                        className="btn-icon btn-icon-view"
+                        title="View"
+                        onClick={() => openView(r)}
+                      >
+                        <IcoEye />
+                      </button>
+
+                      <button
+                        className="btn-icon btn-icon-edit"
+                        title="Edit"
+                        onClick={() => openEdit(r)}
+                      >
+                        <IcoEdit />
+                      </button>
+
+                      <button
+                        className="btn-icon btn-icon-delete"
+                        title="Delete"
+                        onClick={() => openDelete(r)}
+                      >
+                        <IcoTrash />
+                      </button>
                     </div>
                   </td>
                 </tr>

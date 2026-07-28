@@ -11,9 +11,7 @@
 //  and resolving to [rows, fields].
 // ============================================================
 
-const db = require('../config/db'); // TODO: adjust path if your db module lives elsewhere
-
-// ── Helper: scope queries to the logged-in admin's hotel, if available ──
+const db = require('../config/db').promisePool;// ── Helper: scope queries to the logged-in admin's hotel, if available ──
 // Mirrors the open question from the attendance work: staff may or may not
 // have a hotel_id column. If req.dbUser.hotel_id isn't set, this is a no-op,
 // so nothing breaks if that column doesn't exist yet — but once staff.hotel_id

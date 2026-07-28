@@ -1,5 +1,5 @@
 const { getAuth } = require("@clerk/express");
-const db = require("../config/db");
+const db = require("../config/db").promisePool;
 
 const protect = async (req, res, next) => {
   try {

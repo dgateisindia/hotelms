@@ -1,4 +1,4 @@
-const db = require("../config/db"); // adjust path if your db file is elsewhere
+const db = require("../config/db").promisePool;
 
 exports.createRoom = async (req, res) => {
   try {
@@ -56,6 +56,7 @@ exports.getRooms = async (req, res) => {
     });
   }
 };
+
 exports.updateRoom = async (req, res) => {
   try {
     const { id } = req.params;
@@ -99,6 +100,7 @@ exports.updateRoom = async (req, res) => {
     res.status(500).json(err);
   }
 };
+
 exports.deleteRoom = async (req, res) => {
   try {
     const { id } = req.params;
@@ -116,5 +118,67 @@ exports.deleteRoom = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json(err);
+  }
+};
+
+// ========================================
+// GET AVAILABLE ROOMS (status + date-range, check-out optional)
+// ========================================
+exports.getAvailableRooms = async (req, res) => {
+  try {
+    const { checkIn, checkOut, excludeBookingId } = req.query;
+
+    if (!checkIn) {
+      return res.status(400).json({
+        success: false,
+        message: "checkIn query param is required",
+      });
+    }
+
+    let overlapCondition;
+    let params;
+
+    if (checkOut) {
+      // Both dates known: standard overlap check.
+      // A booking conflicts if it starts before our check-out AND
+      // (it has no end date yet, OR it ends after our check-in).
+      overlapCondition = `
+        b.check_in < ?
+        AND (b.check_out IS NULL OR b.check_out > ?)
+      `;
+      params = [excludeBookingId || 0, checkOut, checkIn];
+    } else {
+      // Only check-in known (open-ended stay): a booking conflicts if
+      // it's already underway or starts on/before our check-in and
+      // hasn't ended by then, OR it starts at any point after our
+      // check-in (since our stay has no fixed end, any future booking
+      // for that room could conflict).
+      overlapCondition = `
+        (b.check_out IS NULL OR b.check_out > ?)
+      `;
+      params = [excludeBookingId || 0, checkIn];
+    }
+
+    const [rooms] = await db.query(
+      `
+      SELECT r.*
+      FROM rooms r
+      WHERE r.status != 'maintenance'
+        AND r.room_id NOT IN (
+          SELECT b.room_id
+          FROM bookings b
+          WHERE LOWER(b.booking_status) != 'cancelled'
+            AND b.booking_id != ?
+            AND ${overlapCondition}
+        )
+      ORDER BY r.room_number ASC
+      `,
+      params
+    );
+
+    res.json({ success: true, data: rooms });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 };

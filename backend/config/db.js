@@ -1,6 +1,5 @@
-
 console.log('PASSWORD LOADED:', process.env.DB_PASSWORD);
-const mysql = require('mysql2');
+const mysql = require('mysql2'); // callback-style base import
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -9,12 +8,18 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME,
 });
 
-// Enable promise-based queries so `await db.query(...)` works in controllers
-const db = pool.promise();
+// Quick connectivity check at startup (callback style works here since pool is callback-based)
+pool.query('SELECT 1', (err) => {
+  if (err) console.log('Database connection failed:', err);
+  else console.log('MySQL connected');
+});
 
-// Quick connectivity check at startup (pools don't need an explicit .connect())
-db.query('SELECT 1')
-  .then(() => console.log('MySQL connected'))
-  .catch((err) => console.log('Database connection failed:', err));
+// Default export: callback-style pool.
+// Used by controllers written as db.query(sql, values, (err, result) => {...})
+// e.g. customerRequestController.js and most other controllers.
+module.exports = pool;
 
-module.exports = db;
+// Promise-style pool, attached as a property on the same export.
+// Used by controllers written with async/await, e.g. bookingController.js
+// (await db.query(...), await db.getConnection(), connection.beginTransaction()).
+module.exports.promisePool = pool.promise();

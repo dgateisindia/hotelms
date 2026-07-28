@@ -13,8 +13,7 @@
 //  somewhere else (e.g. '../config/database').
 // ============================================================
 
-const pool = require('../config/db'); // must export a mysql2/promise pool
-
+const pool = require('../config/db').promisePool;
 // ── Helpers ───────────────────────────────────────────────────
 
 // Maps a DB row -> the shape the Staff.js frontend expects

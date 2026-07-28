@@ -1,6 +1,5 @@
 const { createClerkClient } = require("@clerk/backend");
-const db = require("../config/db");
-
+const db = require("../config/db").promisePool;
 const clerkClient = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY,
 });

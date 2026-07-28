@@ -12,8 +12,7 @@
 //  up with what Staff.js already reads (s.dept, s.name, etc).
 // ============================================================
 
-const pool = require('../config/db'); // mysql2/promise pool — adjust path if different
-
+const pool = require('../config/db').promisePool;
 const STATUS_VALUES = ['present', 'absent', 'half_day', 'leave'];
 
 // ── GET /api/attendance?date=YYYY-MM-DD ─────────────────────

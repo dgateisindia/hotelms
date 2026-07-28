@@ -1,4 +1,4 @@
-const db = require("../config/db");
+const db = require("../config/db").promisePool;
 
 function attachDbUser() {
   return async (req, res, next) => {

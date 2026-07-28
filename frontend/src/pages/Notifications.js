@@ -1,10 +1,18 @@
 // ============================================================
 //  Notifications.js — Admin panel for customer room requests
 //  (submitted via the QR code form)
+//
+//  Room assignment on Approve now uses a live dropdown of rooms
+//  actually available (status + date-overlap check) for that
+//  request's own check-in/check-out dates, instead of a free-text
+//  room number field.
 // ============================================================
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+
+const API_BASE_URL = "/api/customer-requests";
+const ROOMS_API_URL = "http://localhost:5000/api/rooms/available";
 
 const statusClass = (status) => {
   switch (status) {
@@ -15,19 +23,41 @@ const statusClass = (status) => {
   }
 };
 
+// The backend returns snake_case columns straight from MySQL.
+// Map them once here, the same way Rooms.js maps its room rows.
+const mapRequest = (row) => ({
+  id: row.request_id,
+  fullName: row.full_name,
+  phone: row.phone,
+  email: row.email,
+  roomType: row.room_type,
+  checkIn: row.check_in,
+  checkOut: row.check_out,
+  guests: row.guests,
+  specialRequest: row.special_request,
+  status: row.status,
+  assignedRoom: row.assigned_room,
+  seen: !!row.seen,
+});
+
 const Notifications = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // room-number input state, keyed by request id
+  // room-number SELECT value, keyed by request id
   const [roomInputs, setRoomInputs] = useState({});
   const [actingId, setActingId] = useState(null);
 
+  // Available-room options per request id, e.g.
+  // { [requestId]: [{ room_id, room_number, room_type, price_per_night }, ...] }
+  const [roomOptions, setRoomOptions] = useState({});
+  const [roomOptionsLoading, setRoomOptionsLoading] = useState({});
+
   const fetchRequests = async () => {
     try {
-      const res = await axios.get("/api/customer-request");
-      setRequests(res.data);
+      const res = await axios.get(API_BASE_URL);
+      setRequests((res.data.data || []).map(mapRequest));
       setError("");
     } catch (err) {
       setError("Failed to load requests.");
@@ -43,11 +73,41 @@ const Notifications = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Load available rooms for every pending request that doesn't have
+  // options cached yet (runs whenever the request list refreshes).
+  useEffect(() => {
+    requests.forEach((r) => {
+      if (
+        r.status === "pending" &&
+        r.checkIn &&
+        r.checkOut &&
+        roomOptions[r.id] === undefined &&
+        !roomOptionsLoading[r.id]
+      ) {
+        loadAvailableRooms(r.id, r.checkIn, r.checkOut);
+      }
+    });
+  }, [requests]);
+
+  const loadAvailableRooms = async (requestId, checkIn, checkOut) => {
+    setRoomOptionsLoading((prev) => ({ ...prev, [requestId]: true }));
+    try {
+      const res = await axios.get(ROOMS_API_URL, {
+        params: { checkIn, checkOut },
+      });
+      setRoomOptions((prev) => ({ ...prev, [requestId]: res.data.data || [] }));
+    } catch (err) {
+      setRoomOptions((prev) => ({ ...prev, [requestId]: [] }));
+    } finally {
+      setRoomOptionsLoading((prev) => ({ ...prev, [requestId]: false }));
+    }
+  };
+
   const markSeen = async (id) => {
     try {
-      await axios.patch(`/api/customer-request/${id}/seen`);
+      await axios.patch(`${API_BASE_URL}/${id}/seen`);
       setRequests((prev) =>
-        prev.map((r) => (r._id === id ? { ...r, seen: true } : r))
+        prev.map((r) => (r.id === id ? { ...r, seen: true } : r))
       );
     } catch {
       // silent — not critical
@@ -57,19 +117,20 @@ const Notifications = () => {
   const handleApprove = async (id) => {
     const assignedRoom = roomInputs[id];
     if (!assignedRoom) {
-      alert("Please enter a room number to assign before approving.");
+      alert("Please select a room to assign before approving.");
       return;
     }
     try {
       setActingId(id);
-      const res = await axios.patch(`/api/customer-request/${id}/approve`, {
+      const res = await axios.patch(`${API_BASE_URL}/${id}/approve`, {
         assignedRoom,
       });
+      const updated = res.data.data ? mapRequest(res.data.data) : null;
       setRequests((prev) =>
-        prev.map((r) => (r._id === id ? res.data.request : r))
+        prev.map((r) => (r.id === id ? (updated || { ...r, status: "approved", assignedRoom }) : r))
       );
     } catch (err) {
-      alert("Failed to approve request.");
+      alert(err.response?.data?.message || "Failed to approve request.");
     } finally {
       setActingId(null);
     }
@@ -79,12 +140,13 @@ const Notifications = () => {
     if (!window.confirm("Decline this request?")) return;
     try {
       setActingId(id);
-      const res = await axios.patch(`/api/customer-request/${id}/decline`);
+      const res = await axios.patch(`${API_BASE_URL}/${id}/decline`);
+      const updated = res.data.data ? mapRequest(res.data.data) : null;
       setRequests((prev) =>
-        prev.map((r) => (r._id === id ? res.data.request : r))
+        prev.map((r) => (r.id === id ? (updated || { ...r, status: "declined" }) : r))
       );
     } catch (err) {
-      alert("Failed to decline request.");
+      alert(err.response?.data?.message || "Failed to decline request.");
     } finally {
       setActingId(null);
     }
@@ -117,10 +179,15 @@ const Notifications = () => {
             </tr>
           </thead>
           <tbody>
-            {requests.map((r) => (
+            {requests.map((r) => {
+              const options = roomOptions[r.id] || [];
+              const optionsLoading = !!roomOptionsLoading[r.id];
+              const hasDates = Boolean(r.checkIn && r.checkOut);
+
+              return (
               <tr
-                key={r._id}
-                onMouseEnter={() => !r.seen && markSeen(r._id)}
+                key={r.id}
+                onMouseEnter={() => !r.seen && markSeen(r.id)}
                 style={!r.seen ? { fontWeight: 700 } : undefined}
               >
                 <td>{r.fullName}</td>
@@ -128,7 +195,7 @@ const Notifications = () => {
                   {r.phone}
                   {r.email ? <div style={{ fontSize: 12, color: "#9ca3af" }}>{r.email}</div> : null}
                 </td>
-                <td>{r.roomType}</td>
+                <td>{r.roomType || "—"}</td>
                 <td>{r.checkIn}</td>
                 <td>{r.checkOut}</td>
                 <td>{r.guests}</td>
@@ -137,20 +204,34 @@ const Notifications = () => {
                 <td>
                   {r.status === "pending" ? (
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <input
-                        type="text"
-                        placeholder="Room #"
-                        value={roomInputs[r._id] || ""}
+                      <select
+                        value={roomInputs[r.id] || ""}
                         onChange={(e) =>
-                          setRoomInputs((prev) => ({ ...prev, [r._id]: e.target.value }))
+                          setRoomInputs((prev) => ({ ...prev, [r.id]: e.target.value }))
                         }
-                        style={{ width: 70, padding: "4px 6px", fontSize: 12 }}
-                      />
+                        disabled={!hasDates || optionsLoading}
+                        style={{ width: 150, padding: "4px 6px", fontSize: 12 }}
+                      >
+                        <option value="">
+                          {!hasDates
+                            ? "No dates on request"
+                            : optionsLoading
+                              ? "Loading rooms…"
+                              : options.length === 0
+                                ? "No rooms available"
+                                : "Select a room"}
+                        </option>
+                        {options.map((room) => (
+                          <option key={room.room_id} value={room.room_number}>
+                            {room.room_number} — {room.room_type} (₹{room.price_per_night}/night)
+                          </option>
+                        ))}
+                      </select>
                       <button
                         className="btn btn-primary"
                         style={{ fontSize: 12, padding: "4px 10px" }}
-                        disabled={actingId === r._id}
-                        onClick={() => handleApprove(r._id)}
+                        disabled={actingId === r.id || !roomInputs[r.id]}
+                        onClick={() => handleApprove(r.id)}
                       >
                         Approve
                       </button>
@@ -160,8 +241,8 @@ const Notifications = () => {
                           background: "#fee2e2", color: "#dc2626",
                           border: "none", borderRadius: 6, cursor: "pointer",
                         }}
-                        disabled={actingId === r._id}
-                        onClick={() => handleDecline(r._id)}
+                        disabled={actingId === r.id}
+                        onClick={() => handleDecline(r.id)}
                       >
                         Decline
                       </button>
@@ -173,7 +254,8 @@ const Notifications = () => {
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       )}
