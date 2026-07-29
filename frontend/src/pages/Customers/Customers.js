@@ -2,6 +2,16 @@
 //  Customers.js — Customer Management Page (logic + JSX only)
 //  Icons  → ../../utils/icons/CustomersIcons.js
 //  Styles → ../../styles/Customers.css
+//
+//  Fix: handleEdit previously required EVERY field (email, gender,
+//  address, nationality, customer_type, id_proof_type,
+//  id_proof_number) to be filled before it would save anything.
+//  Customers created quickly from a booking only have full_name +
+//  phone, so this blocked staff from opening Edit just to add a
+//  missing email/nationality — they were forced to also fill in
+//  everything else first. Now only full_name + phone (the two
+//  fields guaranteed to exist on every customer) are required;
+//  everything else can be filled in progressively over time.
 // ============================================================
 
 import React, { useState, useEffect } from 'react';
@@ -20,33 +30,6 @@ import {
 // ── Avatar colors ─────────────────────────────────────────────
 const AVATAR_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#6366f1'];
 
-// ── Sample Data ───────────────────────────────────────────────
-/*const INITIAL_CUSTOMERS = [
-  { id: 'CUS-1001', name: 'John Doe',     email: 'john.doe@email.com',       phone: '+91 98765 43210', nationality: 'Indian',    bookings: 5, lastStay: '20 May 2024', status: 'Active' },
-  { id: 'CUS-1002', name: 'Emily Smith',  email: 'emily.smith@email.com',    phone: '+91 91234 56789', nationality: 'USA',       bookings: 3, lastStay: '18 May 2024', status: 'Active' },
-  { id: 'CUS-1003', name: 'Michael Brown',email: 'michael.b@email.com',      phone: '+91 99876 54321', nationality: 'UK',        bookings: 4, lastStay: '21 May 2024', status: 'Active' },
-  { id: 'CUS-1004', name: 'Priya Sharma', email: 'priya.sharma@email.com',   phone: '+91 99123 45678', nationality: 'Indian',    bookings: 2, lastStay: '15 May 2024', status: 'Active' },
-  { id: 'CUS-1005', name: 'David Lee',    email: 'david.lee@email.com',      phone: '+91 90011 22334', nationality: 'Australia', bookings: 6, lastStay: '22 May 2024', status: 'Active' },
-  { id: 'CUS-1006', name: 'Sophia Wilson',email: 'sophia.w@email.com',       phone: '+91 88990 11223', nationality: 'Canada',    bookings: 1, lastStay: '10 May 2024', status: 'Inactive' },
-  { id: 'CUS-1007', name: 'Rahul Mehta',  email: 'rahul.mehta@email.com',    phone: '+91 87654 32109', nationality: 'Indian',    bookings: 7, lastStay: '23 May 2024', status: 'Active' },
-  { id: 'CUS-1008', name: 'Neha Singh',   email: 'neha.s@email.com',         phone: '+91 96543 21098', nationality: 'Indian',    bookings: 2, lastStay: '19 May 2024', status: 'Active' },
-];*/
-
-const EMPTY_FORM = {
-  full_name: "",
-  email: "",
-  phone: "",
-  gender: "",
-  address: "",
-  nationality: "",
-  customer_type: "",
-  id_proof_type: "",
-  id_proof_number: "",
-  profile_image: ""
-};
-
-const PER_PAGE = 8;//const PER_PAGE = 8;
-
 const SEGMENTS = [
   { label: 'Business Travelers', pct: 38, count: 325, color: '#3b82f6', icon: <IcoBusiness /> },
   { label: 'Leisure Travelers',  pct: 32, count: 274, color: '#10b981', icon: <IcoLeisure /> },
@@ -62,6 +45,21 @@ const PREFERENCES = [
   { label: 'Airport Pickup',      icon: <IcoAirport /> },
   { label: 'High Floor Preference',icon: <IcoHighFloor /> },
 ];
+
+const EMPTY_FORM = {
+  full_name: "",
+  email: "",
+  phone: "",
+  gender: "",
+  address: "",
+  nationality: "",
+  customer_type: "",
+  id_proof_type: "",
+  id_proof_number: "",
+  profile_image: ""
+};
+
+const PER_PAGE = 8;
 
 // ── Helpers ───────────────────────────────────────────────────
 const statusClass = (status) => {
@@ -126,7 +124,6 @@ const SegmentDonut = ({ segments, total }) => {
 
 // ════════════════════════════════════════════════════════════
 //  COMPONENT
-
 // ════════════════════════════════════════════════════════════
 function Customers() {
 const [customers, setCustomers] = useState([]);
@@ -305,25 +302,24 @@ const handleAdd = async () => {
         console.log(err);
     }
 };
+
+// ── EDIT ──────────────────────────────────────────────────────
+// Only full_name and phone are required — those are the two
+// fields guaranteed to exist on every customer, including ones
+// created quickly from the booking flow (find-or-create by
+// phone). Everything else (email, gender, address, nationality,
+// customer_type, ID proof) can be added or changed independently
+// through this same modal, one field at a time, instead of being
+// gated behind filling out the entire profile in one go.
  const handleEdit = async () => {
 
     if (!selected) return;
 
-    if (
-        !form.full_name ||
-        !form.email ||
-        !form.phone ||
-        !form.gender ||
-        !form.address ||
-        !form.nationality ||
-        !form.customer_type ||
-        !form.id_proof_type ||
-        !form.id_proof_number
-    ) {
+    if (!form.full_name || !form.phone) {
         Swal.fire({
             icon: "warning",
             title: "Incomplete Form",
-            text: "Please fill all the required details.",
+            text: "Full Name and Phone Number are required.",
             confirmButtonColor: "#f59e0b",
         });
 
@@ -456,7 +452,6 @@ const handleImageChange = (e) => {
       </div>
 
       {/* ── Stat Cards ── */}
-    {/* ── Stat Cards ── */}
 <div className="cust-stats">
 
   {/* Total Customers */}
@@ -805,7 +800,6 @@ const handleImageChange = (e) => {
 )}
 
 {/* Delete Modal */}
-      {/* Delete Modal */}
       {showDelete && selected && (
         <div className="modal-overlay" onClick={() => setShowDelete(false)}>
           <div className="modal-box confirm-modal" onClick={e => e.stopPropagation()}>

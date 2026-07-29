@@ -36,17 +36,18 @@ function CustomerFormModal({
               />
             </div>
 
-            {/* Email */}
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={form.email}
-                onChange={handleFormChange}
-                disabled={title === "Edit Customer"}
-              />  
-            </div>
+           {/* Email */}
+<div className="form-group">
+  <label className="form-label">Email</label>
+  <input
+    className="form-input"
+    type="email"
+    name="email"
+    value={form.email || ''}
+    onChange={handleFormChange}
+    placeholder="Enter email"
+  />  
+</div>
 
             {/* Phone */}
             <div className="form-group">

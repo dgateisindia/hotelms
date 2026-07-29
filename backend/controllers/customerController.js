@@ -26,9 +26,23 @@ SELECT
 
     CASE
         WHEN latest.booking_status = 'checked_in' THEN 'Checked In'
+
+        -- Stay with a set check-out date: guest is "Checked In" only
+        -- while today falls inside [check_in, check_out].
         WHEN latest.booking_status = 'confirmed'
+             AND latest.check_out IS NOT NULL
              AND CURDATE() BETWEEN DATE(latest.check_in) AND DATE(latest.check_out)
              THEN 'Checked In'
+
+        -- Open-ended stay (check_out not set yet): guest is
+        -- "Checked In" from check_in onward, not "Checked Out".
+        -- This is the case that was previously falling through to
+        -- the ELSE and showing "Checked Out" incorrectly.
+        WHEN latest.booking_status = 'confirmed'
+             AND latest.check_out IS NULL
+             AND DATE(latest.check_in) <= CURDATE()
+             THEN 'Checked In'
+
         WHEN latest.booking_status = 'confirmed'
              AND latest.check_in > CURDATE()
              THEN 'Upcoming'
@@ -182,9 +196,18 @@ exports.getCustomer = async (req, res) => {
 
         CASE
           WHEN latest.booking_status = 'checked_in' THEN 'Checked In'
+
           WHEN latest.booking_status = 'confirmed'
+               AND latest.check_out IS NOT NULL
                AND CURDATE() BETWEEN DATE(latest.check_in) AND DATE(latest.check_out)
                THEN 'Checked In'
+
+          -- Open-ended stay (check_out not set yet)
+          WHEN latest.booking_status = 'confirmed'
+               AND latest.check_out IS NULL
+               AND DATE(latest.check_in) <= CURDATE()
+               THEN 'Checked In'
+
           WHEN latest.booking_status = 'confirmed'
                AND latest.check_in > CURDATE()
                THEN 'Upcoming'

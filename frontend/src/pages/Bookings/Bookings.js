@@ -22,6 +22,26 @@
 //    View + History stay available.
 //  - Success/failure messages now use SweetAlert2 instead of
 //    native alert()/browser errors.
+//  - handleAdd no longer requires the customer to already exist:
+//    it sends phone + guest_name straight to the backend, which
+//    finds-or-creates the customer record in the same request.
+//    It also now submits every room queued in `extraRooms`, not
+//    just Room 1 — each extra room reuses the same phone/guest
+//    and gets its own booking row/ID.
+//  - Edit modal fixes:
+//      1. Dates from the backend arrive as full ISO datetime
+//         strings (e.g. 2026-07-29T00:00:00.000Z); toDateInputValue()
+//         trims them to YYYY-MM-DD so <input type="date"> displays
+//         the existing value instead of rendering blank.
+//      2. Room Type from the DB (e.g. "Deluxe Room") is normalized
+//         against the dropdown's fixed option list via
+//         normalizeRoomType() so it doesn't silently fall back to
+//         the first option ("Standard").
+//      3. Edit now uses its own handleEditFormChange instead of
+//         handleFormChange, so changing a date no longer wipes out
+//         Room No. — that "clear room on date change" behavior only
+//         makes sense in New Booking, where Room No. is tied to a
+//         live availability list; in Edit it's a plain manual field.
 // ============================================================
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -47,7 +67,7 @@ const IcoHistory= () => <svg width="13" height="13" fill="none" viewBox="0 0 24 
 
 
 const EMPTY_ROOM_FORM = {
-  phone: '', guest: '', roomNo: '', roomType: 'Deluxe',
+  phone: '', guest: '', email: '', nationality: '', roomNo: '', roomType: 'Deluxe',
   checkIn: '', checkOut: '', guests: 1, amount: '',
   status: 'Confirmed', payment: 'Unpaid', idProof: null,
 };
@@ -98,6 +118,27 @@ const calcNights = (checkIn, checkOut) => {
   const outD = new Date(checkOut);
   const diff = Math.round((outD - inD) / (1000 * 60 * 60 * 24));
   return diff > 0 ? diff : 1;
+};
+
+// Normalize a backend date/datetime value into YYYY-MM-DD for
+// <input type="date">. The backend returns full ISO datetime
+// strings (e.g. "2026-07-29T00:00:00.000Z"); a date input renders
+// blank for anything that isn't exactly YYYY-MM-DD.
+const toDateInputValue = (value) => {
+  if (!value) return '';
+  return String(value).split('T')[0];
+};
+
+// DB may store the room type with extra wording ("Deluxe Room")
+// while the dropdown's fixed options are just "Deluxe", "Suite",
+// etc. Match against the first known option found as a
+// case-insensitive substring; fall back to the raw value so
+// nothing is silently discarded/replaced with the wrong option.
+const ROOM_TYPE_OPTIONS = ['Standard', 'Deluxe', 'Suite', 'Executive', 'Presidential Suite'];
+const normalizeRoomType = (value) => {
+  if (!value) return ROOM_TYPE_OPTIONS[0];
+  const match = ROOM_TYPE_OPTIONS.find(opt => value.toLowerCase().includes(opt.toLowerCase()));
+  return match || value;
 };
 
 // Validate only the fields that are actually mandatory:
@@ -398,7 +439,19 @@ const fetchCustomers = async () => {
 
   const openEdit = (b) => {
     setSelected(b);
-    setForm({ phone: b.phone, guest: b.guest, roomNumber: b.roomNumber, roomType: b.roomType, checkIn: b.checkIn, checkOut: b.checkOut, guests: b.guests, amount: b.amount, status: b.status, payment: b.payment, idProof: b.idProof });
+    setForm({
+      phone: b.phone,
+      guest: b.guest,
+      roomNumber: b.roomNumber,
+      roomType: normalizeRoomType(b.roomType),
+      checkIn: toDateInputValue(b.checkIn),
+      checkOut: toDateInputValue(b.checkOut),
+      guests: b.guests,
+      amount: b.amount,
+      status: b.status,
+      payment: b.payment,
+      idProof: b.idProof,
+    });
     setShowEdit(true);
   };
 
@@ -415,6 +468,14 @@ const fetchCustomers = async () => {
       setForm(prev => ({ ...prev, guest: existing.guest }));
     }
   };
+
+// ── ADD ───────────────────────────────────────────────────────
+// No longer looks up an existing customer and blocks if missing.
+// phone + guest_name are sent straight to the backend, which
+// finds-or-creates the customer record in the same transaction as
+// the booking insert. Every room queued in `extraRooms` is now
+// submitted too (previously only Room 1 was ever sent, even though
+// the Save button said "Save N Bookings").
 const handleAdd = async () => {
   // Validate Room 1 and every extra room. Mandatory fields are only
   // Phone Number, Guest Name, and Check-in Date — everything else
@@ -436,28 +497,38 @@ const handleAdd = async () => {
     return; // stop submit — inline errors are now shown under each field
   }
 
-  try {
-    const customer = customers.find(
-      (c) => c.phone === form.phone
+  // Resolve room_id for Room 1 and for every extra room up front, so
+  // we fail fast with a clear message before making any network calls.
+  const mainRoom = rooms.find(
+    (r) => Number(r.room_number) === Number(form.roomNumber)
+  );
+
+  if (!mainRoom) {
+    showError('Room not selected', { message: 'Please select a room before saving the booking.' });
+    return;
+  }
+
+  const resolvedExtraRooms = [];
+  for (let idx = 0; idx < extraRooms.length; idx++) {
+    const r = extraRooms[idx];
+    const roomMatch = rooms.find(
+      (rm) => Number(rm.room_number) === Number(r.roomNumber)
     );
-
-    if (!customer) {
-      showError('Customer not found', { message: 'Please add the customer first before creating a booking.' });
+    if (!roomMatch) {
+      showError('Room not selected', { message: `Please select a room for Room ${idx + 2} before saving.` });
       return;
     }
+    resolvedExtraRooms.push({ ...r, room_id: roomMatch.room_id });
+  }
 
-   const room = rooms.find(
-  (r) => Number(r.room_number) === Number(form.roomNumber)
-);
-
-    if (!room) {
-      showError('Room not selected', { message: 'Please select a room before saving the booking.' });
-      return;
-    }
-
+  try {
+    // Room 1
     await axios.post("http://localhost:5000/api/bookings", {
-      customer_id: customer.customer_id,
-      room_id: room.room_id,
+      phone: form.phone,
+      guest_name: form.guest,
+      email: form.email || null,
+      nationality: form.nationality || null,
+      room_id: mainRoom.room_id,
       check_in: form.checkIn,
       check_out: form.checkOut || null,
       total_guests: Number(form.guests),
@@ -467,16 +538,39 @@ const handleAdd = async () => {
       special_request: ""
     });
 
+    // Every additional room queued for the same phone/guest
+    for (const r of resolvedExtraRooms) {
+      await axios.post("http://localhost:5000/api/bookings", {
+        phone: form.phone,
+        guest_name: form.guest,
+        room_id: r.room_id,
+        check_in: r.checkIn,
+        check_out: r.checkOut || null,
+        total_guests: Number(r.guests),
+        booking_status: r.status,
+        payment_status: r.payment,
+        total_amount: Number(r.amount),
+        special_request: ""
+      });
+    }
+
     await fetchBookings();
     await fetchBookingStats();
+    await fetchCustomers(); // refresh so a newly-created customer shows up immediately
 
     setShowAdd(false);
     setForm(EMPTY_ROOM_FORM);
+    setExtraRooms([]);
 
-    showSuccess('Booking created', `${1 + extraRooms.length} booking${(1 + extraRooms.length) > 1 ? 's' : ''} saved successfully.`);
+    showSuccess('Booking created', `${1 + resolvedExtraRooms.length} booking${(1 + resolvedExtraRooms.length) > 1 ? 's' : ''} saved successfully.`);
   } catch (err) {
     console.error(err);
     showError('Could not create booking', err);
+    // Some bookings in the batch may have already been saved before
+    // the failure — refresh the list so the table reflects reality.
+    await fetchBookings();
+    await fetchBookingStats();
+    await fetchCustomers();
   }
 };
 
@@ -552,6 +646,9 @@ const handleEdit = async () => {
   }
 };
 
+  // New Booking modal only — clearing Room No. on date change is
+  // correct here because it's tied to a live availability list
+  // scoped to that check-in/check-out range.
   const handleFormChange = (e) => {
     const { name, value } = e.target;
 
@@ -575,6 +672,14 @@ const handleEdit = async () => {
         return next;
       });
     }
+  };
+
+  // Edit modal only — Room No. here is a plain manual text input,
+  // not tied to any live availability list, so changing a date must
+  // never wipe it out the way it does in New Booking.
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
   };
 
   // When Room 1's room number changes, auto-fill Room Type to match
@@ -698,6 +803,27 @@ const handleEdit = async () => {
                   placeholder="Enter guest name"
                 />
                 <FieldError message={formErrors.guest} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email (optional)</label>
+                <input
+                  className="form-input"
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleFormChange}
+                  placeholder="guest@example.com"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Nationality (optional)</label>
+                <input
+                  className="form-input"
+                  name="nationality"
+                  value={form.nationality}
+                  onChange={handleFormChange}
+                  placeholder="e.g. Indian"
+                />
               </div>
             </div>
 
@@ -922,48 +1048,48 @@ const handleEdit = async () => {
           <div className="modal-grid">
             <div className="form-group">
               <label className="form-label">Phone Number</label>
-              <input className="form-input" name="phone" value={form.phone} onChange={handleFormChange} placeholder="+91 00000 00000" />
+              <input className="form-input" name="phone" value={form.phone} onChange={handleEditFormChange} placeholder="+91 00000 00000" />
             </div>
             <div className="form-group">
               <label className="form-label">Guest Name</label>
-              <input className="form-input" name="guest" value={form.guest} onChange={handleFormChange} placeholder="Enter guest name" />
+              <input className="form-input" name="guest" value={form.guest} onChange={handleEditFormChange} placeholder="Enter guest name" />
             </div>
             <div className="form-group">
               <label className="form-label">Room No.</label>
-              <input className="form-input" name="roomNumber" value={form.roomNumber} onChange={handleFormChange} placeholder="e.g. 101" />
+              <input className="form-input" name="roomNumber" value={form.roomNumber} onChange={handleEditFormChange} placeholder="e.g. 101" />
             </div>
             <div className="form-group">
               <label className="form-label">Room Type</label>
-              <select className="form-select" name="roomType" value={form.roomType} onChange={handleFormChange}>
+              <select className="form-select" name="roomType" value={form.roomType} onChange={handleEditFormChange}>
                 <option>Standard</option><option>Deluxe</option><option>Suite</option>
                 <option>Executive</option><option>Presidential Suite</option>
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">No. of Guests</label>
-              <input className="form-input" type="number" name="guests" value={form.guests} onChange={handleFormChange} min={1} />
+              <input className="form-input" type="number" name="guests" value={form.guests} onChange={handleEditFormChange} min={1} />
             </div>
             <div className="form-group">
               <label className="form-label">Check-in Date</label>
-              <input className="form-input" type="date" name="checkIn" value={form.checkIn} onChange={handleFormChange} />
+              <input className="form-input" type="date" name="checkIn" value={form.checkIn} onChange={handleEditFormChange} />
             </div>
             <div className="form-group">
               <label className="form-label">Check-out Date</label>
-              <input className="form-input" type="date" name="checkOut" value={form.checkOut} onChange={handleFormChange} />
+              <input className="form-input" type="date" name="checkOut" value={form.checkOut} onChange={handleEditFormChange} />
             </div>
             <div className="form-group">
               <label className="form-label">Amount</label>
-              <input className="form-input" name="amount" value={form.amount} onChange={handleFormChange} placeholder="e.g. ₹ 8,000" />
+              <input className="form-input" name="amount" value={form.amount} onChange={handleEditFormChange} placeholder="e.g. ₹ 8,000" />
             </div>
             <div className="form-group">
               <label className="form-label">Payment Status</label>
-              <select className="form-select" name="payment" value={form.payment} onChange={handleFormChange}>
+              <select className="form-select" name="payment" value={form.payment} onChange={handleEditFormChange}>
                 <option>Paid</option><option>Unpaid</option><option>Partial</option><option>Refunded</option>
               </select>
             </div>
             <div className="form-group full">
               <label className="form-label">Booking Status</label>
-              <select className="form-select" name="status" value={form.status} onChange={handleFormChange}>
+              <select className="form-select" name="status" value={form.status} onChange={handleEditFormChange}>
                 <option>Confirmed</option><option>Pending</option><option>Checked-in</option><option>Checked-out</option><option>Cancelled</option>
               </select>
             </div>

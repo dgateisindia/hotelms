@@ -178,9 +178,6 @@ exports.getBooking = async (req, res) => {
 // ===============================
 // BOOKING DASHBOARD STATS
 // ===============================
-// ===============================
-// BOOKING DASHBOARD STATS
-// ===============================
 exports.getBookingStats = async (req,res)=>{
 
   try{
@@ -205,7 +202,6 @@ exports.getBookingStats = async (req,res)=>{
 
       FROM bookings
     `);
-    // ...unchanged below
 
     res.json({
 
@@ -240,73 +236,113 @@ exports.getBookingStats = async (req,res)=>{
   }
 
 };
-// ========================================
-// ADD BOOKING
-// ========================================
 
 // ========================================
 // ADD BOOKING
+// Accepts { phone, guest_name, room_id, check_in, check_out,
+//           total_guests, booking_status, payment_status,
+//           total_amount, special_request }
+//
+// Instead of requiring customer_id to already exist, this now
+// finds the customer by phone, or creates one on the fly if no
+// match is found. Everything happens in one transaction so a
+// booking failure can't leave behind an orphan customer, and a
+// customer failure can't leave behind a booking with a bad FK.
 // ========================================
 exports.addBooking = async (req, res) => {
   console.log("POST BODY");
   console.log(req.body);
 
   const formatMySQLDate = (value) => {
-  if (!value) return null;
+    if (!value) return null;
 
-  return new Date(value)
-    .toISOString()
-    .slice(0, 19)
-    .replace("T", " ");
-};
-
-const formattedCheckIn = formatMySQLDate(check_in);
-const formattedCheckOut = check_out
-  ? formatMySQLDate(check_out)
-  : null;
+    return new Date(value)
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " ");
+  };
 
   const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();
-const {
-  customer_id,
-  room_id,
-  check_in,
-  check_out,
-  total_guests,
-  booking_status,
-  payment_status,
-  total_amount,
-  special_request,
-} = req.body;
+
+    const {
+      phone,
+      guest_name,
+      email,        // optional — collected in New Booking modal
+      nationality,  // optional — collected in New Booking modal
+      room_id,
+      check_in,
+      check_out,
+      total_guests,
+      booking_status,
+      payment_status,
+      total_amount,
+      special_request,
+    } = req.body;
+
+    const formattedCheckIn = formatMySQLDate(check_in);
+    const formattedCheckOut = check_out ? formatMySQLDate(check_out) : null;
+
     // -----------------------------
     // Validate Required Fields
     // -----------------------------
-    if (!customer_id || !room_id || !check_in) {
+    if (!phone || !guest_name || !room_id || !check_in) {
       await connection.rollback();
 
       return res.status(400).json({
         success: false,
-        message: "customer_id, room_id, and check_in are required.",
+        message: "phone, guest_name, room_id, and check_in are required.",
       });
     }
 
     // -----------------------------
-    // Validate Customer
+    // Find or Create Customer (by phone)
     // -----------------------------
-    const [customer] = await connection.query(
-      "SELECT customer_id FROM customers WHERE customer_id = ?",
-      [customer_id]
+    const [existingCustomer] = await connection.query(
+      "SELECT customer_id, full_name, email, nationality FROM customers WHERE phone = ?",
+      [phone]
     );
 
-    if (customer.length === 0) {
-      await connection.rollback();
+    let customer_id;
 
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found",
-      });
+    if (existingCustomer.length > 0) {
+      customer_id = existingCustomer[0].customer_id;
+
+      // Keep the name in sync if it was edited in the booking modal.
+      // For email/nationality, only fill them in if they're currently
+      // empty — never silently overwrite a value staff already set
+      // via the Customers page.
+      const updates = [];
+      const params = [];
+
+      if (existingCustomer[0].full_name !== guest_name) {
+        updates.push("full_name = ?");
+        params.push(guest_name);
+      }
+      if (!existingCustomer[0].email && email) {
+        updates.push("email = ?");
+        params.push(email);
+      }
+      if (!existingCustomer[0].nationality && nationality) {
+        updates.push("nationality = ?");
+        params.push(nationality);
+      }
+
+      if (updates.length) {
+        params.push(customer_id);
+        await connection.query(
+          `UPDATE customers SET ${updates.join(", ")} WHERE customer_id = ?`,
+          params
+        );
+      }
+    } else {
+      const [newCustomer] = await connection.query(
+        "INSERT INTO customers (full_name, phone, email, nationality) VALUES (?, ?, ?, ?)",
+        [guest_name, phone, email || null, nationality || null]
+      );
+      customer_id = newCustomer.insertId;
     }
 
     // -----------------------------
@@ -424,8 +460,8 @@ const {
         bookingCode,
         customer_id,
         room_id,
-       formattedCheckIn,
-      formattedCheckOut,
+        formattedCheckIn,
+        formattedCheckOut,
         total_guests,
         booking_status,
         payment_status,
@@ -441,6 +477,7 @@ const {
       message: "Booking created successfully.",
       booking_id: result.insertId,
       booking_code: bookingCode,
+      customer_id,
     });
 
   } catch (err) {
