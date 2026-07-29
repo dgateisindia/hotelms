@@ -116,6 +116,21 @@ function LoginPage() {
 
     } catch (err) {
       console.error(err);
+
+      // Clerk rejects signIn.create() outright if a session is already
+      // active (e.g. stale SignedOut render right before Clerk's client
+      // synced state, or a session from another tab). Rather than show
+      // the user an error about their own valid session, send them
+      // straight into the same role-based redirect a normal login uses.
+      const alreadySignedIn = err.errors?.some(
+        (e) => e.code === 'session_exists' || /already signed in/i.test(e.longMessage || e.message || '')
+      );
+
+      if (alreadySignedIn) {
+        navigate("/login"); // SignedIn branch will now render PostLoginRedirect
+        return;
+      }
+
       setError(err.errors?.length ? err.errors[0].longMessage : "Login failed.");
     } finally {
       setLoading(false);
