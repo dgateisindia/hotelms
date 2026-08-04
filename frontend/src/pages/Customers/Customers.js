@@ -2,10 +2,23 @@
 //  Customers.js — Customer Management Page (logic + JSX only)
 //  Icons  → ../../utils/icons/CustomersIcons.js
 //  Styles → ../../styles/Customers.css
+//
+//  Fix: handleEdit previously required EVERY field (email, gender,
+//  address, nationality, customer_type, id_proof_type,
+//  id_proof_number) to be filled before it would save anything.
+//  Customers created quickly from a booking only have full_name +
+//  phone, so this blocked staff from opening Edit just to add a
+//  missing email/nationality — they were forced to also fill in
+//  everything else first. Now only full_name + phone (the two
+//  fields guaranteed to exist on every customer) are required;
+//  everything else can be filled in progressively over time.
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import CustomerFormModal from "../../components/CustomerFormModal";
 import '../../styles/Customers.css';
+import Swal from "sweetalert2";
 import {
   IcoPlus, IcoSearch, IcoFilter, IcoEye, IcoEdit, IcoTrash,
   IcoChevL, IcoChevR, IcoWarn, IcoStar,
@@ -16,21 +29,6 @@ import {
 
 // ── Avatar colors ─────────────────────────────────────────────
 const AVATAR_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#6366f1'];
-
-// ── Sample Data ───────────────────────────────────────────────
-const INITIAL_CUSTOMERS = [
-  { id: 'CUS-1001', name: 'John Doe',     email: 'john.doe@email.com',       phone: '+91 98765 43210', nationality: 'Indian',    bookings: 5, lastStay: '20 May 2024', status: 'Active' },
-  { id: 'CUS-1002', name: 'Emily Smith',  email: 'emily.smith@email.com',    phone: '+91 91234 56789', nationality: 'USA',       bookings: 3, lastStay: '18 May 2024', status: 'Active' },
-  { id: 'CUS-1003', name: 'Michael Brown',email: 'michael.b@email.com',      phone: '+91 99876 54321', nationality: 'UK',        bookings: 4, lastStay: '21 May 2024', status: 'Active' },
-  { id: 'CUS-1004', name: 'Priya Sharma', email: 'priya.sharma@email.com',   phone: '+91 99123 45678', nationality: 'Indian',    bookings: 2, lastStay: '15 May 2024', status: 'Active' },
-  { id: 'CUS-1005', name: 'David Lee',    email: 'david.lee@email.com',      phone: '+91 90011 22334', nationality: 'Australia', bookings: 6, lastStay: '22 May 2024', status: 'Active' },
-  { id: 'CUS-1006', name: 'Sophia Wilson',email: 'sophia.w@email.com',       phone: '+91 88990 11223', nationality: 'Canada',    bookings: 1, lastStay: '10 May 2024', status: 'Inactive' },
-  { id: 'CUS-1007', name: 'Rahul Mehta',  email: 'rahul.mehta@email.com',    phone: '+91 87654 32109', nationality: 'Indian',    bookings: 7, lastStay: '23 May 2024', status: 'Active' },
-  { id: 'CUS-1008', name: 'Neha Singh',   email: 'neha.s@email.com',         phone: '+91 96543 21098', nationality: 'Indian',    bookings: 2, lastStay: '19 May 2024', status: 'Active' },
-];
-
-const EMPTY_FORM = { name: '', email: '', phone: '', nationality: 'Indian', status: 'Active' };
-const PER_PAGE = 8;
 
 const SEGMENTS = [
   { label: 'Business Travelers', pct: 38, count: 325, color: '#3b82f6', icon: <IcoBusiness /> },
@@ -48,10 +46,29 @@ const PREFERENCES = [
   { label: 'High Floor Preference',icon: <IcoHighFloor /> },
 ];
 
+const EMPTY_FORM = {
+  full_name: "",
+  email: "",
+  phone: "",
+  gender: "",
+  address: "",
+  nationality: "",
+  customer_type: "",
+  id_proof_type: "",
+  id_proof_number: "",
+  profile_image: ""
+};
+
+const PER_PAGE = 8;
+
 // ── Helpers ───────────────────────────────────────────────────
-const statusClass = (s) => {
-  const map = { 'Active':'badge-active', 'Inactive':'badge-inactive', 'VIP':'badge-vip' };
-  return `badge ${map[s] || ''}`;
+const statusClass = (status) => {
+  const map = {
+    "Checked In": "badge-active",
+    "Checked Out": "badge-inactive",
+  };
+
+  return `badge ${map[status] || ""}`;
 };
 
 const initials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
@@ -109,9 +126,39 @@ const SegmentDonut = ({ segments, total }) => {
 //  COMPONENT
 // ════════════════════════════════════════════════════════════
 function Customers() {
-  const [customers, setCustomers] = useState(INITIAL_CUSTOMERS);
-  const [search, setSearch]       = useState('');
+const [customers, setCustomers] = useState([]);
+const [stats, setStats] = useState({
+  totalCustomers: 0,
+  activeGuests: 0,
+  repeatGuests: 0,
+  vipCustomers: 0,
+});
+ const [search, setSearch]       = useState('');
   const [page, setPage]           = useState(1);
+
+  const fetchCustomers = async () => {
+    try {
+      const res = await axios.get("http://localhost:5000/api/customers");
+      setCustomers(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+
+  const fetchCustomerStats = async () => {
+  try {
+    const res = await axios.get(
+      "http://localhost:5000/api/customers/stats"
+    );
+
+    if (res.data.success) {
+      setStats(res.data.data);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+};
 
   // Modals
   const [showAdd, setShowAdd]       = useState(false);
@@ -120,102 +167,261 @@ function Customers() {
   const [showDelete, setShowDelete] = useState(false);
   const [selected, setSelected]     = useState(null);
   const [form, setForm]             = useState(EMPTY_FORM);
+//====================================================
+useEffect(() => {
+  fetchCustomers();
+  fetchCustomerStats();
+}, []);
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+
+    setForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
 
   // ── Filter ──
-  const filtered = customers.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.email.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone.includes(search) ||
-    c.id.toLowerCase().includes(search.toLowerCase())
-  );
+ const filtered = customers.filter(c =>
+  c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+  c.email?.toLowerCase().includes(search.toLowerCase()) ||
+  c.phone?.includes(search) ||
+  String(c.customer_id).includes(search)
+);
 
   const totalPages = Math.ceil(filtered.length / PER_PAGE);
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   // ── Handlers ──
-  const openAdd    = () => { setForm(EMPTY_FORM); setShowAdd(true); };
-  const openEdit   = (c) => { setSelected(c); setForm({ name: c.name, email: c.email, phone: c.phone, nationality: c.nationality, status: c.status }); setShowEdit(true); };
-  const openView   = (c) => { setSelected(c); setShowView(true); };
-  const openDelete = (c) => { setSelected(c); setShowDelete(true); };
+const openAdd = () => {
+  setForm(EMPTY_FORM);
+  setShowAdd(true);
+};
+const openEdit = (c) => {
+  setSelected(c);
 
-  const handleAdd = () => {
-    const newCust = {
-      ...form,
-      id: `CUS-${1009 + customers.length}`,
-      bookings: 0,
-      lastStay: '—',
-    };
-    setCustomers(prev => [newCust, ...prev]);
-    setShowAdd(false);
-  };
+  setForm({
+    full_name: c.full_name,
+    email: c.email,
+    phone: c.phone,
+    gender: c.gender,
+    address: c.address,
+    id_proof_type: c.id_proof_type,
+    id_proof_number: c.id_proof_number,
+    nationality: c.nationality,
+    customer_type: c.customer_type,
+    profile_image: c.profile_image
+  });
 
-  const handleEdit = () => {
-    setCustomers(prev => prev.map(c => c.id === selected.id ? { ...c, ...form } : c));
-    setShowEdit(false);
-  };
+  setShowEdit(true);
+}; 
+const openView = async (customer) => {
+  try {
+    const res = await axios.get(
+      `http://localhost:5000/api/customers/${customer.customer_id}`
+    );
 
-  const handleDelete = () => {
-    setCustomers(prev => prev.filter(c => c.id !== selected.id));
-    setShowDelete(false);
-  };
+    setSelected(res.data);
+    setShowView(true);
+  } catch (err) {
+    console.error(err);
+  }
+}; const openDelete = (c) => { setSelected(c); setShowDelete(true); };
 
-  const handleFormChange = (e) => {
-    const { name, value } = e.target;
-    setForm(prev => ({ ...prev, [name]: value }));
-  };
+const handleAdd = async () => {
+
+    const requiredFields = [
+        { key: "full_name", label: "Full Name" },
+        { key: "email", label: "Email" },
+        { key: "phone", label: "Phone Number" },
+        { key: "gender", label: "Gender" },
+        { key: "address", label: "Address" },
+        { key: "nationality", label: "Nationality" },
+        { key: "customer_type", label: "Customer Type" },
+        { key: "id_proof_type", label: "ID Proof Type" },
+        { key: "id_proof_number", label: "ID Proof Number" },
+        { key: "profile_image", label: "Profile Image" },
+    ];
+
+    const missing = requiredFields.filter(field => !form[field.key]);
+
+    if (missing.length > 0) {
+
+        Swal.fire({
+            icon: "warning",
+            title: "Incomplete Form",
+            text: `Please fill: ${missing.map(f => f.label).join(", ")}`,
+            confirmButtonColor: "#f59e0b",
+        });
+
+        return;
+    }
+
+    try {
+
+        await axios.post(
+            "http://localhost:5000/api/customers",
+            form
+        );
+
+        Swal.fire({
+            icon: "success",
+            title: "Success",
+            text: "Customer information saved successfully.",
+            confirmButtonColor: "#2563eb",
+        });
+
+        await fetchCustomers();
+        await fetchCustomerStats();
+
+        setShowAdd(false);
+        setForm(EMPTY_FORM);
+
+    } catch (err) {
+
+        if (err.response?.status === 409) {
+
+            Swal.fire({
+                icon: "warning",
+                title: "Duplicate Customer",
+                text: err.response.data.message,
+                confirmButtonColor: "#f59e0b",
+            });
+
+            return;
+        }
+
+        Swal.fire({
+            icon: "error",
+            title: "Save Failed",
+            text: err.response?.data?.message || "Unable to save customer information.",
+            confirmButtonColor: "#dc2626",
+        });
+
+        console.log(err);
+    }
+};
+
+// ── EDIT ──────────────────────────────────────────────────────
+// Only full_name and phone are required — those are the two
+// fields guaranteed to exist on every customer, including ones
+// created quickly from the booking flow (find-or-create by
+// phone). Everything else (email, gender, address, nationality,
+// customer_type, ID proof) can be added or changed independently
+// through this same modal, one field at a time, instead of being
+// gated behind filling out the entire profile in one go.
+ const handleEdit = async () => {
+
+    if (!selected) return;
+
+    if (!form.full_name || !form.phone) {
+        Swal.fire({
+            icon: "warning",
+            title: "Incomplete Form",
+            text: "Full Name and Phone Number are required.",
+            confirmButtonColor: "#f59e0b",
+        });
+
+        return;
+    }
+
+    try {
+
+        await axios.put(
+            `http://localhost:5000/api/customers/${selected.customer_id}`,
+            form
+        );
+
+        Swal.fire({
+            icon: "success",
+            title: "Updated",
+            text: "Customer information updated successfully.",
+            confirmButtonColor: "#2563eb",
+        });
+
+await fetchCustomers();
+await fetchCustomerStats();
+        setShowEdit(false);
+
+    } catch (err) {
+
+        Swal.fire({
+            icon: "error",
+            title: "Update Failed",
+            text: "Unable to update customer information.",
+            confirmButtonColor: "#dc2626",
+        });
+
+        console.log(err);
+    }
+};
+  const handleDelete = async () => {
+
+    const result = await Swal.fire({
+        title: "Delete Customer?",
+        text: "This action cannot be undone.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#dc2626",
+        cancelButtonColor: "#6b7280",
+        confirmButtonText: "Yes, Delete",
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+
+        await axios.delete(
+            `http://localhost:5000/api/customers/${selected.customer_id}`
+        );
+
+        Swal.fire({
+            icon: "success",
+            title: "Deleted",
+            text: "Customer deleted successfully.",
+            confirmButtonColor: "#2563eb",
+        });
+
+await fetchCustomers();
+await fetchCustomerStats();
+        setShowDelete(false);
+
+    } catch (err) {
+
+        Swal.fire({
+            icon: "error",
+            title: "Delete Failed",
+            text: "Unable to delete customer.",
+            confirmButtonColor: "#dc2626",
+        });
+    }
+};
+
+const handleImageChange = (e) => {
+
+    const file = e.target.files[0];
+
+    if (!file) return;
+
+    if (file.size > 100 * 1024) {
+
+        alert("Maximum file size is 100 KB");
+
+        e.target.value = "";
+
+        return;
+    }
+
+    setForm(prev => ({
+        ...prev,
+        profile_image: file
+    }));
+
+};
+  
 
   // ── Shared Customer Form Modal ──
-  const CustomerFormModal = ({ title, onSave, onClose }) => (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div className="modal-grid">
-            <div className="form-group full">
-              <label className="form-label">Full Name</label>
-              <input className="form-input" name="name" value={form.name} onChange={handleFormChange} placeholder="Enter full name" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Email Address</label>
-              <input className="form-input" name="email" value={form.email} onChange={handleFormChange} placeholder="email@example.com" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Phone Number</label>
-              <input className="form-input" name="phone" value={form.phone} onChange={handleFormChange} placeholder="+91 00000 00000" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Nationality</label>
-              <select className="form-select" name="nationality" value={form.nationality} onChange={handleFormChange}>
-                <option>Indian</option>
-                <option>USA</option>
-                <option>UK</option>
-                <option>Australia</option>
-                <option>Canada</option>
-                <option>Germany</option>
-                <option>France</option>
-                <option>Other</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <select className="form-select" name="status" value={form.status} onChange={handleFormChange}>
-                <option>Active</option>
-                <option>Inactive</option>
-                <option>VIP</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn-save" onClick={onSave}>Save Customer</button>
-        </div>
-      </div>
-    </div>
-  );
 
   // ════════════════════════════════════════════════════════════
   //  RENDER
@@ -246,41 +452,85 @@ function Customers() {
       </div>
 
       {/* ── Stat Cards ── */}
-      <div className="cust-stats">
-        <div className="cstat-card">
-          <div className="cstat-icon blue"><IcoUsers /></div>
-          <div className="cstat-info">
-            <div className="cstat-label">Total Customers</div>
-            <div className="cstat-value">856</div>
-            <div className="cstat-change">↑ 12.5% from last month</div>
-          </div>
-        </div>
-        <div className="cstat-card">
-          <div className="cstat-icon green"><IcoRepeat /></div>
-          <div className="cstat-info">
-            <div className="cstat-label">Repeat Guests</div>
-            <div className="cstat-value">342</div>
-            <div className="cstat-change">↑ 8.7% from last month</div>
-          </div>
-        </div>
-        <div className="cstat-card">
-          <div className="cstat-icon orange"><IcoUserNew /></div>
-          <div className="cstat-info">
-            <div className="cstat-label">New Customers</div>
-            <div className="cstat-value">125</div>
-            <div className="cstat-change">↑ 15.3% from last month</div>
-          </div>
-        </div>
-        <div className="cstat-card">
-          <div className="cstat-icon purple"><IcoCalendar /></div>
-          <div className="cstat-info">
-            <div className="cstat-label">Total Bookings</div>
-            <div className="cstat-value">1,248</div>
-            <div className="cstat-change">↑ 10.2% from last month</div>
-          </div>
-        </div>
+<div className="cust-stats">
+
+  {/* Total Customers */}
+  <div className="cstat-card">
+    <div className="cstat-icon blue">
+      <IcoUsers />
+    </div>
+
+    <div className="cstat-info">
+      <div className="cstat-label">Total Customers</div>
+
+      <div className="cstat-value">
+        {stats.totalCustomers}
       </div>
 
+      <div className="cstat-change">
+        Registered Customers
+      </div>
+    </div>
+  </div>
+
+  {/* Active Guests */}
+  <div className="cstat-card">
+    <div className="cstat-icon green">
+      <IcoRepeat />
+    </div>
+
+    <div className="cstat-info">
+      <div className="cstat-label">Active Guests</div>
+
+      <div className="cstat-value">
+        {stats.activeGuests}
+      </div>
+
+      <div className="cstat-change">
+        Currently Checked In
+      </div>
+    </div>
+  </div>
+
+  {/* Repeat Guests */}
+  <div className="cstat-card">
+    <div className="cstat-icon orange">
+      <IcoUserNew />
+    </div>
+
+    <div className="cstat-info">
+      <div className="cstat-label">Repeat Guests</div>
+
+      <div className="cstat-value">
+        {stats.repeatGuests}
+      </div>
+
+      <div className="cstat-change">
+        Returning Guests
+      </div>
+    </div>
+  </div>
+
+  {/* VIP Customers */}
+  <div className="cstat-card">
+    <div className="cstat-icon purple">
+      <IcoCalendar />
+    </div>
+
+    <div className="cstat-info">
+      <div className="cstat-label">VIP Customers</div>
+
+      <div className="cstat-value">
+        {stats.vipCustomers}
+      </div>
+
+      <div className="cstat-change">
+        Premium Members
+      </div>
+    </div>
+  </div>
+
+</div>
       {/* ── Customers Table ── */}
       <div className="customers-card">
         <table className="customers-table">
@@ -302,14 +552,14 @@ function Customers() {
               <tr><td colSpan={9} style={{ textAlign: 'center', padding: 32, color: '#9ca3af' }}>No customers found.</td></tr>
             ) : (
               paginated.map((c, idx) => (
-                <tr key={c.id}>
-                  <td style={{ fontWeight: 600 }}>{c.id}</td>
+                <tr key={c.customer_id}>
+                  <td style={{ fontWeight: 600 }}>{c.customer_id}</td>
                   <td>
                     <div className="cust-avatar-cell">
                       <div className="cust-avatar" style={{ background: AVATAR_COLORS[idx % AVATAR_COLORS.length] }}>
-                        {initials(c.name)}
+                        {initials(c.full_name)}
                       </div>
-                      {c.name}
+                      {c.full_name}
                     </div>
                   </td>
                   <td style={{ color: '#6b7280' }}>{c.email}</td>
@@ -355,7 +605,10 @@ function Customers() {
         {/* Top Customer Segments */}
         <div className="segment-card">
           <h4>Top Customer Segments</h4>
-          <SegmentDonut segments={SEGMENTS} total={856} />
+<SegmentDonut
+  segments={SEGMENTS}
+  total={stats.totalCustomers}
+/>
         </div>
 
         {/* Customer Preferences */}
@@ -393,43 +646,160 @@ function Customers() {
       </div>
 
       {/* ══════════ MODALS ══════════ */}
+      {/* Add Customer */}
+{showAdd && (
+  <CustomerFormModal
+    title="+ Add New Customer"
+    form={form}
+    handleFormChange={handleFormChange}
+    handleImageChange={handleImageChange}
+    onSave={handleAdd}
+    onClose={() => setShowAdd(false)}
+  />
+)}
 
-      {showAdd  && <CustomerFormModal title="+ Add New Customer" onSave={handleAdd}  onClose={() => setShowAdd(false)} />}
-      {showEdit && <CustomerFormModal title="Edit Customer"      onSave={handleEdit} onClose={() => setShowEdit(false)} />}
+{showEdit && (
+  <CustomerFormModal
+    title="Edit Customer"
+    form={form}
+    handleFormChange={handleFormChange}
+    handleImageChange={handleImageChange}
+    onSave={handleEdit}
+    onClose={() => setShowEdit(false)}
+  />
+)}
 
-      {/* View Modal */}
-      {showView && selected && (
-        <div className="modal-overlay" onClick={() => setShowView(false)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Customer Details — {selected.id}</h3>
-              <button className="modal-close" onClick={() => setShowView(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              {[
-                ['Customer ID',    selected.id],
-                ['Full Name',      selected.name],
-                ['Email',          selected.email],
-                ['Phone',          selected.phone],
-                ['Nationality',    selected.nationality],
-                ['Total Bookings', selected.bookings],
-                ['Last Stay',      selected.lastStay],
-                ['Status',         selected.status],
-              ].map(([k, v]) => (
-                <div className="detail-row" key={k}>
-                  <span className="detail-key">{k}</span>
-                  <span className="detail-value">{v}</span>
-                </div>
-              ))}
-            </div>
-            <div className="modal-footer">
-              <button className="btn-save" onClick={() => setShowView(false)}>Close</button>
-            </div>
+{/* View Modal */}
+{showView && selected && (
+  <div
+    className="modal-overlay"
+    onClick={() => setShowView(false)}
+  >
+    <div
+      className="modal-box"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="modal-header">
+        <h3>Customer Details</h3>
+
+        <button
+          className="modal-close"
+          onClick={() => setShowView(false)}
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="modal-body">
+
+        <div className="detail-section">
+          <h4>Customer Information</h4>
+
+          <div className="detail-row">
+            <span className="detail-key">Customer ID</span>
+            <span className="detail-value">{selected.customer_id}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Full Name</span>
+            <span className="detail-value">{selected.full_name}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Email</span>
+            <span className="detail-value">{selected.email}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Phone</span>
+            <span className="detail-value">{selected.phone}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Gender</span>
+            <span className="detail-value">{selected.gender}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Nationality</span>
+            <span className="detail-value">{selected.nationality}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Customer Type</span>
+            <span className="detail-value">{selected.customer_type}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Address</span>
+            <span className="detail-value">{selected.address}</span>
           </div>
         </div>
-      )}
 
-      {/* Delete Modal */}
+        <div className="detail-section">
+          <h4>Identity Details</h4>
+
+          <div className="detail-row">
+            <span className="detail-key">ID Proof Type</span>
+            <span className="detail-value">{selected.id_proof_type}</span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">ID Proof Number</span>
+            <span className="detail-value">{selected.id_proof_number}</span>
+          </div>
+        </div>
+
+        <div className="detail-section">
+          <h4>Booking Summary</h4>
+
+          <div className="detail-row">
+            <span className="detail-key">Total Bookings</span>
+            <span className="detail-value">
+              {selected.bookings ?? 0}
+            </span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Last Stay</span>
+            <span className="detail-value">
+              {selected.lastStay || "No Booking"}
+            </span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Status</span>
+            <span className="detail-value">
+              {selected.status || "-"}
+            </span>
+          </div>
+
+          <div className="detail-row">
+            <span className="detail-key">Registered On</span>
+            <span className="detail-value">
+              {selected.created_at
+                ? new Date(selected.created_at).toLocaleDateString("en-IN")
+                : "-"}
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      <div className="modal-footer">
+        <button
+          className="btn-save"
+          onClick={() => setShowView(false)}
+        >
+          Close
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+
+{/* Delete Modal */}
       {showDelete && selected && (
         <div className="modal-overlay" onClick={() => setShowDelete(false)}>
           <div className="modal-box confirm-modal" onClick={e => e.stopPropagation()}>
@@ -439,7 +809,7 @@ function Customers() {
             </div>
             <div className="confirm-body">
               <div className="confirm-icon red"><IcoWarn /></div>
-              <h4>Delete {selected.name}?</h4>
+              <h4>Delete {selected.full_name}?</h4>
               <p>This customer record will be permanently deleted. This action cannot be undone.</p>
             </div>
             <div className="modal-footer">

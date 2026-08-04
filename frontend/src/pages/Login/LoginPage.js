@@ -1,15 +1,8 @@
-// ============================================================
-//  LoginPage.js — Only logic, state, and JSX (HTML structure)
-//  Icons  → imported from LoginIcons.js
-//  Styles → imported from LoginPage.css
-// ============================================================
-
 import React, { useState } from 'react';
+import { useSignIn, useAuth } from "@clerk/clerk-react";
 import { useNavigate, Link } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import hotelBg from '../../assets/images/hotel-bg.jpg';
-
-// ── Separate files ──
-
 
 import '../../styles/LoginPage.css';
 import {
@@ -17,84 +10,205 @@ import {
   IconEmail, IconLock, IconEye, IconArrow,
   IconShield, IconBuilding, IconThumb,
   IconGlobe, IconChevron,
-  GoogleLogo, MicrosoftLogo, HotelierCrown,
+  GoogleLogo, HotelierCrown,
 } from '../../utils/icons/LoginIcons';
 
-// ============================================================
-//  COMPONENT
-// ============================================================
 function LoginPage() {
   const navigate = useNavigate();
+  const { signIn, setActive } = useSignIn();
+  const { getToken } = useAuth();
 
-  // ── State ──
   const [formData, setFormData]         = useState({ email: '', password: '', rememberMe: false });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError]               = useState('');
   const [loading, setLoading]           = useState(false);
 
-  // ── Handlers ──
+  const [step, setStep]                     = useState('credentials');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verifyLoading, setVerifyLoading]       = useState(false);
+  const [resendLoading, setResendLoading]       = useState(false);
+  const [resendMessage, setResendMessage]       = useState('');
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
+  const handleChangeCode = (e) => {
+    setVerificationCode(e.target.value);
+  };
+
+  const prepareEmailCodeFactor = async () => {
+    const supportedSecondFactors = signIn.supportedSecondFactors || [];
+    const emailFactor = supportedSecondFactors.find(
+      (f) => f.strategy === 'email_code'
+    );
+
+    if (emailFactor) {
+      await signIn.prepareSecondFactor({
+        strategy: 'email_code',
+        emailAddressId: emailFactor.emailAddressId,
+      });
+    } else {
+      await signIn.prepareSecondFactor({ strategy: 'email_code' });
+    }
+  };
+
+  // ── Shared success toast, fired right before navigating to dashboard ──
+  const showLoginSuccessToast = () => {
+    Swal.fire({
+      icon: 'success',
+      title: 'Welcome back!',
+      text: 'You have signed in successfully.',
+      timer: 2000,
+      timerProgressBar: true,
+      showConfirmButton: false,
+      toast: true,
+      position: 'top-end',
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-
-    if (!formData.email || !formData.password) {
-      setError('Please enter your email and password.');
-      return;
-    }
 
     setLoading(true);
+    setError("");
+
     try {
-      // TODO: connect to backend API
-      // const res = await axios.post('/api/auth/login', { email: formData.email, password: formData.password });
-      // localStorage.setItem('token', res.data.token);
-      navigate('/dashboard');
-    } catch (err) {
-      if (!err.response || err.response.status >= 500) {
-        navigate('/500');
-      } else {
-        setError(err.response?.data?.message || 'Invalid email or password.');
+      const result = await signIn.create({
+        identifier: formData.email,
+        password: formData.password,
+      });
+
+      switch (result.status) {
+
+        case "complete":
+          await setActive({ session: result.createdSessionId });
+
+          const token = await getToken();
+          console.log("TOKEN:", token);
+
+          showLoginSuccessToast();
+          navigate("/login"); // PostLoginRedirect will route based on role
+          break;
+
+        case "needs_second_factor":
+        case "needs_client_trust":
+          try {
+            await prepareEmailCodeFactor();
+            setStep('verify');
+          } catch (prepErr) {
+            console.error(prepErr);
+            setError(
+              prepErr.errors?.[0]?.longMessage ||
+              "Couldn't send a verification code. Please try again."
+            );
+          }
+          break;
+
+        case "needs_first_factor":
+          setError("Password is incorrect.");
+          break;
+
+        default:
+          setError("Unable to sign in.");
       }
+
+    } catch (err) {
+      console.error(err);
+
+      // Clerk rejects signIn.create() outright if a session is already
+      // active (e.g. stale SignedOut render right before Clerk's client
+      // synced state, or a session from another tab). Rather than show
+      // the user an error about their own valid session, send them
+      // straight into the same role-based redirect a normal login uses.
+      const alreadySignedIn = err.errors?.some(
+        (e) => e.code === 'session_exists' || /already signed in/i.test(e.longMessage || e.message || '')
+      );
+
+      if (alreadySignedIn) {
+        navigate("/login"); // SignedIn branch will now render PostLoginRedirect
+        return;
+      }
+
+      setError(err.errors?.length ? err.errors[0].longMessage : "Login failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Google login handler ──
+  const handleVerifyCode = async (e) => {
+    e.preventDefault();
+
+    setVerifyLoading(true);
+    setError("");
+
+    try {
+      const result = await signIn.attemptSecondFactor({
+        strategy: 'email_code',
+        code: verificationCode,
+      });
+
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+
+        const token = await getToken();
+        console.log("TOKEN:", token);
+
+        showLoginSuccessToast();
+        navigate("/login"); // PostLoginRedirect will route based on role
+      } else {
+        setError("Verification incomplete. Please try again.");
+      }
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.errors?.length ? err.errors[0].longMessage : "Invalid or expired code. Please try again."
+      );
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setResendLoading(true);
+    setResendMessage('');
+    setError('');
+
+    try {
+      await prepareEmailCodeFactor();
+      setResendMessage('A new code has been sent to your email.');
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.errors?.[0]?.longMessage || "Couldn't resend the code. Please try again."
+      );
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const handleStartOver = () => {
+    setStep('credentials');
+    setVerificationCode('');
+    setError('');
+    setResendMessage('');
+  };
+
   const handleGoogleLogin = () => {
-    // TODO: connect to Google OAuth
-    // window.location.href = '/api/auth/google';
     alert('Google login coming soon!');
   };
 
-  // ── Google register handler ──
-  const handleGoogleRegister = () => {
-    // TODO: connect to Google OAuth register flow
-    // window.location.href = '/api/auth/google?mode=register';
-    navigate('/register');
-  };
-
-  // ── JSX (HTML structure) ──
   return (
     <div className="auth-page">
       <div className="auth-container">
 
-        {/* ════════════ LEFT PANEL ════════════ */}
         <div className="auth-panel-left">
-
-          {/* Background image */}
           <div
             className="auth-panel-bg"
             style={{ backgroundImage: `url(${hotelBg})` }}
           />
-
           <div className="auth-panel-content">
-
-            {/* Logo */}
             <div className="auth-logo">
               <HotelierCrown />
               <div className="auth-logo-text">
@@ -102,13 +216,11 @@ function LoginPage() {
               </div>
             </div>
 
-            {/* Welcome */}
             <div className="auth-welcome">
               <h2>Welcome Back!</h2>
               <p>Sign in to continue to your account</p>
             </div>
 
-            {/* Features */}
             <div className="auth-features">
               <div className="auth-feature">
                 <div className="auth-feature-icon"><IconBed /></div>
@@ -135,7 +247,6 @@ function LoginPage() {
               </div>
             </div>
 
-            {/* Help box */}
             <div className="auth-help">
               <div className="auth-help-icon"><IconHeadphone /></div>
               <div className="auth-help-text">
@@ -146,152 +257,183 @@ function LoginPage() {
                 <a href="/support">Contact Support →</a>
               </div>
             </div>
-
           </div>
         </div>
 
-        {/* ════════════ RIGHT PANEL ════════════ */}
         <div className="auth-panel-right">
 
-          {/* Form header */}
-          <div className="auth-form-header">
-            <h2>Sign In</h2>
-            <p>Enter your credentials to access your account</p>
-          </div>
-
-          {/* Error alert */}
-          {error && (
-            <div className="alert alert-error" style={{ marginBottom: 16 }}>
-              <span>⚠</span> {error}
-            </div>
-          )}
-
-          {/* Form */}
-          <form className="auth-form" onSubmit={handleSubmit} noValidate>
-
-            {/* Email field */}
-            <div className="form-group">
-              <label className="form-label" htmlFor="email">Email Address</label>
-              <div className="input-wrapper">
-                <span className="input-icon"><IconEmail /></span>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  className="form-input"
-                  placeholder="Enter your email address"
-                  value={formData.email}
-                  onChange={handleChange}
-                  autoComplete="email"
-                />
+          {step === 'credentials' ? (
+            <>
+              <div className="auth-form-header">
+                <h2>Sign In</h2>
+                <p>Enter your credentials to access your account</p>
               </div>
-            </div>
 
-            {/* Password field */}
-            <div className="form-group">
-              <label className="form-label" htmlFor="password">Password</label>
-              <div className="input-wrapper">
-                <span className="input-icon"><IconLock /></span>
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  className="form-input"
-                  placeholder="Enter your password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  autoComplete="current-password"
-                  style={{ paddingRight: 44 }}
-                />
+              {error && (
+                <div className="alert alert-error" style={{ marginBottom: 16 }}>
+                  <span>⚠</span> {error}
+                </div>
+              )}
+
+              <form className="auth-form" onSubmit={handleSubmit} noValidate>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="email">Email Address</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon"><IconEmail /></span>
+                    <input
+                      id="email"
+                      name="email"
+                      type="email"
+                      className="form-input"
+                      placeholder="Enter your email address"
+                      value={formData.email}
+                      onChange={handleChange}
+                      autoComplete="email"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="password">Password</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon"><IconLock /></span>
+                    <input
+                      id="password"
+                      name="password"
+                      type={showPassword ? 'text' : 'password'}
+                      className="form-input"
+                      placeholder="Enter your password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      autoComplete="current-password"
+                      style={{ paddingRight: 44 }}
+                    />
+                    <button
+                      type="button"
+                      className="input-right-icon"
+                      onClick={() => setShowPassword(p => !p)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <IconEye open={showPassword} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="auth-form-row">
+                  <label className="checkbox-group">
+                    <input
+                      type="checkbox"
+                      name="rememberMe"
+                      checked={formData.rememberMe}
+                      onChange={handleChange}
+                    />
+                    <span className="checkbox-label">Remember me</span>
+                  </label>
+                  <Link to="/forgot-password" className="auth-forgot-link">Forgot Password?</Link>
+                </div>
+
                 <button
-                  type="button"
-                  className="input-right-icon"
-                  onClick={() => setShowPassword(p => !p)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  type="submit"
+                  className="btn-primary"
+                  disabled={loading}
                 >
-                  <IconEye open={showPassword} />
+                  {loading ? 'Signing in…' : 'Sign In'}
+                  {!loading && <IconArrow />}
                 </button>
+
+                <div className="auth-divider">
+                  <span className="auth-divider-line" />
+                  <span className="auth-divider-text">or continue with</span>
+                  <span className="auth-divider-line" />
+                </div>
+
+                <div className="auth-social-buttons">
+                  <button type="button" className="btn-social" onClick={handleGoogleLogin}>
+                    <GoogleLogo />
+                    Sign in with Google
+                  </button>
+                </div>
+
+              </form>
+            </>
+          ) : (
+            <>
+              <div className="auth-form-header">
+                <h2>Verify Your Identity</h2>
+                <p>
+                  We've sent a verification code to <strong>{formData.email}</strong>.
+                  Enter it below to continue.
+                </p>
               </div>
-            </div>
 
-            {/* Remember me + Forgot password */}
-            <div className="auth-form-row">
-              <label className="checkbox-group">
-                <input
-                  type="checkbox"
-                  name="rememberMe"
-                  checked={formData.rememberMe}
-                  onChange={handleChange}
-                />
-                <span className="checkbox-label">Remember me</span>
-              </label>
-              <Link to="/forgot-password" className="auth-forgot-link">Forgot Password?</Link>
-            </div>
+              {error && (
+                <div className="alert alert-error" style={{ marginBottom: 16 }}>
+                  <span>⚠</span> {error}
+                </div>
+              )}
 
-            {/* Submit button */}
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={loading}
-            >
-              {loading ? 'Signing in…' : 'Sign In'}
-              {!loading && <IconArrow />}
-            </button>
+              {resendMessage && (
+                <div className="alert alert-success" style={{ marginBottom: 16 }}>
+                  <span>✓</span> {resendMessage}
+                </div>
+              )}
 
-            {/* ── Divider ── */}
-            <div className="auth-divider">
-              <span className="auth-divider-line" />
-              <span className="auth-divider-text">or continue with</span>
-              <span className="auth-divider-line" />
-            </div>
+              <form className="auth-form" onSubmit={handleVerifyCode} noValidate>
 
-            {/* ── Social Login buttons ── */}
-            <div className="auth-social-buttons">
-              <button type="button" className="btn-social" onClick={handleGoogleLogin}>
-                <GoogleLogo />
-                Sign in with Google
-              </button>
-              <button type="button" className="btn-social" onClick={() => {}}>
-                <MicrosoftLogo />
-                Sign in with Microsoft
-              </button>
-            </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="verificationCode">Verification Code</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon"><IconLock /></span>
+                    <input
+                      id="verificationCode"
+                      name="verificationCode"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      className="form-input"
+                      placeholder="Enter the 6-digit code"
+                      value={verificationCode}
+                      onChange={handleChangeCode}
+                    />
+                  </div>
+                </div>
 
-            {/* ── Divider before register ── */}
-            <div className="auth-divider">
-              <span className="auth-divider-line" />
-              <span className="auth-divider-text">new here?</span>
-              <span className="auth-divider-line" />
-            </div>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={verifyLoading || !verificationCode}
+                >
+                  {verifyLoading ? 'Verifying…' : 'Verify & Sign In'}
+                  {!verifyLoading && <IconArrow />}
+                </button>
 
-            {/* ── Register section ── */}
-            <div className="auth-register-box">
-              <p className="auth-register-text">
-                Don't have an account yet?
-              </p>
+                <div className="auth-form-row" style={{ marginTop: 16 }}>
+                  <button
+                    type="button"
+                    className="auth-forgot-link"
+                    onClick={handleResendCode}
+                    disabled={resendLoading}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    {resendLoading ? 'Sending…' : 'Resend code'}
+                  </button>
+                  <button
+                    type="button"
+                    className="auth-forgot-link"
+                    onClick={handleStartOver}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    Start over
+                  </button>
+                </div>
 
-              {/* Register with Google */}
-              <button type="button" className="btn-google-register" onClick={handleGoogleRegister}>
-                <GoogleLogo />
-                Register with Google
-              </button>
-
-              {/* Register with email */}
-              <button type="button" className="btn-register-now" onClick={() => navigate('/register')}>
-                Register Now →
-              </button>
-
-              <p className="auth-signin-link">
-                Already have an account?{' '}
-                <Link to="/login" className="auth-link-text">Sign In</Link>
-              </p>
-            </div>
-
-          </form>
+              </form>
+            </>
+          )}
         </div>
       </div>
 
-      {/* ════════════ FOOTER BAR ════════════ */}
       <div className="auth-footer">
         <div className="auth-footer-item">
           <div className="auth-footer-icon"><IconShield /></div>

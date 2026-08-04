@@ -1,13 +1,20 @@
 // ============================================================
 //  Billing.js — Billing & Invoice Management (logic + JSX only)
-//  - Full width invoice table
+//  - Full width invoice table, backed by /api/billing/* endpoints
 //  - Invoice appears ONLY when Print icon clicked
 //  - Invoice modal has Print + Download PDF options
+//  - Generate/Edit Bill form: booking dropdown autofills guest/room/
+//    dates/status; Room Charges rate is left blank for manual entry
+//  - Full client-side validation before submit
+//  - Date range badge (defaults to current month → today) drives
+//    invoice table + dashboard widgets via dateFrom/dateTo params
 //  Icons  → ../../utils/icons/BillingIcons.js
 //  Styles → ../../styles/Billing.css
 // ============================================================
 
-import React, { useState } from 'react';
+
+import axios from "axios";
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import '../../styles/Billing.css';
 import {
   IcoPlus, IcoSearch, IcoFilter, IcoEye, IcoEdit,
@@ -15,42 +22,37 @@ import {
   IcoPaid, IcoOutstand, IcoPrint, IcoCalendar,
 } from '../../utils/icons/Billingicons';
 
+// ── API client ────────────────────────────────────────────────
+const api = axios.create({
+  baseURL: process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/api/billing` : '/api/billing',
+  withCredentials: true,
+});
+const bookingApi = axios.create({
+    baseURL: process.env.REACT_APP_API_URL
+        ? `${process.env.REACT_APP_API_URL}/api/bookings`
+        : "/api/bookings",
+    withCredentials: true,
+});
 // ── Constants ─────────────────────────────────────────────────
 const AVATAR_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#6366f1'];
-const initials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+const initials = (name) => (name || '').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
-// ── Sample Data ───────────────────────────────────────────────
-const INITIAL_INVOICES = [
-  { id:'INV-1250', bookingId:'BK-1250', guest:'John Doe',      room:'101', checkIn:'20 May 2024', checkOut:'22 May 2024', nights:2, amount:14000, paid:14000, due:0,    status:'Paid',    method:'Card', items:[{desc:'Room Charges (Deluxe Room)',qty:2,rate:4000,amount:8000},{desc:'Room Service',qty:1,rate:1200,amount:1200},{desc:'Food & Beverages',qty:1,rate:1800,amount:1800},{desc:'Laundry',qty:1,rate:500,amount:500},{desc:'Taxes (GST 12%)',qty:1,rate:2500,amount:2500}] },
-  { id:'INV-1249', bookingId:'BK-1249', guest:'Emily Smith',   room:'205', checkIn:'20 May 2024', checkOut:'23 May 2024', nights:3, amount:15000, paid:10000, due:5000,  status:'Partial', method:'Cash', items:[{desc:'Room Charges (Suite)',qty:3,rate:3500,amount:10500},{desc:'Beverages',qty:1,rate:800,amount:800},{desc:'Taxes (GST 12%)',qty:1,rate:1344,amount:1344}] },
-  { id:'INV-1248', bookingId:'BK-1248', guest:'Michael Brown', room:'302', checkIn:'20 May 2024', checkOut:'24 May 2024', nights:4, amount:18000, paid:18000, due:0,    status:'Paid',    method:'UPI',  items:[{desc:'Room Charges (Standard)',qty:4,rate:3000,amount:12000},{desc:'Room Service',qty:2,rate:1200,amount:2400},{desc:'Taxes (GST 12%)',qty:1,rate:1728,amount:1728}] },
-  { id:'INV-1247', bookingId:'BK-1247', guest:'Sarah Wilson',  room:'103', checkIn:'20 May 2024', checkOut:'21 May 2024', nights:1, amount:8000,  paid:0,     due:8000,  status:'Unpaid',  method:'',     items:[{desc:'Room Charges (Deluxe)',qty:1,rate:6000,amount:6000},{desc:'Taxes (GST 12%)',qty:1,rate:720,amount:720}] },
-  { id:'INV-1246', bookingId:'BK-1246', guest:'David Lee',     room:'401', checkIn:'21 May 2024', checkOut:'24 May 2024', nights:3, amount:16000, paid:16000, due:0,    status:'Paid',    method:'Card', items:[{desc:'Room Charges (Suite)',qty:3,rate:4500,amount:13500},{desc:'Food & Beverages',qty:1,rate:1024,amount:1024}] },
-  { id:'INV-1245', bookingId:'BK-1245', guest:'Priya Sharma',  room:'204', checkIn:'21 May 2024', checkOut:'22 May 2024', nights:1, amount:11000, paid:5000,  due:6000,  status:'Partial', method:'Cash', items:[{desc:'Room Charges (Deluxe)',qty:1,rate:8000,amount:8000},{desc:'Room Service',qty:2,rate:800,amount:1600}] },
-];
-
-const REVENUE_DATA = [
-  {month:'Jan',val:18000},{month:'Feb',val:22000},{month:'Mar',val:28000},
-  {month:'Apr',val:32000},{month:'May',val:45000},
-];
-
-const PAYMENT_METHODS = [
-  {label:'Cash',       pct:45, color:'#10b981'},
-  {label:'Card',       pct:30, color:'#3b82f6'},
-  {label:'UPI',        pct:15, color:'#f59e0b'},
-  {label:'Net Banking',pct:10, color:'#8b5cf6'},
-];
-
-const RECENT_PAYMENTS = [
-  {guest:'John Doe',      inv:'INV-1250', amount:'₹ 12,000', status:'Paid',    color:'#3b82f6', date:'22 May 2024'},
-  {guest:'Emily Smith',   inv:'INV-1249', amount:'₹ 5,000',  status:'Partial', color:'#10b981', date:'21 May 2024'},
-  {guest:'Michael Brown', inv:'INV-1248', amount:'₹ 18,000', status:'Paid',    color:'#f59e0b', date:'20 May 2024'},
-  {guest:'Sarah Wilson',  inv:'INV-1247', amount:'₹ 0',      status:'Unpaid',  color:'#8b5cf6', date:'19 May 2024'},
-];
-
-const emptyItem = () => ({desc:'', qty:1, rate:0, amount:0});
+const emptyItem = () => ({desc:'', qty:1, rate:'', amount:0});
 const EMPTY_FORM = {guest:'', bookingId:'', room:'', checkIn:'', checkOut:'', method:'Cash', status:'Unpaid', items:[emptyItem()]};
 const PER_PAGE = 8;
+const TABS = ['All Bills','Paid','Partial','Unpaid','Cancelled'];
+
+// ── Date range helpers ──────────────────────────────────────
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const firstOfMonthISO = () => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+};
+const fmtDateBadge = (isoStr) => {
+  if (!isoStr) return '';
+  const d = new Date(`${isoStr}T00:00:00`);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 // ── Helpers ───────────────────────────────────────────────────
 const statusClass = (s) => {
@@ -58,20 +60,28 @@ const statusClass = (s) => {
   return `badge ${m[s]||''}`;
 };
 
+const inputErrorStyle = { borderColor: '#ef4444', boxShadow: '0 0 0 1px rgba(239,68,68,0.25)' };
+const errorTextStyle = { color: '#ef4444', fontSize: 11, marginTop: 4, display: 'block' };
+const fmtCurrency = (n) => `₹ ${Number(n||0).toLocaleString('en-IN')}`;
+const calcTotal = (items) => items.reduce((s,i)=>s+(parseFloat(i.rate)||0)*(parseFloat(i.qty)||0),0);
+
 // ── Revenue Line Chart ────────────────────────────────────────
 const RevenueChart = ({data}) => {
+  if (!data || data.length === 0) {
+    return <div style={{padding:'24px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No revenue data yet.</div>;
+  }
   const W=340,H=100,PAD={top:10,right:10,bottom:24,left:40};
   const iW=W-PAD.left-PAD.right, iH=H-PAD.top-PAD.bottom;
-  const max=Math.max(...data.map(d=>d.val));
-  const x=(i)=>PAD.left+(i/(data.length-1))*iW;
+  const max=Math.max(...data.map(d=>d.val), 1);
+  const x=(i)=>PAD.left+(data.length>1?(i/(data.length-1))*iW:iW/2);
   const y=(v)=>PAD.top+iH-((v/max)*iH);
   const line=data.map((d,i)=>`${i===0?'M':'L'}${x(i)},${y(d.val)}`).join(' ');
   const area=`${line} L${x(data.length-1)},${PAD.top+iH} L${x(0)},${PAD.top+iH} Z`;
-  const ticks=[0,10000,20000,30000,40000,50000];
+  const ticks=[0,max*0.25,max*0.5,max*0.75,max].map(v=>Math.round(v));
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto'}}>
       <defs><linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity="0.2"/><stop offset="100%" stopColor="#3b82f6" stopOpacity="0.01"/></linearGradient></defs>
-      {ticks.map(t=><g key={t}><line x1={PAD.left} y1={y(t)} x2={W-PAD.right} y2={y(t)} stroke="#f1f4f9" strokeWidth="1"/><text x={PAD.left-4} y={y(t)+4} textAnchor="end" fontSize="9" fill="#9ca3af">{t===0?'0':`${t/1000}k`}</text></g>)}
+      {ticks.map(t=><g key={t}><line x1={PAD.left} y1={y(t)} x2={W-PAD.right} y2={y(t)} stroke="#f1f4f9" strokeWidth="1"/><text x={PAD.left-4} y={y(t)+4} textAnchor="end" fontSize="9" fill="#9ca3af">{t===0?'0':`${Math.round(t/1000)}k`}</text></g>)}
       <path d={area} fill="url(#revGrad)"/>
       <path d={line} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
       {data.map((d,i)=><circle key={i} cx={x(i)} cy={y(d.val)} r="4" fill="#fff" stroke="#3b82f6" strokeWidth="2.5"/>)}
@@ -83,7 +93,7 @@ const RevenueChart = ({data}) => {
 // ── Donut Chart ───────────────────────────────────────────────
 const DonutChart = ({segments, size=100, stroke=16, centerLabel, centerSub}) => {
   const R=((size-stroke)/2), CX=size/2, circ=2*Math.PI*R;
-  const total=segments.reduce((s,sg)=>s+sg.pct,0);
+  const total=segments.reduce((s,sg)=>s+sg.pct,0) || 1;
   let offset=0;
   return (
     <div style={{position:'relative',width:size,height:size,flexShrink:0}}>
@@ -98,7 +108,8 @@ const DonutChart = ({segments, size=100, stroke=16, centerLabel, centerSub}) => 
 
 // ── Invoice Modal — shown ONLY on Print button click ──────────
 const InvoiceModal = ({invoice, onClose}) => {
-  const subtotal = invoice.items.reduce((s,i)=>s+i.amount,0);
+  const items = invoice.items || [];
+  const subtotal = items.reduce((s,i)=>s+i.amount,0);
   const tax      = Math.round(subtotal*0.12);
   const discount = Math.round(subtotal*0.12);
   const total    = subtotal;
@@ -144,7 +155,6 @@ const InvoiceModal = ({invoice, onClose}) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box modal-box-lg" style={{maxWidth:660}} onClick={e=>e.stopPropagation()}>
 
-        {/* Modal header with Print + Download */}
         <div className="modal-header">
           <h3>Invoice — {invoice.id}</h3>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
@@ -158,10 +168,8 @@ const InvoiceModal = ({invoice, onClose}) => {
           </div>
         </div>
 
-        {/* Invoice content — printable */}
         <div id="invoice-print-area" style={{padding:'24px 28px'}}>
 
-          {/* Hotel header */}
           <div className="ih" style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:14}}>
             <div className="ilogo" style={{width:44,height:44,background:'#c9a227',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,color:'#fff',fontWeight:900,flexShrink:0}}>H</div>
             <div>
@@ -175,7 +183,6 @@ const InvoiceModal = ({invoice, onClose}) => {
 
           <div className="invoice-divider"/>
 
-          {/* Title + meta */}
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
             <div className="invoice-title">INVOICE</div>
             <div style={{textAlign:'right'}}>
@@ -185,7 +192,6 @@ const InvoiceModal = ({invoice, onClose}) => {
             </div>
           </div>
 
-          {/* Bill To + Stay Details */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:14}}>
             <div>
               <div className="invoice-bill-label">Bill To.</div>
@@ -201,7 +207,6 @@ const InvoiceModal = ({invoice, onClose}) => {
             </div>
           </div>
 
-          {/* Items */}
           <table className="invoice-items-table" style={{marginTop:18}}>
             <thead>
               <tr>
@@ -212,7 +217,7 @@ const InvoiceModal = ({invoice, onClose}) => {
               </tr>
             </thead>
             <tbody>
-              {invoice.items.map((item,i)=>(
+              {items.map((item,i)=>(
                 <tr key={i}>
                   <td>{item.desc}</td>
                   <td style={{textAlign:'center'}}>{item.qty}</td>
@@ -223,7 +228,6 @@ const InvoiceModal = ({invoice, onClose}) => {
             </tbody>
           </table>
 
-          {/* Totals */}
           <div style={{marginTop:12,borderTop:'1px solid #e4e8f0',paddingTop:10}}>
             <div className="invoice-total-row"><span>Subtotal</span><span>₹ {subtotal.toLocaleString('en-IN')}</span></div>
             <div className="invoice-total-row"><span>Tax (12%)</span><span>₹ {tax.toLocaleString('en-IN')}</span></div>
@@ -231,7 +235,6 @@ const InvoiceModal = ({invoice, onClose}) => {
             <div className="invoice-total-row total"><span>Total Amount</span><span>₹ {total.toLocaleString('en-IN')}</span></div>
           </div>
 
-          {/* Payment info */}
           <div className="invoice-payment-info" style={{marginTop:14}}>
             <div className="invoice-payment-title">Payment Information</div>
             {[['Payment Method',invoice.method||'—'],['Paid Amount',`₹ ${invoice.paid.toLocaleString('en-IN')}`],['Payment Status',invoice.status]].map(([k,v])=>(
@@ -249,101 +252,559 @@ const InvoiceModal = ({invoice, onClose}) => {
   );
 };
 
+// ── Bill Form Modal (Generate / Edit) ──────────────────────────
+const BillFormModal = ({
+  title, form, formErrors, formError, bookings, saving,
+  onFormChange, onItemChange, onBookingChange, onAddItem, onRemoveItem,
+  onSave, onClose,
+}) => {
+  const total = calcTotal(form.items), tax = Math.round(total * 0.12), grand = total + tax;
+  const errs = formErrors;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box modal-box-lg" onClick={e => e.stopPropagation()}>
+        <div className="modal-header"><h3>{title}</h3><button className="modal-close" onClick={onClose}>×</button></div>
+        <div className="modal-body">
+          {formError && <div className="form-error" style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{formError}</div>}
+          <div className="modal-section-title">Guest &amp; Booking Info</div>
+          <div className="modal-grid">
+
+            <div className="form-group">
+              <label className="form-label">Select Booking *</label>
+              <select
+                className="form-select"
+                value={form.bookingId}
+                onChange={onBookingChange}
+                style={errs.bookingId ? inputErrorStyle : undefined}
+              >
+                <option value="">Select Booking</option>
+                {bookings.map((booking) => (
+                  <option key={booking.booking_id} value={booking.booking_id}>
+                    {booking.booking_code} - {booking.full_name}
+                  </option>
+                ))}
+              </select>
+              {errs.bookingId && <span style={errorTextStyle}>{errs.bookingId}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Guest Name</label>
+              <input
+                className="form-input"
+                value={form.guest}
+                readOnly
+                placeholder="Auto-filled from booking"
+                style={errs.guest ? inputErrorStyle : undefined}
+              />
+              {errs.guest && <span style={errorTextStyle}>{errs.guest}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Room No.</label>
+              <input
+                className="form-input"
+                value={form.room}
+                readOnly
+                placeholder="Auto-filled from booking"
+                style={errs.room ? inputErrorStyle : undefined}
+              />
+              {errs.room && <span style={errorTextStyle}>{errs.room}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Check-in</label>
+              <input className="form-input" type="date" name="checkIn" value={form.checkIn || ''} onChange={onFormChange} style={errs.checkIn ? inputErrorStyle : undefined} />
+              {errs.checkIn && <span style={errorTextStyle}>{errs.checkIn}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Check-out</label>
+              <input className="form-input" type="date" name="checkOut" value={form.checkOut || ''} onChange={onFormChange} style={errs.checkOut ? inputErrorStyle : undefined} />
+              {errs.checkOut && <span style={errorTextStyle}>{errs.checkOut}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Payment Method</label>
+              <select className="form-select" name="method" value={form.method} onChange={onFormChange} style={errs.method ? inputErrorStyle : undefined}>
+                <option>Cash</option><option>Card</option><option>UPI</option><option>Net Banking</option>
+              </select>
+              {errs.method && <span style={errorTextStyle}>{errs.method}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Payment Status</label>
+              <select className="form-select" name="status" value={form.status} onChange={onFormChange} style={errs.status ? inputErrorStyle : undefined}>
+                <option>Paid</option><option>Partial</option><option>Unpaid</option>
+              </select>
+              {errs.status && <span style={errorTextStyle}>{errs.status}</span>}
+            </div>
+
+          </div>
+          <div className="modal-section-title">Bill Items</div>
+          <div className="bill-items-list">
+            <div className="bill-item-row bill-item-header"><span className="bill-item-col-label">Description</span><span className="bill-item-col-label">Qty</span><span className="bill-item-col-label">Rate (₹)</span><span className="bill-item-col-label">Amount</span><span /></div>
+            {form.items.map((item, idx) => {
+              const ie = errs.itemErrors?.[idx] || {};
+              return (
+                <div className="bill-item-row" key={idx}>
+                  <div>
+                    <input className="form-input" value={item.desc} onChange={e => onItemChange(idx, 'desc', e.target.value)} placeholder="e.g. Room Charges" style={{ fontSize: 12, ...(ie.desc ? inputErrorStyle : {}) }} />
+                    {ie.desc && <span style={errorTextStyle}>{ie.desc}</span>}
+                  </div>
+                  <div>
+                    <input className="form-input" type="number" value={item.qty} onChange={e => onItemChange(idx, 'qty', e.target.value)} min={1} style={{ textAlign: 'center', ...(ie.qty ? inputErrorStyle : {}) }} />
+                    {ie.qty && <span style={errorTextStyle}>{ie.qty}</span>}
+                  </div>
+                  <div>
+                    <input className="form-input" type="number" value={item.rate} onChange={e => onItemChange(idx, 'rate', e.target.value)} placeholder="Enter rate" style={{ textAlign: 'right', ...(ie.rate ? inputErrorStyle : {}) }} />
+                    {ie.rate && <span style={errorTextStyle}>{ie.rate}</span>}
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1a2a5e' }}>{fmtCurrency(item.amount)}</span>
+                  {form.items.length > 1 && <button className="btn-remove-bill-item" onClick={() => onRemoveItem(idx)}>×</button>}
+                </div>
+              );
+            })}
+            <button className="btn-add-bill-item" onClick={onAddItem}>Add Item</button>
+            {errs.items && <div style={{ ...errorTextStyle, marginTop: 6 }}>{errs.items}</div>}
+          </div>
+          <div className="bill-total-box">
+            <div className="bill-total-row"><span>Subtotal</span><span>{fmtCurrency(total)}</span></div>
+            <div className="bill-total-row"><span>Tax (GST 12%)</span><span>{fmtCurrency(tax)}</span></div>
+            <div className="bill-total-row bill-grand-total"><span>Total Amount</span><span>{fmtCurrency(grand)}</span></div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn-cancel" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn-save" onClick={onSave} disabled={saving}>{saving ? 'Saving…' : 'Generate Bill'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ════════════════════════════════════════════════════════════
 //  MAIN COMPONENT
 // ════════════════════════════════════════════════════════════
 function Billing() {
-  const [invoices, setInvoices]       = useState(INITIAL_INVOICES);
+  // Table + pagination (server-driven)
+  const [invoices, setInvoices]       = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [totalInvoices, setTotalInvoices] = useState(0);
+  const [totalPages, setTotalPages]   = useState(1);
+  const [loadingTable, setLoadingTable] = useState(true);
+  const [tableError, setTableError]   = useState(null);
+
+  // Dashboard widgets
+  const [stats, setStats] = useState({ totalBills:0, totalRevenue:0, paidAmount:0, outstanding:0, changes:{} });
+  const [revenueData, setRevenueData]         = useState([]);
+  const [paymentMethods, setPaymentMethods]   = useState([]);
+  const [recentPayments, setRecentPayments]   = useState([]);
+  const [loadingWidgets, setLoadingWidgets]   = useState(true);
+
   const [search, setSearch]           = useState('');
   const [activeTab, setActiveTab]     = useState('All Bills');
   const [page, setPage]               = useState(1);
+
+  // Date range — defaults to current month start → today.
+  // Lazy initializers so a fresh mount (new login/page load) always
+  // starts from the real current date, not a stale closure.
+  const [dateRange, setDateRange]     = useState(() => ({ from: firstOfMonthISO(), to: todayISO() }));
+  const [draftRange, setDraftRange]   = useState(() => ({ from: firstOfMonthISO(), to: todayISO() }));
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  // Tracks whether the user manually applied a custom range, so the
+  // midnight/month-rollover effect below never overrides an explicit choice.
+  const userPickedRangeRef = useRef(false);
+
   const [showAdd, setShowAdd]         = useState(false);
   const [showEdit, setShowEdit]       = useState(false);
   const [showView, setShowView]       = useState(false);
   const [showInvoice, setShowInvoice] = useState(false);
   const [selected, setSelected]       = useState(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [form, setForm]               = useState(EMPTY_FORM);
+  const [saving, setSaving]           = useState(false);
+  const [formError, setFormError]     = useState(null);
+  const [formErrors, setFormErrors]   = useState({}); // field-level validation errors
 
-  // ── Filter ──
-  const filtered = invoices.filter(inv =>
-    (activeTab==='All Bills' || inv.status===activeTab) &&
-    (inv.guest.toLowerCase().includes(search.toLowerCase()) ||
-     inv.id.toLowerCase().includes(search.toLowerCase()) ||
-     inv.bookingId.toLowerCase().includes(search.toLowerCase()))
-  );
-  const totalPages = Math.ceil(filtered.length/PER_PAGE);
-  const paginated  = filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
+  // If this tab is left open across midnight (or across a month
+  // boundary), roll the default "current month → today" range forward
+  // automatically — but only while the user hasn't manually applied a
+  // custom range via the date picker.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (userPickedRangeRef.current || showDatePicker) return;
+      const freshFrom = firstOfMonthISO();
+      const freshTo = todayISO();
+      setDateRange(prev => (prev.from !== freshFrom || prev.to !== freshTo) ? { from: freshFrom, to: freshTo } : prev);
+      setDraftRange(prev => (prev.from !== freshFrom || prev.to !== freshTo) ? { from: freshFrom, to: freshTo } : prev);
+    }, 60 * 1000); // check once a minute
+    return () => clearInterval(interval);
+  }, [showDatePicker]);
+
+  // ── Fetch bookings (for the Generate/Edit Bill dropdown) ──
+  const fetchBookings = async () => {
+    try {
+      const res = await bookingApi.get("/");
+      setBookings(res.data);
+    }
+    catch (err) {
+      console.log(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchBookings();
+  }, []);
+
+  // ── Fetch invoice table (server search / filter / pagination / date range) ──
+  const fetchInvoices = useCallback(async () => {
+    setLoadingTable(true);
+    setTableError(null);
+    try {
+      const { data } = await api.get('/invoices', {
+        params: {
+          search,
+          status: activeTab === 'All Bills' ? undefined : activeTab,
+          page,
+          limit: PER_PAGE,
+          dateFrom: dateRange.from,
+          dateTo: dateRange.to,
+        },
+      });
+      setInvoices(data.invoices || []);
+      setTotalInvoices(data.total || 0);
+      setTotalPages(data.totalPages || 1);
+    } catch (err) {
+      console.error('Failed to load invoices:', err);
+      setTableError('Could not load invoices. Please try again.');
+      setInvoices([]);
+    } finally {
+      setLoadingTable(false);
+    }
+  }, [search, activeTab, page, dateRange]);
+
+  // debounce search so we don't fire a request per keystroke
+  useEffect(() => {
+    const t = setTimeout(fetchInvoices, 300);
+    return () => clearTimeout(t);
+  }, [fetchInvoices]);
+
+  // ── Fetch dashboard widgets (stats, chart, breakdown, recent) — same date range ──
+  const fetchWidgets = useCallback(async () => {
+    setLoadingWidgets(true);
+    try {
+      const rangeParams = { dateFrom: dateRange.from, dateTo: dateRange.to };
+      const [statsRes, revenueRes, methodsRes, recentRes] = await Promise.all([
+        api.get('/stats', { params: rangeParams }),
+        api.get('/revenue-chart', { params: rangeParams }),
+        api.get('/payment-methods', { params: rangeParams }),
+        api.get('/recent-payments', { params: { ...rangeParams, limit: 4 } }),
+      ]);
+      const rawStats = statsRes.data?.stats ?? statsRes.data ?? {};
+      setStats({
+        totalBills: 0,
+        totalRevenue: 0,
+        paidAmount: 0,
+        outstanding: 0,
+        changes: {},
+        ...rawStats,
+      });
+      setRevenueData(revenueRes.data || []);
+      setPaymentMethods(methodsRes.data || []);
+      setRecentPayments(recentRes.data || []);
+    } catch (err) {
+      console.error('Failed to load billing widgets:', err);
+    } finally {
+      setLoadingWidgets(false);
+    }
+  }, [dateRange]);
+
+  useEffect(() => { fetchWidgets(); }, [fetchWidgets]);
+
+  const refreshAll = () => { fetchInvoices(); fetchWidgets(); };
+
+  // ── Date range handlers ──
+  const openDatePicker = () => { setDraftRange(dateRange); setShowDatePicker(v => !v); };
+  const applyDateRange = () => {
+    userPickedRangeRef.current = true;
+    setDateRange(draftRange);
+    setPage(1);
+    setShowDatePicker(false);
+  };
+  const cancelDateRange = () => setShowDatePicker(false);
+  // Lets the user opt back into the auto-updating "current month → today"
+  // default instead of a manually pinned range.
+  const resetToCurrentRange = () => {
+    userPickedRangeRef.current = false;
+    const fresh = { from: firstOfMonthISO(), to: todayISO() };
+    setDateRange(fresh);
+    setDraftRange(fresh);
+    setPage(1);
+    setShowDatePicker(false);
+  };
 
   // ── Handlers ──
-  const openAdd     = () => { setForm(EMPTY_FORM); setShowAdd(true); };
-  const openEdit    = (inv) => { setSelected(inv); setForm({guest:inv.guest,bookingId:inv.bookingId,room:inv.room,checkIn:inv.checkIn,checkOut:inv.checkOut,method:inv.method,status:inv.status,items:inv.items.map(i=>({...i}))}); setShowEdit(true); };
+  const openAdd     = () => { setForm(EMPTY_FORM); setFormError(null); setFormErrors({}); setShowAdd(true); };
+  const openEdit    = (inv) => {
+    setSelected(inv);
+    setForm({guest:inv.guest,bookingId:inv.bookingId,room:inv.room,checkIn:inv.checkIn,checkOut:inv.checkOut,method:inv.method,status:inv.status,items:(inv.items||[emptyItem()]).map(i=>({...i}))});
+    setFormError(null);
+    setFormErrors({});
+    setShowEdit(true);
+  };
   const openView    = (inv) => { setSelected(inv); setShowView(true); };
-  const openInvoice = (inv) => { setSelected(inv); setShowInvoice(true); };
 
-  const calcTotal = (items) => items.reduce((s,i)=>s+(parseFloat(i.rate)||0)*(parseFloat(i.qty)||0),0);
+  const openInvoice = async (inv) => {
+    setSelected(inv);
+    setShowInvoice(true);
+    setInvoiceLoading(true);
+    try {
+      const { data } = await api.get(`/invoices/${inv.invoice_id}`)
+      setSelected(data);
+    } catch (err) {
+      console.error('Failed to load invoice detail:', err);
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
 
-  const handleAdd = () => {
-    const total=calcTotal(form.items);
-    setInvoices(prev=>[{id:`INV-${1251+invoices.length}`,bookingId:form.bookingId,guest:form.guest,room:form.room,checkIn:form.checkIn,checkOut:form.checkOut,nights:1,amount:total,paid:form.status==='Paid'?total:0,due:form.status==='Paid'?0:total,status:form.status,method:form.method,items:form.items},...prev]);
-    setShowAdd(false); setPage(1);
+  // ── Validation ──
+  const validateForm = (f) => {
+    const errors = { itemErrors: f.items.map(() => ({})) };
+
+    if (!f.bookingId) errors.bookingId = 'Please select a booking';
+    if (!f.guest || !f.guest.trim()) errors.guest = 'Guest name is required';
+    if (!f.room || !String(f.room).trim()) errors.room = 'Room number is required';
+    if (!f.checkIn) errors.checkIn = 'Check-in date is required';
+    if (!f.checkOut) errors.checkOut = 'Check-out date is required';
+    if (f.checkIn && f.checkOut && new Date(f.checkOut) <= new Date(f.checkIn)) {
+      errors.checkOut = 'Check-out must be after check-in';
+    }
+    if (!f.method) errors.method = 'Select a payment method';
+    if (!f.status) errors.status = 'Select a payment status';
+
+    let hasValidItem = false;
+    f.items.forEach((item, idx) => {
+      const itemErr = {};
+      if (!item.desc || !item.desc.trim()) itemErr.desc = 'Required';
+      if (item.qty === '' || item.qty === null || Number(item.qty) <= 0) itemErr.qty = 'Must be > 0';
+      if (item.rate === '' || item.rate === null || Number(item.rate) <= 0) itemErr.rate = 'Enter a rate';
+      if (Object.keys(itemErr).length === 0) hasValidItem = true;
+      errors.itemErrors[idx] = itemErr;
+    });
+    if (!hasValidItem) errors.items = 'Add at least one bill item with a description, quantity and rate';
+
+    return errors;
   };
-  const handleEdit = () => {
-    const total=calcTotal(form.items);
-    setInvoices(prev=>prev.map(inv=>inv.id===selected.id?{...inv,...form,amount:total,paid:form.status==='Paid'?total:inv.paid,due:form.status==='Paid'?0:total-inv.paid}:inv));
-    setShowEdit(false);
+
+  const hasBlockingErrors = (errors) =>
+    Object.entries(errors).some(([k, v]) => k !== 'itemErrors' && v) ||
+    errors.itemErrors.some((ie) => Object.keys(ie).length > 0);
+
+  const handleAdd = async () => {
+
+    const errs = validateForm(form);
+    setFormErrors(errs);
+    if (hasBlockingErrors(errs)) {
+        setFormError('Please fix the highlighted fields before generating the bill.');
+        return;
+    }
+
+    setSaving(true);
+    setFormError(null);
+
+    try {
+        const subtotal = form.items.reduce(
+            (sum, item) => sum + Number(item.qty) * Number(item.rate),
+            0
+        );
+
+        const tax = subtotal * 0.12;
+
+        const methodMap = { Cash: 'cash', Card: 'card', UPI: 'upi', 'Net Banking': 'bank_transfer' };
+
+        const payload = {
+            booking_id: form.bookingId,
+            payment_method: methodMap[form.method] || 'cash',
+
+            room_charges:
+                form.items.find(i => i.desc === "Room Charges")?.amount || 0,
+
+            food_charges:
+                form.items.find(i => i.desc === "Food Charges")?.amount || 0,
+
+            laundry_charges:
+                form.items.find(i => i.desc === "Laundry Charges")?.amount || 0,
+
+            extra_service_charges:
+                form.items
+                    .filter(
+                        i =>
+                            i.desc !== "Room Charges" &&
+                            i.desc !== "Food Charges" &&
+                            i.desc !== "Laundry Charges"
+                    )
+                    .reduce((s, i) => s + Number(i.amount), 0),
+
+            tax_amount: tax,
+
+            paid_amount:
+                form.status === "Paid" ? subtotal + tax : 0
+        };
+
+        await api.post("/invoices", payload);
+
+        setShowAdd(false);
+        refreshAll();
+
+    } catch (err) {
+        console.log(err);
+        setFormError(
+            err.response?.data?.message ||
+            "Unable to generate invoice"
+        );
+    } finally {
+        setSaving(false);
+    }
   };
-  const handleFormChange = (e) => { const{name,value}=e.target; setForm(prev=>({...prev,[name]:value})); };
+
+  const handleEdit = async () => {
+    if (!selected) return;
+
+    const errs = validateForm(form);
+    setFormErrors(errs);
+    if (hasBlockingErrors(errs)) {
+      setFormError('Please fix the highlighted fields before saving.');
+      return;
+    }
+
+    setSaving(true);
+    setFormError(null);
+
+    try {
+      const subtotal = form.items.reduce(
+        (sum, item) => sum + Number(item.qty) * Number(item.rate),
+        0
+      );
+      const tax = subtotal * 0.12;
+
+      const methodMap = { Cash: 'cash', Card: 'card', UPI: 'upi', 'Net Banking': 'bank_transfer' };
+
+      const payload = {
+        booking_id: form.bookingId,
+        payment_method: methodMap[form.method] || 'cash',
+
+        room_charges:
+          form.items.find(i => i.desc === "Room Charges")?.amount || 0,
+
+        food_charges:
+          form.items.find(i => i.desc === "Food Charges")?.amount || 0,
+
+        laundry_charges:
+          form.items.find(i => i.desc === "Laundry Charges")?.amount || 0,
+
+        extra_service_charges:
+          form.items
+            .filter(i => !["Room Charges", "Food Charges", "Laundry Charges"].includes(i.desc))
+            .reduce((s, i) => s + Number(i.amount), 0),
+
+        tax_amount: tax,
+
+        paid_amount:
+          form.status === "Paid" ? subtotal + tax
+          : form.status === "Partial" ? Math.round((subtotal + tax) / 2)
+          : 0,
+      };
+
+      await api.put(`/invoices/${selected.invoice_id}`, payload);
+      setShowEdit(false);
+      refreshAll();
+    } catch (err) {
+      console.error('Failed to update invoice:', err);
+      setFormError(err.response?.data?.message || 'Failed to update invoice. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+    setFormErrors(prev => (prev[name] ? { ...prev, [name]: undefined } : prev));
+    setFormError(null);
+  };
   const handleItemChange = (idx,field,val) => {
     setForm(prev=>{
       const items=prev.items.map((it,i)=>{ if(i!==idx) return it; const u={...it,[field]:val}; u.amount=(parseFloat(u.rate)||0)*(parseFloat(u.qty)||0); return u; });
       return {...prev,items};
     });
+    setFormErrors(prev => {
+      if (!prev.itemErrors || !prev.itemErrors[idx] || !prev.itemErrors[idx][field]) return prev;
+      const itemErrors = prev.itemErrors.map((ie, i) => i === idx ? { ...ie, [field]: undefined } : ie);
+      return { ...prev, itemErrors, items: undefined };
+    });
+    setFormError(null);
   };
   const addItem    = () => setForm(prev=>({...prev,items:[...prev.items,emptyItem()]}));
-  const removeItem = (idx) => setForm(prev=>({...prev,items:prev.items.filter((_,i)=>i!==idx)}));
+  const removeItem = (idx) => {
+    setForm(prev=>({...prev,items:prev.items.filter((_,i)=>i!==idx)}));
+    setFormErrors(prev => {
+      if (!prev.itemErrors) return prev;
+      return { ...prev, itemErrors: prev.itemErrors.filter((_, i) => i !== idx) };
+    });
+  };
 
-  // ── Bill Form Modal ──
-  const BillFormModal = ({title, onSave, onClose}) => {
-    const total=calcTotal(form.items), tax=Math.round(total*0.12), grand=total+tax;
-    return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-box modal-box-lg" onClick={e=>e.stopPropagation()}>
-          <div className="modal-header"><h3>{title}</h3><button className="modal-close" onClick={onClose}>×</button></div>
-          <div className="modal-body">
-            <div className="modal-section-title">Guest &amp; Booking Info</div>
-            <div className="modal-grid">
-              <div className="form-group"><label className="form-label">Guest Name</label><input className="form-input" name="guest" value={form.guest} onChange={handleFormChange} placeholder="Enter guest name"/></div>
-              <div className="form-group"><label className="form-label">Booking ID</label><input className="form-input" name="bookingId" value={form.bookingId} onChange={handleFormChange} placeholder="e.g. BK-1250"/></div>
-              <div className="form-group"><label className="form-label">Room No.</label><input className="form-input" name="room" value={form.room} onChange={handleFormChange} placeholder="e.g. 101"/></div>
-              <div className="form-group"><label className="form-label">Check-in</label><input className="form-input" type="date" name="checkIn" value={form.checkIn} onChange={handleFormChange}/></div>
-              <div className="form-group"><label className="form-label">Check-out</label><input className="form-input" type="date" name="checkOut" value={form.checkOut} onChange={handleFormChange}/></div>
-              <div className="form-group"><label className="form-label">Payment Method</label><select className="form-select" name="method" value={form.method} onChange={handleFormChange}><option>Cash</option><option>Card</option><option>UPI</option><option>Net Banking</option></select></div>
-              <div className="form-group"><label className="form-label">Payment Status</label><select className="form-select" name="status" value={form.status} onChange={handleFormChange}><option>Paid</option><option>Partial</option><option>Unpaid</option></select></div>
-            </div>
-            <div className="modal-section-title">Bill Items</div>
-            <div className="bill-items-list">
-              <div className="bill-item-row bill-item-header"><span className="bill-item-col-label">Description</span><span className="bill-item-col-label">Qty</span><span className="bill-item-col-label">Rate (₹)</span><span className="bill-item-col-label">Amount</span><span/></div>
-              {form.items.map((item,idx)=>(
-                <div className="bill-item-row" key={idx}>
-                  <input className="form-input" value={item.desc} onChange={e=>handleItemChange(idx,'desc',e.target.value)} placeholder="e.g. Room Charges" style={{fontSize:12}}/>
-                  <input className="form-input" type="number" value={item.qty} onChange={e=>handleItemChange(idx,'qty',e.target.value)} min={1} style={{textAlign:'center'}}/>
-                  <input className="form-input" type="number" value={item.rate} onChange={e=>handleItemChange(idx,'rate',e.target.value)} placeholder="0" style={{textAlign:'right'}}/>
-                  <span style={{fontSize:13,fontWeight:600,color:'#1a2a5e'}}>₹ {(item.amount||0).toLocaleString('en-IN')}</span>
-                  {form.items.length>1 && <button className="btn-remove-bill-item" onClick={()=>removeItem(idx)}>×</button>}
-                </div>
-              ))}
-              <button className="btn-add-bill-item" onClick={addItem}>Add Item</button>
-            </div>
-            <div className="bill-total-box">
-              <div className="bill-total-row"><span>Subtotal</span><span>₹ {total.toLocaleString('en-IN')}</span></div>
-              <div className="bill-total-row"><span>Tax (GST 12%)</span><span>₹ {tax.toLocaleString('en-IN')}</span></div>
-              <div className="bill-total-row bill-grand-total"><span>Total Amount</span><span>₹ {grand.toLocaleString('en-IN')}</span></div>
-            </div>
-          </div>
-          <div className="modal-footer"><button className="btn-cancel" onClick={onClose}>Cancel</button><button className="btn-save" onClick={onSave}>Generate Bill</button></div>
-        </div>
-      </div>
-    );
+  const fmtChange = (pct) => {
+    if (pct === undefined || pct === null) return null;
+    const up = pct >= 0;
+    return <span className={up ? '' : 'neg'}>{up ? '↑' : '↓'} {Math.abs(pct)}% from last month</span>;
+  };
+
+  const handleBookingChange = async (e) => {
+    const bookingId = e.target.value;
+    setFormError(null);
+    setFormErrors(prev => ({ ...prev, bookingId: undefined }));
+
+    if (!bookingId) {
+        setForm(EMPTY_FORM);
+        return;
+    }
+
+    try {
+        const { data } = await bookingApi.get(`/${bookingId}`);
+        const checkIn = new Date(data.check_in);
+        const checkOut = new Date(data.check_out);
+
+        const nights = Math.max(
+            1,
+            Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24))
+        );
+
+        setForm({
+            guest: data.full_name,
+            bookingId: data.booking_id,
+            room: data.room_number,
+            checkIn: data.check_in.substring(0, 10),
+            checkOut: data.check_out.substring(0, 10),
+            method: "Cash",
+            status: data.payment_status || "Unpaid",
+            items: [
+                {
+                    desc: "Room Charges",
+                    qty: nights,
+                    rate: '',
+                    amount: 0,
+                },
+            ],
+        });
+        setFormError(null);
+        setFormErrors({});
+    } catch (err) {
+        console.error(err);
+        setFormError("Unable to load booking details");
+        setFormErrors(prev => ({ ...prev, bookingId: 'Booking not found' }));
+    }
   };
 
   return (
@@ -352,22 +813,76 @@ function Billing() {
       <div className="page-header">
         <div className="page-header-left"><h2>Billing &amp; Invoices</h2><p>Manage bills, payments and invoices</p></div>
         <div className="page-header-right">
-          <div className="date-range-badge"><IcoCalendar/> 01 May 2024 – 31 May 2024</div>
+
+          {/* Date range badge — clickable, opens a from/to picker */}
+          <div style={{ position: 'relative' }}>
+            <button
+              className="date-range-badge"
+              style={{ cursor: 'pointer', border: 'none' }}
+              onClick={openDatePicker}
+            >
+              <IcoCalendar/> {fmtDateBadge(dateRange.from)} – {fmtDateBadge(dateRange.to)}
+            </button>
+
+            {showDatePicker && (
+              <div
+                style={{
+                  position: 'absolute', top: '110%', right: 0, zIndex: 20,
+                  background: '#fff', border: '1px solid #e4e8f0', borderRadius: 10,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.08)', padding: 16, width: 260,
+                }}
+              >
+                <div className="form-group" style={{ marginBottom: 10 }}>
+                  <label className="form-label">From</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={draftRange.from}
+                    max={draftRange.to}
+                    onChange={e => setDraftRange(prev => ({ ...prev, from: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">To</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={draftRange.to}
+                    min={draftRange.from}
+                    max={todayISO()}
+                    onChange={e => setDraftRange(prev => ({ ...prev, to: e.target.value }))}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+                  {userPickedRangeRef.current && (
+                    <button className="btn-cancel" onClick={resetToCurrentRange} title="Back to current month → today, auto-updating">
+                      Use current range
+                    </button>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                    <button className="btn-cancel" onClick={cancelDateRange}>Cancel</button>
+                    <button className="btn-save" onClick={applyDateRange}>Apply</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <button className="btn-generate" onClick={openAdd}><IcoPlus/>Generate New Bill</button>
         </div>
       </div>
 
       {/* Stat Cards */}
       <div className="bill-stats">
-        <div className="bstat-card"><div className="bstat-icon blue"><IcoBill/></div><div className="bstat-info"><div className="bstat-label">Total Bills</div><div className="bstat-value">1,248</div><div className="bstat-change">↑ 10.8% from last month</div></div></div>
-        <div className="bstat-card"><div className="bstat-icon green"><IcoRevenue/></div><div className="bstat-info"><div className="bstat-label">Total Revenue</div><div className="bstat-value" style={{fontSize:17}}>₹ 24,50,000</div><div className="bstat-change">↑ 15.2% from last month</div></div></div>
-        <div className="bstat-card"><div className="bstat-icon teal"><IcoPaid/></div><div className="bstat-info"><div className="bstat-label">Paid Amount</div><div className="bstat-value" style={{fontSize:17}}>₹ 20,15,000</div><div className="bstat-change">↑ 14.7% from last month</div></div></div>
-        <div className="bstat-card"><div className="bstat-icon red"><IcoOutstand/></div><div className="bstat-info"><div className="bstat-label">Outstanding</div><div className="bstat-value" style={{fontSize:17}}>₹ 4,35,000</div><div className="bstat-change neg">↑ 6.3% from last month</div></div></div>
+        <div className="bstat-card"><div className="bstat-icon blue"><IcoBill/></div><div className="bstat-info"><div className="bstat-label">Total Bills</div><div className="bstat-value">{loadingWidgets ? '—' : Number(stats.totalBills||0).toLocaleString('en-IN')}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.totalBills)}</div></div></div>
+        <div className="bstat-card"><div className="bstat-icon green"><IcoRevenue/></div><div className="bstat-info"><div className="bstat-label">Total Revenue</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.totalRevenue)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.totalRevenue)}</div></div></div>
+        <div className="bstat-card"><div className="bstat-icon teal"><IcoPaid/></div><div className="bstat-info"><div className="bstat-label">Paid Amount</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.paidAmount)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.paidAmount)}</div></div></div>
+        <div className="bstat-card"><div className="bstat-icon red"><IcoOutstand/></div><div className="bstat-info"><div className="bstat-label">Outstanding</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.outstanding)}</div><div className="bstat-change neg">{loadingWidgets ? '' : fmtChange(stats.changes?.outstanding)}</div></div></div>
       </div>
 
       {/* Tabs */}
       <div className="bill-tabs">
-        {['All Bills','Paid','Partial','Unpaid','Cancelled'].map(tab=>(
+        {TABS.map(tab=>(
           <button key={tab} className={`bill-tab ${activeTab===tab?'active':''}`} onClick={()=>{setActiveTab(tab);setPage(1);}}>{tab}</button>
         ))}
       </div>
@@ -392,9 +907,13 @@ function Billing() {
             </tr>
           </thead>
           <tbody>
-            {paginated.length===0 ? (
+            {loadingTable ? (
+              <tr><td colSpan={9} style={{textAlign:'center',padding:32,color:'#9ca3af'}}>Loading invoices…</td></tr>
+            ) : tableError ? (
+              <tr><td colSpan={9} style={{textAlign:'center',padding:32,color:'#ef4444'}}>{tableError}</td></tr>
+            ) : invoices.length===0 ? (
               <tr><td colSpan={9} style={{textAlign:'center',padding:32,color:'#9ca3af'}}>No invoices found.</td></tr>
-            ) : paginated.map((inv,idx)=>(
+            ) : invoices.map((inv,idx)=>(
               <tr key={inv.id}>
                 <td style={{fontWeight:700,color:'#1a2a5e'}}>{inv.id}</td>
                 <td style={{color:'#6b7280'}}>{inv.bookingId}</td>
@@ -405,15 +924,14 @@ function Billing() {
                   </div>
                 </td>
                 <td>{inv.checkOut}</td>
-                <td style={{fontWeight:600}}>₹ {inv.amount.toLocaleString('en-IN')}</td>
-                <td style={{fontWeight:600,color:'#10b981'}}>₹ {inv.paid.toLocaleString('en-IN')}</td>
-                <td style={{fontWeight:600,color:inv.due>0?'#ef4444':'#1a1f36'}}>₹ {inv.due.toLocaleString('en-IN')}</td>
+                <td style={{fontWeight:600}}>{fmtCurrency(inv.amount)}</td>
+                <td style={{fontWeight:600,color:'#10b981'}}>{fmtCurrency(inv.paid)}</td>
+                <td style={{fontWeight:600,color:inv.due>0?'#ef4444':'#1a1f36'}}>{fmtCurrency(inv.due)}</td>
                 <td><span className={statusClass(inv.status)}>{inv.status}</span></td>
                 <td>
                   <div className="action-btns">
                     <button className="btn-icon btn-icon-view"  title="View Details" onClick={()=>openView(inv)}><IcoEye/></button>
                     <button className="btn-icon btn-icon-edit"  title="Edit"         onClick={()=>openEdit(inv)}><IcoEdit/></button>
-                    {/* Print icon — opens invoice modal */}
                     <button className="btn-icon btn-icon-print" title="Print / Download Invoice" onClick={()=>openInvoice(inv)}><IcoPrint/></button>
                   </div>
                 </td>
@@ -422,7 +940,7 @@ function Billing() {
           </tbody>
         </table>
         <div className="pagination">
-          <span className="pagination-info">Showing {filtered.length===0?0:(page-1)*PER_PAGE+1} to {Math.min(page*PER_PAGE,filtered.length)} of {filtered.length} invoices</span>
+          <span className="pagination-info">Showing {totalInvoices===0?0:(page-1)*PER_PAGE+1} to {Math.min(page*PER_PAGE,totalInvoices)} of {totalInvoices} invoices</span>
           <div className="pagination-btns">
             <button className="pg-btn" onClick={()=>setPage(p=>p-1)} disabled={page===1}><IcoChevL/></button>
             {Array.from({length:Math.min(totalPages,3)},(_,i)=>i+1).map(n=>(
@@ -436,17 +954,23 @@ function Billing() {
 
       {/* Bottom 3-col */}
       <div className="bill-bottom">
-        <div className="revenue-card"><div className="revenue-title">Revenue Overview</div><RevenueChart data={REVENUE_DATA}/></div>
+        <div className="revenue-card"><div className="revenue-title">Revenue Overview</div><RevenueChart data={revenueData}/></div>
         <div className="payment-methods-card">
           <div className="pm-title">Payment Methods</div>
-          <div className="pm-donut-wrap">
-            <DonutChart segments={PAYMENT_METHODS} size={100} stroke={16} centerLabel="100%" centerSub="Total"/>
-            <div className="pm-legend">{PAYMENT_METHODS.map(p=><div className="pm-leg-item" key={p.label}><span className="pm-dot" style={{background:p.color}}/><span>{p.label}</span><span className="pm-pct">{p.pct}%</span></div>)}</div>
-          </div>
+          {paymentMethods.length===0 ? (
+            <div style={{padding:'16px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No payment data yet.</div>
+          ) : (
+            <div className="pm-donut-wrap">
+              <DonutChart segments={paymentMethods} size={100} stroke={16} centerLabel="100%" centerSub="Total"/>
+              <div className="pm-legend">{paymentMethods.map(p=><div className="pm-leg-item" key={p.label}><span className="pm-dot" style={{background:p.color}}/><span>{p.label}</span><span className="pm-pct">{p.pct}%</span></div>)}</div>
+            </div>
+          )}
         </div>
         <div className="recent-pay-card">
           <div className="rp-title">Recent Payments</div>
-          {RECENT_PAYMENTS.map((rp,i)=>(
+          {recentPayments.length===0 ? (
+            <div style={{padding:'16px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No recent payments.</div>
+          ) : recentPayments.map((rp,i)=>(
             <div className="rp-item" key={i}>
               <div className="rp-avatar" style={{background:AVATAR_COLORS[i%AVATAR_COLORS.length]}}>{initials(rp.guest)}</div>
               <div className="rp-info"><div className="rp-name">{rp.guest}</div><div className="rp-inv">{rp.inv} · {rp.date}</div></div>
@@ -457,23 +981,57 @@ function Billing() {
       </div>
 
       {/* ══ MODALS ══ */}
-      {showAdd  && <BillFormModal title="Generate New Bill" onSave={handleAdd}  onClose={()=>setShowAdd(false)}/>}
-      {showEdit && <BillFormModal title="Edit Invoice"        onSave={handleEdit} onClose={()=>setShowEdit(false)}/>}
+      {showAdd  && (
+        <BillFormModal
+          title="Generate New Bill"
+          form={form}
+          formErrors={formErrors}
+          formError={formError}
+          bookings={bookings}
+          saving={saving}
+          onFormChange={handleFormChange}
+          onItemChange={handleItemChange}
+          onBookingChange={handleBookingChange}
+          onAddItem={addItem}
+          onRemoveItem={removeItem}
+          onSave={handleAdd}
+          onClose={() => setShowAdd(false)}
+        />
+      )}
+      {showEdit && (
+        <BillFormModal
+          title="Edit Invoice"
+          form={form}
+          formErrors={formErrors}
+          formError={formError}
+          bookings={bookings}
+          saving={saving}
+          onFormChange={handleFormChange}
+          onItemChange={handleItemChange}
+          onBookingChange={handleBookingChange}
+          onAddItem={addItem}
+          onRemoveItem={removeItem}
+          onSave={handleEdit}
+          onClose={() => setShowEdit(false)}
+        />
+      )}
 
-      {/* Invoice modal — only opens on Print button click */}
-      {showInvoice && selected && <InvoiceModal invoice={selected} onClose={()=>setShowInvoice(false)}/>}
-      {/* View Details modal */}
+      {showInvoice && selected && (
+        invoiceLoading
+          ? <div className="modal-overlay" onClick={()=>setShowInvoice(false)}><div className="modal-box" onClick={e=>e.stopPropagation()} style={{padding:40,textAlign:'center',color:'#9ca3af'}}>Loading invoice…</div></div>
+          : <InvoiceModal invoice={selected} onClose={()=>setShowInvoice(false)}/>
+      )}
       {showView && selected && (
         <div className="modal-overlay" onClick={()=>setShowView(false)}>
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
             <div className="modal-header"><h3>Invoice Details — {selected.id}</h3><button className="modal-close" onClick={()=>setShowView(false)}>×</button></div>
             <div className="modal-body">
-              {[['Invoice No.',selected.id],['Booking ID',selected.bookingId],['Guest Name',selected.guest],['Room No.',selected.room],['Check-in',selected.checkIn],['Check-out',selected.checkOut],['Total Amount',`₹ ${selected.amount.toLocaleString('en-IN')}`],['Paid Amount',`₹ ${selected.paid.toLocaleString('en-IN')}`],['Due Amount',`₹ ${selected.due.toLocaleString('en-IN')}`],['Status',selected.status],['Payment Method',selected.method||'—']].map(([k,v])=>(
+              {[['Invoice No.',selected.id],['Booking ID',selected.bookingId],['Guest Name',selected.guest],['Room No.',selected.room],['Check-in',selected.checkIn],['Check-out',selected.checkOut],['Total Amount',fmtCurrency(selected.amount)],['Paid Amount',fmtCurrency(selected.paid)],['Due Amount',fmtCurrency(selected.due)],['Status',selected.status],['Payment Method',selected.method||'—']].map(([k,v])=>(
                 <div className="detail-row" key={k}><span className="detail-key">{k}</span><span className="detail-value">{v}</span></div>
               ))}
             </div>
             <div className="modal-footer">
-              <button className="btn-cancel" style={{display:'flex',alignItems:'center',gap:6}} onClick={()=>{setShowView(false);setShowInvoice(true);}}><IcoPrint/> Print Invoice</button>
+              <button className="btn-cancel" style={{display:'flex',alignItems:'center',gap:6}} onClick={()=>{setShowView(false);openInvoice(selected);}}><IcoPrint/> Print Invoice</button>
               <button className="btn-save" onClick={()=>setShowView(false)}>Close</button>
             </div>
           </div>

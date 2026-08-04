@@ -7,9 +7,46 @@
 //  - Typing an existing phone in "New Booking" auto-fills guest
 //    info and lets admin add more rooms under new Booking IDs
 //  - Delete removed — only Cancel remains (admin only)
+//  - Room No. is now a live dropdown of rooms actually available
+//    for the selected check-in/check-out range (status +
+//    date-overlap check against /api/rooms/available)
+//  - Check-in is mandatory, check-out is optional. Available
+//    rooms load as soon as check-in is picked.
+//  - Selecting a room auto-fills Amount (price/night × nights;
+//    defaults to 1 night if check-out isn't set yet, and
+//    recalculates if check-out is added/changed afterward).
+//  - New Booking modal validates Phone, Guest Name, and
+//    Check-in Date; errors show inline under each field.
+//  - readOnly prop (passed by Dashboard.js for super_admin):
+//    hides New Booking / Edit / Cancel / ID upload controls,
+//    View + History stay available.
+//  - Success/failure messages now use SweetAlert2 instead of
+//    native alert()/browser errors.
+//  - handleAdd no longer requires the customer to already exist:
+//    it sends phone + guest_name straight to the backend, which
+//    finds-or-creates the customer record in the same request.
+//    It also now submits every room queued in `extraRooms`, not
+//    just Room 1 — each extra room reuses the same phone/guest
+//    and gets its own booking row/ID.
+//  - Edit modal fixes:
+//      1. Dates from the backend arrive as full ISO datetime
+//         strings (e.g. 2026-07-29T00:00:00.000Z); toDateInputValue()
+//         trims them to YYYY-MM-DD so <input type="date"> displays
+//         the existing value instead of rendering blank.
+//      2. Room Type from the DB (e.g. "Deluxe Room") is normalized
+//         against the dropdown's fixed option list via
+//         normalizeRoomType() so it doesn't silently fall back to
+//         the first option ("Standard").
+//      3. Edit now uses its own handleEditFormChange instead of
+//         handleFormChange, so changing a date no longer wipes out
+//         Room No. — that "clear room on date change" behavior only
+//         makes sense in New Booking, where Room No. is tied to a
+//         live availability list; in Edit it's a plain manual field.
 // ============================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from "react";
+import axios from "axios";
+import Swal from 'sweetalert2';
 import '../../styles/Bookings.css';
 import {
   IcoPlus, IcoSearch, IcoFilter, IcoEye, IcoEdit,
@@ -27,25 +64,39 @@ const IcoHistory= () => <svg width="13" height="13" fill="none" viewBox="0 0 24 
 // ── Sample Data ───────────────────────────────────────────────
 // Each row = ONE room = ONE Booking ID. Rows sharing the same
 // `phone` belong to the same guest/customer.
-const INITIAL_BOOKINGS = [
-  { id: 'BK-1250', phone: '+91 98765 43210', guest: 'John Doe',      roomNo: '101', roomType: 'Deluxe',   checkIn: '20 May 2024', checkOut: '22 May 2024', guests: 2, amount: '₹ 8,000',  status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1251', phone: '+91 98765 43210', guest: 'John Doe',      roomNo: '102', roomType: 'Standard', checkIn: '20 May 2024', checkOut: '23 May 2024', guests: 1, amount: '₹ 4,000',  status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1249', phone: '+91 91234 56789', guest: 'Emily Smith',   roomNo: '205', roomType: 'Suite',    checkIn: '20 May 2024', checkOut: '23 May 2024', guests: 2, amount: '₹ 15,000', status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1248', phone: '+91 99876 54321', guest: 'Michael Brown', roomNo: '302', roomType: 'Standard', checkIn: '20 May 2024', checkOut: '24 May 2024', guests: 3, amount: '₹ 18,000', status: 'Checked-in',  payment: 'Partial',  idProof: null },
-  { id: 'BK-1247', phone: '+91 99123 45678', guest: 'Sarah Wilson',  roomNo: '103', roomType: 'Deluxe',   checkIn: '20 May 2024', checkOut: '21 May 2024', guests: 1, amount: '₹ 8,000',  status: 'Checked-out', payment: 'Paid',     idProof: null },
-  { id: 'BK-1246', phone: '+91 90011 22334', guest: 'David Lee',     roomNo: '401', roomType: 'Suite',    checkIn: '21 May 2024', checkOut: '24 May 2024', guests: 2, amount: '₹ 16,000', status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1245', phone: '+91 88990 11223', guest: 'Priya Sharma',  roomNo: '204', roomType: 'Deluxe',   checkIn: '21 May 2024', checkOut: '22 May 2024', guests: 2, amount: '₹ 11,000', status: 'Pending',     payment: 'Unpaid',   idProof: null },
-  { id: 'BK-1244', phone: '+91 87654 32109', guest: 'Amit Verma',    roomNo: '501', roomType: 'Suite',    checkIn: '22 May 2024', checkOut: '25 May 2024', guests: 2, amount: '₹ 14,000', status: 'Confirmed',   payment: 'Paid',     idProof: null },
-  { id: 'BK-1243', phone: '+91 96543 21098', guest: 'Neha Singh',    roomNo: '201', roomType: 'Standard', checkIn: '22 May 2024', checkOut: '23 May 2024', guests: 1, amount: '₹ 9,000',  status: 'Cancelled',   payment: 'Refunded', idProof: null },
-];
+
 
 const EMPTY_ROOM_FORM = {
-  phone: '', guest: '', roomNo: '', roomType: 'Deluxe',
+  phone: '', guest: '', email: '', nationality: '', roomNo: '', roomType: 'Deluxe',
   checkIn: '', checkOut: '', guests: 1, amount: '',
   status: 'Confirmed', payment: 'Unpaid', idProof: null,
 };
 
 const PER_PAGE = 8;
+
+// ── SweetAlert helpers ──────────────────────────────────────────
+const showSuccess = (title, text) => {
+  Swal.fire({
+    icon: 'success',
+    title,
+    text,
+    timer: 2000,
+    timerProgressBar: true,
+    showConfirmButton: false,
+    toast: true,
+    position: 'top-end',
+  });
+};
+
+const showError = (title, err) => {
+  const text = err?.response?.data?.message || err?.message || 'Something went wrong. Please try again.';
+  Swal.fire({
+    icon: 'error',
+    title,
+    text,
+    confirmButtonColor: '#0d1b4b',
+  });
+};
 
 // ── Helpers ───────────────────────────────────────────────────
 const statusClass = (s) => {
@@ -58,12 +109,55 @@ const payClass = (p) => {
 };
 const genId = () => `BK-${Math.floor(1000 + Math.random() * 9000)}`;
 
+// Number of nights between check-in and check-out. If check-out
+// isn't set yet (it's optional), default to 1 night so the amount
+// field has a sane starting value instead of ₹0.
+const calcNights = (checkIn, checkOut) => {
+  if (!checkIn || !checkOut) return 1;
+  const inD = new Date(checkIn);
+  const outD = new Date(checkOut);
+  const diff = Math.round((outD - inD) / (1000 * 60 * 60 * 24));
+  return diff > 0 ? diff : 1;
+};
+
+// Normalize a backend date/datetime value into YYYY-MM-DD for
+// <input type="date">. The backend returns full ISO datetime
+// strings (e.g. "2026-07-29T00:00:00.000Z"); a date input renders
+// blank for anything that isn't exactly YYYY-MM-DD.
+const toDateInputValue = (value) => {
+  if (!value) return '';
+  return String(value).split('T')[0];
+};
+
+// DB may store the room type with extra wording ("Deluxe Room")
+// while the dropdown's fixed options are just "Deluxe", "Suite",
+// etc. Match against the first known option found as a
+// case-insensitive substring; fall back to the raw value so
+// nothing is silently discarded/replaced with the wrong option.
+const ROOM_TYPE_OPTIONS = ['Standard', 'Deluxe', 'Suite', 'Executive', 'Presidential Suite'];
+const normalizeRoomType = (value) => {
+  if (!value) return ROOM_TYPE_OPTIONS[0];
+  const match = ROOM_TYPE_OPTIONS.find(opt => value.toLowerCase().includes(opt.toLowerCase()));
+  return match || value;
+};
+
+// Validate only the fields that are actually mandatory:
+// Phone Number, Guest Name, Check-in Date. Everything else
+// (room, guests, amount, check-out, etc.) is optional at this stage.
+const validateRoomForm = (data) => {
+  const errs = {};
+  if (!data.phone || !data.phone.trim()) errs.phone = 'Phone number is required';
+  if (!data.guest || !data.guest.trim()) errs.guest = 'Guest name is required';
+  if (!data.checkIn) errs.checkIn = 'Check-in date is required';
+  return errs;
+};
+
 // Brand color band per unique phone number (cycles through palette)
 const GROUP_COLORS = ['#eff6ff', '#f0fdf4', '#fff7ed', '#faf5ff', '#fef2f2', '#ecfeff'];
 const groupColorFor = (phone, phoneOrder) => GROUP_COLORS[phoneOrder.indexOf(phone) % GROUP_COLORS.length];
 
 // ── ID Proof Cell ─────────────────────────────────────────────
-const IdProofCell = ({ booking, onUpload }) => {
+const IdProofCell = ({ booking, onUpload, readOnly }) => {
   const inputId = `id-proof-${booking.id}`;
   const handleChange = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -76,8 +170,19 @@ const IdProofCell = ({ booking, onUpload }) => {
         <a href={booking.idProof.url} target="_blank" rel="noopener noreferrer" className="id-proof-filename" title={booking.idProof.name}>
           <IcoFile /><span>{booking.idProof.name}</span>
         </a>
-        <label htmlFor={inputId} className="id-proof-replace-btn">Replace</label>
-        <input id={inputId} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleChange} style={{ display: 'none' }} />
+        {!readOnly && (
+          <>
+            <label htmlFor={inputId} className="id-proof-replace-btn">Replace</label>
+            <input id={inputId} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleChange} style={{ display: 'none' }} />
+          </>
+        )}
+      </div>
+    );
+  }
+  if (readOnly) {
+    return (
+      <div className="id-proof-cell">
+        <span style={{ color: '#9ca3af', fontSize: 12 }}>Not uploaded</span>
       </div>
     );
   }
@@ -89,16 +194,132 @@ const IdProofCell = ({ booking, onUpload }) => {
   );
 };
 
+// ── Inline field error ──────────────────────────────────────────
+const FieldError = ({ message }) => {
+  if (!message) return null;
+  return <span className="field-error">{message}</span>;
+};
+
 // ════════════════════════════════════════════════════════════
 //  COMPONENT
 // ════════════════════════════════════════════════════════════
-function Bookings() {
-  const [bookings, setBookings]           = useState(INITIAL_BOOKINGS);
+function Bookings({ readOnly = false }) {
+  const [bookings, setBookings] = useState([]);
+const [stats, setStats] = useState({
+    totalBookings: 0,
+    confirmedBookings: 0,
+    pendingBookings: 0,
+    totalRevenue: 0
+});
   const [search, setSearch]               = useState('');
   const [filterStatus, setFilterStatus]   = useState('All Status');
   const [filterPayment, setFilterPayment] = useState('All Payment Status');
   const [page, setPage]                   = useState(1);
+  const [rooms,setRooms]=useState([]);
 
+  // Available rooms per date-range, keyed by which room slot is asking:
+  // 'main' for Room 1, or the numeric index of an extra room.
+  const [roomAvailability, setRoomAvailability] = useState({});
+
+  // Field-level validation errors for the New Booking modal.
+  // formErrors covers Room 1; extraRoomErrors is keyed by extra-room index.
+  const [formErrors, setFormErrors] = useState({});
+  const [extraRoomErrors, setExtraRoomErrors] = useState({});
+
+  useEffect(() => {
+  fetchBookings();
+  fetchBookingStats();
+  fetchRooms();
+  fetchCustomers();
+}, []);
+const fetchRooms = async () => {
+    const res = await axios.get("http://localhost:5000/api/rooms");
+    setRooms(res.data);
+};
+
+// Fetch rooms actually available (status + no date overlap) for a
+// given check-in date, optionally narrowed by check-out. Check-out
+// is optional — if it isn't set yet, we still ask the backend for
+// rooms free starting from check-in. Stash the result under `key`
+// so Room 1 and each extra-room row have independent lists.
+const loadAvailableRooms = async (key, checkIn, checkOut) => {
+  if (!checkIn) {
+    setRoomAvailability(prev => ({ ...prev, [key]: [] }));
+    return;
+  }
+  try {
+    const res = await axios.get("http://localhost:5000/api/rooms/available", {
+      params: checkOut ? { checkIn, checkOut } : { checkIn }
+    });
+    setRoomAvailability(prev => ({ ...prev, [key]: res.data.data }));
+  } catch (err) {
+    console.error(err);
+    setRoomAvailability(prev => ({ ...prev, [key]: [] }));
+  }
+};
+
+// Fetch booking statistics from the backend
+const fetchBookings = async () => {
+  try {
+    const res = await axios.get("http://localhost:5000/api/bookings");
+
+    const formatted = res.data.map((b) => ({
+      booking_id: b.booking_id,
+      id: b.booking_code || '',
+      guest: b.full_name || '',
+      phone: b.phone || '',
+      // Guard against a null room_number so we don't end up with the
+      // literal text "null" (String(null) === "null") being displayed
+      // or matched against in search.
+      roomNumber: b.room_number != null ? String(b.room_number) : '',
+      roomType: b.room_type,
+      checkIn: b.check_in,
+      checkOut: b.check_out,
+      guests: b.total_guests,
+      amount: b.total_amount,
+      status: b.booking_status,
+      payment: b.payment_status,
+      customer_id: b.customer_id,
+      room_id: b.room_id,
+      idProof: null,
+    }));
+
+    setBookings(formatted);
+
+  } catch (err) {
+    console.error(err);
+    showError('Could not load bookings', err);
+  }
+};
+
+
+// Fetch booking statistics from the backend
+const fetchBookingStats = async () => {
+
+    try{
+
+        const res = await axios.get(
+            "http://localhost:5000/api/bookings/stats"
+        );
+
+        setStats(res.data.data);
+
+    }catch(err){
+
+        console.log(err);
+
+    }
+
+}
+
+const fetchCustomers = async () => {
+  try {
+    const res = await axios.get("http://localhost:5000/api/customers");
+    setCustomers(res.data);
+  } catch (err) {
+    console.error(err);
+  }
+};
   // Modals
   const [showAdd, setShowAdd]       = useState(false);
   const [showEdit, setShowEdit]     = useState(false);
@@ -107,17 +328,72 @@ function Bookings() {
   const [showHistory, setShowHistory] = useState(false);
   const [selected, setSelected]     = useState(null);
   const [form, setForm]             = useState(EMPTY_ROOM_FORM);
+  const [customers, setCustomers] = useState([]);
 
   // For "New Booking" modal — extra rooms added in the same session,
   // all sharing the same phone/guest from the first room's form.
   const [extraRooms, setExtraRooms] = useState([]);
 
+  // Reload the Room 1 availability list whenever its dates change
+  // (check-in alone is enough to trigger it — check-out is optional),
+  // but only while the New Booking modal is actually open.
+  useEffect(() => {
+    if (showAdd) loadAvailableRooms('main', form.checkIn, form.checkOut);
+  }, [form.checkIn, form.checkOut, showAdd]);
+
+  // Reload each extra room's availability list whenever any of their
+  // dates change.
+  useEffect(() => {
+    extraRooms.forEach((r, idx) => {
+      loadAvailableRooms(idx, r.checkIn, r.checkOut);
+    });
+  }, [extraRooms.map(r => `${r.checkIn}|${r.checkOut}`).join(',')]);
+
+  // If check-out is added or changed AFTER a room has already been
+  // picked for Room 1, recalculate the amount using the new night
+  // count instead of leaving it at the 1-night default.
+  useEffect(() => {
+    if (!showAdd || !form.roomNumber) return;
+    const picked = (roomAvailability.main || []).find(
+      r => String(r.room_number) === String(form.roomNumber)
+    );
+    if (picked) {
+      setForm(prev => ({
+        ...prev,
+        amount: picked.price_per_night * calcNights(prev.checkIn, prev.checkOut),
+      }));
+    }
+  }, [form.checkOut]);
+
+  useEffect(() => {
+    if (!showAdd) return;
+    setExtraRooms(prev => prev.map((r, idx) => {
+      if (!r.roomNumber) return r;
+      const picked = (roomAvailability[idx] || []).find(
+        opt => String(opt.room_number) === String(r.roomNumber)
+      );
+      if (!picked) return r;
+      return { ...r, amount: picked.price_per_night * calcNights(r.checkIn, r.checkOut) };
+    }));
+  }, [extraRooms.map(r => r.checkOut).join(',')]);
+
   // ── Filter ──
+  // NOTE: guest/id/phone/roomNumber can be null/undefined if a booking's
+  // linked customer or room record is missing (LEFT JOINs on the backend
+  // return null for unmatched rows). Guard every field with `|| ''`
+  // before calling string methods on it, or this crashes the whole page
+  // with "Cannot read properties of null (reading 'toLowerCase')".
   const filtered = bookings.filter(b => {
-    const matchSearch = b.guest.toLowerCase().includes(search.toLowerCase())
-      || b.id.toLowerCase().includes(search.toLowerCase())
-      || b.phone.includes(search)
-      || b.roomNo.includes(search);
+    const guest      = b.guest || '';
+    const id         = b.id || '';
+    const phone      = b.phone || '';
+    const roomNumber = b.roomNumber || '';
+    const searchTerm = search.toLowerCase();
+
+    const matchSearch = guest.toLowerCase().includes(searchTerm)
+      || id.toLowerCase().includes(searchTerm)
+      || phone.includes(search)
+      || roomNumber.includes(search);
     const matchStatus  = filterStatus  === 'All Status'        || b.status  === filterStatus;
     const matchPayment = filterPayment === 'All Payment Status' || b.payment === filterPayment;
     return matchSearch && matchStatus && matchPayment;
@@ -155,12 +431,27 @@ function Bookings() {
   const openAdd = () => {
     setForm(EMPTY_ROOM_FORM);
     setExtraRooms([]);
+    setRoomAvailability({});
+    setFormErrors({});
+    setExtraRoomErrors({});
     setShowAdd(true);
   };
 
   const openEdit = (b) => {
     setSelected(b);
-    setForm({ phone: b.phone, guest: b.guest, roomNo: b.roomNo, roomType: b.roomType, checkIn: b.checkIn, checkOut: b.checkOut, guests: b.guests, amount: b.amount, status: b.status, payment: b.payment, idProof: b.idProof });
+    setForm({
+      phone: b.phone,
+      guest: b.guest,
+      roomNumber: b.roomNumber,
+      roomType: normalizeRoomType(b.roomType),
+      checkIn: toDateInputValue(b.checkIn),
+      checkOut: toDateInputValue(b.checkOut),
+      guests: b.guests,
+      amount: b.amount,
+      status: b.status,
+      payment: b.payment,
+      idProof: b.idProof,
+    });
     setShowEdit(true);
   };
 
@@ -178,39 +469,289 @@ function Bookings() {
     }
   };
 
-  const handleAdd = () => {
-    // Save the room currently in `form`, plus any rooms queued in extraRooms.
-    // Every room gets its OWN id (own Booking ID), all sharing the same phone.
-    const allRooms = [form, ...extraRooms];
-    const newBookings = allRooms
-      .filter(r => r.roomNo) // skip totally empty rows
-      .map(r => ({ ...r, id: genId() }));
-    setBookings(prev => [...newBookings, ...prev]);
+// ── ADD ───────────────────────────────────────────────────────
+// No longer looks up an existing customer and blocks if missing.
+// phone + guest_name are sent straight to the backend, which
+// finds-or-creates the customer record in the same transaction as
+// the booking insert. Every room queued in `extraRooms` is now
+// submitted too (previously only Room 1 was ever sent, even though
+// the Save button said "Save N Bookings").
+const handleAdd = async () => {
+  // Validate Room 1 and every extra room. Mandatory fields are only
+  // Phone Number, Guest Name, and Check-in Date — everything else
+  // (room, guests, amount, check-out) is optional at submit time.
+  const mainErrors = validateRoomForm(form);
+  const allExtraErrors = {};
+  extraRooms.forEach((r, idx) => {
+    // Extra rooms share phone/guest with Room 1, so only check-in
+    // needs separate validation per row.
+    const errs = {};
+    if (!r.checkIn) errs.checkIn = 'Check-in date is required';
+    if (Object.keys(errs).length) allExtraErrors[idx] = errs;
+  });
+
+  setFormErrors(mainErrors);
+  setExtraRoomErrors(allExtraErrors);
+
+  if (Object.keys(mainErrors).length || Object.keys(allExtraErrors).length) {
+    return; // stop submit — inline errors are now shown under each field
+  }
+
+  // Resolve room_id for Room 1 and for every extra room up front, so
+  // we fail fast with a clear message before making any network calls.
+  const mainRoom = rooms.find(
+    (r) => Number(r.room_number) === Number(form.roomNumber)
+  );
+
+  if (!mainRoom) {
+    showError('Room not selected', { message: 'Please select a room before saving the booking.' });
+    return;
+  }
+
+  const resolvedExtraRooms = [];
+  for (let idx = 0; idx < extraRooms.length; idx++) {
+    const r = extraRooms[idx];
+    const roomMatch = rooms.find(
+      (rm) => Number(rm.room_number) === Number(r.roomNumber)
+    );
+    if (!roomMatch) {
+      showError('Room not selected', { message: `Please select a room for Room ${idx + 2} before saving.` });
+      return;
+    }
+    resolvedExtraRooms.push({ ...r, room_id: roomMatch.room_id });
+  }
+
+  try {
+    // Room 1
+    await axios.post("http://localhost:5000/api/bookings", {
+      phone: form.phone,
+      guest_name: form.guest,
+      email: form.email || null,
+      nationality: form.nationality || null,
+      room_id: mainRoom.room_id,
+      check_in: form.checkIn,
+      check_out: form.checkOut || null,
+      total_guests: Number(form.guests),
+      booking_status: form.status,
+      payment_status: form.payment,
+      total_amount: Number(form.amount),
+      special_request: ""
+    });
+
+    // Every additional room queued for the same phone/guest
+    for (const r of resolvedExtraRooms) {
+      await axios.post("http://localhost:5000/api/bookings", {
+        phone: form.phone,
+        guest_name: form.guest,
+        room_id: r.room_id,
+        check_in: r.checkIn,
+        check_out: r.checkOut || null,
+        total_guests: Number(r.guests),
+        booking_status: r.status,
+        payment_status: r.payment,
+        total_amount: Number(r.amount),
+        special_request: ""
+      });
+    }
+
+    await fetchBookings();
+    await fetchBookingStats();
+    await fetchCustomers(); // refresh so a newly-created customer shows up immediately
+
     setShowAdd(false);
+    setForm(EMPTY_ROOM_FORM);
     setExtraRooms([]);
-    setPage(1);
-  };
 
-  const handleEdit = () => {
-    setBookings(prev => prev.map(b => b.id === selected.id ? { ...b, ...form } : b));
+    showSuccess('Booking created', `${1 + resolvedExtraRooms.length} booking${(1 + resolvedExtraRooms.length) > 1 ? 's' : ''} saved successfully.`);
+  } catch (err) {
+    console.error(err);
+    showError('Could not create booking', err);
+    // Some bookings in the batch may have already been saved before
+    // the failure — refresh the list so the table reflects reality.
+    await fetchBookings();
+    await fetchBookingStats();
+    await fetchCustomers();
+  }
+};
+
+// ── EDIT ──────────────────────────────────────────────────────
+// The `form` state uses frontend field names (phone, guest, roomNumber,
+// checkIn, checkOut, guests, amount, status, payment). The backend's
+// updateBooking controller expects a different shape entirely
+// (customer_id, room_id, check_in, check_out, total_guests,
+// booking_status, payment_status, total_amount, special_request).
+// Previously this sent `form` straight through, so every field arrived
+// as undefined server-side. Fixed by resolving customer_id/room_id the
+// same way handleAdd does, and mapping every field to its backend name.
+const handleEdit = async () => {
+  try {
+    const customer = customers.find(
+      (c) => c.phone === form.phone
+    );
+
+    if (!customer) {
+      showError('Customer not found', { message: 'Please add the customer first before saving changes.' });
+      return;
+    }
+
+    const room = rooms.find(
+      (r) => Number(r.room_number) === Number(form.roomNumber)
+    );
+
+    if (!room) {
+      showError('Room not found', { message: 'The selected room number does not match any existing room.' });
+      return;
+    }
+
+    await axios.put(
+      `http://localhost:5000/api/bookings/${selected.booking_id}`,
+      {
+        customer_id: customer.customer_id,
+        room_id: room.room_id,
+        check_in: form.checkIn,
+        check_out: form.checkOut || null,
+        total_guests: Number(form.guests),
+        booking_status: form.status,
+        payment_status: form.payment,
+        total_amount: Number(form.amount),
+        special_request: form.special_request || "",
+      }
+    );
+
+    await fetchBookings();
+    await fetchBookingStats();
+
     setShowEdit(false);
-  };
+    showSuccess('Booking updated', `Booking ${selected?.id || ''} was updated successfully.`);
+  } catch (err) {
+    console.error(err);
+    showError('Could not update booking', err);
+  }
+};
+  
+  const handleCancel = async () => {
+  try {
+    await axios.put(
+      `http://localhost:5000/api/bookings/${selected.booking_id}/cancel`
+    );
 
-  const handleCancel = () => {
-    setBookings(prev => prev.map(b => b.id === selected.id ? { ...b, status: 'Cancelled', payment: 'Refunded' } : b));
+    await fetchBookings();
+    await fetchBookingStats();
+
     setShowCancel(false);
+    showSuccess('Booking cancelled', `Booking ${selected?.id || ''} has been cancelled.`);
+  } catch (err) {
+    console.error(err);
+    showError('Could not cancel booking', err);
+  }
+};
+
+  // New Booking modal only — clearing Room No. on date change is
+  // correct here because it's tied to a live availability list
+  // scoped to that check-in/check-out range.
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+
+    // Changing either date invalidates whatever room was picked under
+    // the old range, since it may no longer be available (or a
+    // previously-unavailable room may now be free). Clear the
+    // selection so the admin can't submit a stale room/date pairing.
+    const clearsRoom = name === 'checkIn' || name === 'checkOut';
+
+    setForm(prev => ({
+      ...prev,
+      [name]: value,
+      ...(clearsRoom ? { roomNumber: '' } : {}),
+    }));
+
+    // Clear that field's error as soon as the user starts fixing it.
+    if (formErrors[name]) {
+      setFormErrors(prev => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+    }
   };
 
-  const handleFormChange = (e) => {
+  // Edit modal only — Room No. here is a plain manual text input,
+  // not tied to any live availability list, so changing a date must
+  // never wipe it out the way it does in New Booking.
+  const handleEditFormChange = (e) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
+  // When Room 1's room number changes, auto-fill Room Type to match
+  // the selected room's actual type, and auto-fill Amount from the
+  // room's price/night × number of nights (defaults to 1 night if
+  // check-out hasn't been set yet).
+  const handleMainRoomSelect = (e) => {
+    const value = e.target.value;
+    const picked = (roomAvailability.main || []).find(
+      r => String(r.room_number) === String(value)
+    );
+    setForm(prev => ({
+      ...prev,
+      roomNumber: value,
+      ...(picked ? {
+        roomType: picked.room_type,
+        amount: picked.price_per_night * calcNights(prev.checkIn, prev.checkOut),
+      } : {}),
+    }));
+  };
+
   // ── Extra room queue (only inside "New Booking" modal) ──
   const addExtraRoom    = () => setExtraRooms(prev => [...prev, { ...EMPTY_ROOM_FORM, phone: form.phone, guest: form.guest }]);
-  const removeExtraRoom = (idx) => setExtraRooms(prev => prev.filter((_, i) => i !== idx));
+  const removeExtraRoom = (idx) => {
+    setExtraRooms(prev => prev.filter((_, i) => i !== idx));
+    setRoomAvailability(prev => {
+      const next = { ...prev };
+      delete next[idx];
+      return next;
+    });
+    setExtraRoomErrors(prev => {
+      const next = { ...prev };
+      delete next[idx];
+      return next;
+    });
+  };
   const handleExtraRoomChange = (idx, field, value) => {
-    setExtraRooms(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+    setExtraRooms(prev => prev.map((r, i) => {
+      if (i !== idx) return r;
+      const clearsRoom = field === 'checkIn' || field === 'checkOut';
+      return { ...r, [field]: value, ...(clearsRoom ? { roomNumber: '' } : {}) };
+    }));
+
+    if (extraRoomErrors[idx]?.[field]) {
+      setExtraRoomErrors(prev => {
+        const next = { ...prev };
+        const rowErrs = { ...next[idx] };
+        delete rowErrs[field];
+        if (Object.keys(rowErrs).length) next[idx] = rowErrs;
+        else delete next[idx];
+        return next;
+      });
+    }
+  };
+
+  // Same auto-fill behavior as the main room (type + amount), but for
+  // an extra-room row.
+  const handleExtraRoomSelect = (idx, value) => {
+    const picked = (roomAvailability[idx] || []).find(
+      r => String(r.room_number) === String(value)
+    );
+    setExtraRooms(prev => prev.map((r, i) => i === idx
+      ? {
+          ...r,
+          roomNumber: value,
+          ...(picked ? {
+            roomType: picked.room_type,
+            amount: picked.price_per_night * calcNights(r.checkIn, r.checkOut),
+          } : {}),
+        }
+      : r
+    ));
   };
 
   const handleIdProofUpload = (bookingId, file) => {
@@ -223,6 +764,10 @@ function Bookings() {
   // ════════════════════════════════════════════════════════════
   const NewBookingModal = () => {
     const existingGuest = lookupByPhone(form.phone);
+    // Only check-in is required to start showing available rooms —
+    // check-out is optional and can be added/changed later.
+    const mainDatesSet = Boolean(form.checkIn);
+    const mainRoomOptions = roomAvailability.main || [];
 
     return (
       <div className="modal-overlay" onClick={() => setShowAdd(false)}>
@@ -237,19 +782,48 @@ function Bookings() {
             <div className="modal-section-title">Guest Lookup</div>
             <div className="modal-grid">
               <div className="form-group">
-                <label className="form-label">Phone Number</label>
+                <label className="form-label">Phone Number *</label>
                 <input
-                  className="form-input"
+                  className={`form-input${formErrors.phone ? ' input-error' : ''}`}
                   name="phone"
                   value={form.phone}
                   onChange={handleFormChange}
                   onBlur={handlePhoneBlur}
                   placeholder="+91 00000 00000"
                 />
+                <FieldError message={formErrors.phone} />
               </div>
               <div className="form-group">
-                <label className="form-label">Guest Name</label>
-                <input className="form-input" name="guest" value={form.guest} onChange={handleFormChange} placeholder="Enter guest name" />
+                <label className="form-label">Guest Name *</label>
+                <input
+                  className={`form-input${formErrors.guest ? ' input-error' : ''}`}
+                  name="guest"
+                  value={form.guest}
+                  onChange={handleFormChange}
+                  placeholder="Enter guest name"
+                />
+                <FieldError message={formErrors.guest} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email (optional)</label>
+                <input
+                  className="form-input"
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleFormChange}
+                  placeholder="guest@example.com"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Nationality (optional)</label>
+                <input
+                  className="form-input"
+                  name="nationality"
+                  value={form.nationality}
+                  onChange={handleFormChange}
+                  placeholder="e.g. Indian"
+                />
               </div>
             </div>
 
@@ -265,9 +839,52 @@ function Bookings() {
             </div>
             <div className="room-row-card">
               <div className="modal-grid">
+                {/* Dates come first so the room dropdown below can react to them */}
+                <div className="form-group">
+                  <label className="form-label">Check-in Date *</label>
+                  <input
+                    className={`form-input${formErrors.checkIn ? ' input-error' : ''}`}
+                    type="date"
+                    name="checkIn"
+                    value={form.checkIn}
+                    onChange={handleFormChange}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                  <FieldError message={formErrors.checkIn} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Check-out Date</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    name="checkOut"
+                    value={form.checkOut}
+                    onChange={handleFormChange}
+                    min={form.checkIn || new Date().toISOString().split('T')[0]}
+                  />
+                </div>
                 <div className="form-group">
                   <label className="form-label">Room No.</label>
-                  <input className="form-input" name="roomNo" value={form.roomNo} onChange={handleFormChange} placeholder="e.g. 101" />
+                  <select
+                    className="form-select"
+                    name="roomNumber"
+                    value={form.roomNumber}
+                    onChange={handleMainRoomSelect}
+                    disabled={!mainDatesSet}
+                  >
+                    <option value="">
+                      {!mainDatesSet
+                        ? 'Select check-in date first'
+                        : mainRoomOptions.length === 0
+                          ? 'No rooms available'
+                          : 'Select a room'}
+                    </option>
+                    {mainRoomOptions.map(r => (
+  <option key={r.room_id} value={r.room_number}>
+    {r.room_number} · {r.room_type}
+  </option>
+))}
+                  </select>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Room Type</label>
@@ -275,14 +892,6 @@ function Bookings() {
                     <option>Standard</option><option>Deluxe</option><option>Suite</option>
                     <option>Executive</option><option>Presidential Suite</option>
                   </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Check-in Date</label>
-                  <input className="form-input" type="date" name="checkIn" value={form.checkIn} onChange={handleFormChange} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Check-out Date</label>
-                  <input className="form-input" type="date" name="checkOut" value={form.checkOut} onChange={handleFormChange} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">No. of Guests</label>
@@ -318,7 +927,12 @@ function Bookings() {
             </div>
 
             {/* ── Extra rooms queued for the same phone number ── */}
-            {extraRooms.map((room, idx) => (
+            {extraRooms.map((room, idx) => {
+              // Only check-in gates room availability — check-out is optional.
+              const datesSet = Boolean(room.checkIn);
+              const options = roomAvailability[idx] || [];
+              const rowErrors = extraRoomErrors[idx] || {};
+              return (
               <div key={idx}>
                 <div className="modal-section-header">
                   <span className="modal-section-title">Room {idx + 2}</span>
@@ -329,8 +943,47 @@ function Bookings() {
                 <div className="room-row-card">
                   <div className="modal-grid">
                     <div className="form-group">
+                      <label className="form-label">Check-in Date *</label>
+                      <input
+                        className={`form-input${rowErrors.checkIn ? ' input-error' : ''}`}
+                        type="date"
+                        value={room.checkIn}
+                        onChange={e => handleExtraRoomChange(idx, 'checkIn', e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                      <FieldError message={rowErrors.checkIn} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Check-out Date</label>
+                      <input
+                        className="form-input"
+                        type="date"
+                        value={room.checkOut}
+                        onChange={e => handleExtraRoomChange(idx, 'checkOut', e.target.value)}
+                        min={room.checkIn || new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div className="form-group">
                       <label className="form-label">Room No.</label>
-                      <input className="form-input" value={room.roomNo} onChange={e => handleExtraRoomChange(idx, 'roomNo', e.target.value)} placeholder="e.g. 102" />
+                      <select
+                        className="form-select"
+                        value={room.roomNumber}
+                        onChange={e => handleExtraRoomSelect(idx, e.target.value)}
+                        disabled={!datesSet}
+                      >
+                        <option value="">
+                          {!datesSet
+                            ? 'Select check-in date first'
+                            : options.length === 0
+                              ? 'No rooms available'
+                              : 'Select a room'}
+                        </option>
+                        {options.map(r => (
+  <option key={r.room_id} value={r.room_number}>
+    {r.room_number} · {r.room_type}
+  </option>
+))}
+                      </select>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Room Type</label>
@@ -338,14 +991,6 @@ function Bookings() {
                         <option>Standard</option><option>Deluxe</option><option>Suite</option>
                         <option>Executive</option><option>Presidential Suite</option>
                       </select>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Check-in Date</label>
-                      <input className="form-input" type="date" value={room.checkIn} onChange={e => handleExtraRoomChange(idx, 'checkIn', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Check-out Date</label>
-                      <input className="form-input" type="date" value={room.checkOut} onChange={e => handleExtraRoomChange(idx, 'checkOut', e.target.value)} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">No. of Guests</label>
@@ -370,7 +1015,8 @@ function Bookings() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             <button className="btn-add-room-row" onClick={addExtraRoom} style={{ marginTop: 8 }}>
               <IcoPlusSm /> Add Another Room (same phone)
@@ -402,48 +1048,48 @@ function Bookings() {
           <div className="modal-grid">
             <div className="form-group">
               <label className="form-label">Phone Number</label>
-              <input className="form-input" name="phone" value={form.phone} onChange={handleFormChange} placeholder="+91 00000 00000" />
+              <input className="form-input" name="phone" value={form.phone} onChange={handleEditFormChange} placeholder="+91 00000 00000" />
             </div>
             <div className="form-group">
               <label className="form-label">Guest Name</label>
-              <input className="form-input" name="guest" value={form.guest} onChange={handleFormChange} placeholder="Enter guest name" />
+              <input className="form-input" name="guest" value={form.guest} onChange={handleEditFormChange} placeholder="Enter guest name" />
             </div>
             <div className="form-group">
               <label className="form-label">Room No.</label>
-              <input className="form-input" name="roomNo" value={form.roomNo} onChange={handleFormChange} placeholder="e.g. 101" />
+              <input className="form-input" name="roomNumber" value={form.roomNumber} onChange={handleEditFormChange} placeholder="e.g. 101" />
             </div>
             <div className="form-group">
               <label className="form-label">Room Type</label>
-              <select className="form-select" name="roomType" value={form.roomType} onChange={handleFormChange}>
+              <select className="form-select" name="roomType" value={form.roomType} onChange={handleEditFormChange}>
                 <option>Standard</option><option>Deluxe</option><option>Suite</option>
                 <option>Executive</option><option>Presidential Suite</option>
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">No. of Guests</label>
-              <input className="form-input" type="number" name="guests" value={form.guests} onChange={handleFormChange} min={1} />
+              <input className="form-input" type="number" name="guests" value={form.guests} onChange={handleEditFormChange} min={1} />
             </div>
             <div className="form-group">
               <label className="form-label">Check-in Date</label>
-              <input className="form-input" type="date" name="checkIn" value={form.checkIn} onChange={handleFormChange} />
+              <input className="form-input" type="date" name="checkIn" value={form.checkIn} onChange={handleEditFormChange} />
             </div>
             <div className="form-group">
               <label className="form-label">Check-out Date</label>
-              <input className="form-input" type="date" name="checkOut" value={form.checkOut} onChange={handleFormChange} />
+              <input className="form-input" type="date" name="checkOut" value={form.checkOut} onChange={handleEditFormChange} />
             </div>
             <div className="form-group">
               <label className="form-label">Amount</label>
-              <input className="form-input" name="amount" value={form.amount} onChange={handleFormChange} placeholder="e.g. ₹ 8,000" />
+              <input className="form-input" name="amount" value={form.amount} onChange={handleEditFormChange} placeholder="e.g. ₹ 8,000" />
             </div>
             <div className="form-group">
               <label className="form-label">Payment Status</label>
-              <select className="form-select" name="payment" value={form.payment} onChange={handleFormChange}>
+              <select className="form-select" name="payment" value={form.payment} onChange={handleEditFormChange}>
                 <option>Paid</option><option>Unpaid</option><option>Partial</option><option>Refunded</option>
               </select>
             </div>
             <div className="form-group full">
               <label className="form-label">Booking Status</label>
-              <select className="form-select" name="status" value={form.status} onChange={handleFormChange}>
+              <select className="form-select" name="status" value={form.status} onChange={handleEditFormChange}>
                 <option>Confirmed</option><option>Pending</option><option>Checked-in</option><option>Checked-out</option><option>Cancelled</option>
               </select>
             </div>
@@ -468,9 +1114,11 @@ function Bookings() {
           <h2>Bookings</h2>
           <p>Manage all reservations and bookings</p>
         </div>
-        <button className="btn-new-booking" onClick={openAdd}>
-          <IcoPlus /> New Booking
-        </button>
+        {!readOnly && (
+          <button className="btn-new-booking" onClick={openAdd}>
+            <IcoPlus /> New Booking
+          </button>
+        )}
       </div>
 
       {/* ── Stat Cards ── */}
@@ -479,15 +1127,16 @@ function Bookings() {
           <div className="bstat-icon blue"><IcoCalendar /></div>
           <div className="bstat-info">
             <div className="bstat-label">Total Bookings</div>
-            <div className="bstat-value">1,248</div>
-            <div className="bstat-change">↑ 12.5% from last month</div>
+<div className="bstat-value">
+{stats.totalBookings}
+</div>            <div className="bstat-change">↑ 12.5% from last month</div>
           </div>
         </div>
         <div className="bstat-card">
           <div className="bstat-icon green"><IcoCheck /></div>
           <div className="bstat-info">
             <div className="bstat-label">Confirmed Bookings</div>
-            <div className="bstat-value">{confirmedBookings}</div>
+            <div className="bstat-value">{stats.confirmedBookings}</div>
             <div className="bstat-change">↑ 8.7% from last month</div>
           </div>
         </div>
@@ -495,7 +1144,7 @@ function Bookings() {
           <div className="bstat-icon orange"><IcoClock /></div>
           <div className="bstat-info">
             <div className="bstat-label">Pending Bookings</div>
-            <div className="bstat-value">{pendingBookings}</div>
+            <div className="bstat-value">{stats.pendingBookings}</div>
             <div className="bstat-change down">↓ 3.2% from last month</div>
           </div>
         </div>
@@ -503,7 +1152,7 @@ function Bookings() {
           <div className="bstat-icon purple"><IcoRupee /></div>
           <div className="bstat-info">
             <div className="bstat-label">Total Revenue</div>
-            <div className="bstat-value">₹ 24,50,000</div>
+            <div className="bstat-value">₹ {Number(stats.totalRevenue).toLocaleString("en-IN")}</div>
             <div className="bstat-change">↑ 15.2% from last month</div>
           </div>
         </div>
@@ -577,20 +1226,22 @@ function Bookings() {
                     )}
 
                     <td>{b.guest}</td>
-                    <td style={{ fontWeight: 600 }}>{b.roomNo}</td>
+                    <td style={{ fontWeight: 600 }}>{b.roomNumber}</td>
                     <td>{b.roomType}</td>
-                    <td>{b.checkIn}</td>
-                    <td>{b.checkOut}</td>
+                    <td>{new Date(b.checkIn).toLocaleDateString("en-IN")}</td>
+                    <td>{b.checkOut ? new Date(b.checkOut).toLocaleDateString("en-IN") : '—'}</td>
                     <td>{b.guests}</td>
                     <td style={{ fontWeight: 600 }}>{b.amount}</td>
                     <td><span className={statusClass(b.status)}>{b.status}</span></td>
                     <td><span className={payClass(b.payment)}>{b.payment}</span></td>
-                    <td><IdProofCell booking={b} onUpload={handleIdProofUpload} /></td>
+                    <td><IdProofCell booking={b} onUpload={handleIdProofUpload} readOnly={readOnly} /></td>
                     <td>
                       <div className="action-btns">
                         <button className="btn-icon btn-icon-view" title="View" onClick={() => openView(b)}><IcoEye /></button>
-                        <button className="btn-icon btn-icon-edit" title="Edit" onClick={() => openEdit(b)}><IcoEdit /></button>
-                        {b.status !== 'Cancelled' && b.status !== 'Checked-out' && (
+                        {!readOnly && (
+                          <button className="btn-icon btn-icon-edit" title="Edit" onClick={() => openEdit(b)}><IcoEdit /></button>
+                        )}
+                        {!readOnly && b.status !== 'Cancelled' && b.status !== 'Checked-out' && (
                           <button className="btn-icon btn-icon-delete" title="Cancel"
                             style={{ background: '#fffbeb', color: '#f59e0b' }} onClick={() => openCancel(b)}>
                             <IcoCancel />
@@ -622,8 +1273,8 @@ function Bookings() {
 
       {/* ══════════ MODALS ══════════ */}
 
-      {showAdd  && <NewBookingModal />}
-      {showEdit && <EditBookingModal />}
+      {!readOnly && showAdd  && NewBookingModal()}
+      {!readOnly && showEdit && EditBookingModal()}
 
       {/* View Modal — single room */}
       {showView && selected && (
@@ -638,10 +1289,10 @@ function Bookings() {
                 ['Booking ID',    selected.id],
                 ['Phone Number',  selected.phone],
                 ['Guest Name',    selected.guest],
-                ['Room No.',      selected.roomNo],
+                ['Room Number',   selected.roomNumber],
                 ['Room Type',     selected.roomType],
                 ['Check-in',      selected.checkIn],
-                ['Check-out',     selected.checkOut],
+                ['Check-out',     selected.checkOut || 'Not set'],
                 ['No. of Guests', selected.guests],
                 ['Amount',        selected.amount],
                 ['Status',        selected.status],
@@ -673,10 +1324,10 @@ function Bookings() {
               <div className="modal-section-title">{selected.guest} — All Rooms Booked</div>
               {bookings.filter(b => b.phone === selected.phone).map((r, i) => (
                 <div className="room-view-card" key={r.id}>
-                  <div className="room-view-title">{r.id} — Room {r.roomNo} ({r.roomType})</div>
+                  <div className="room-view-title">{r.id} — Room {r.roomNumber} ({r.roomType})</div>
                   {[
                     ['Check-in',  r.checkIn],
-                    ['Check-out', r.checkOut],
+                    ['Check-out', r.checkOut || 'Not set'],
                     ['Guests',    r.guests],
                     ['Amount',    r.amount],
                     ['Status',    r.status],
@@ -698,7 +1349,7 @@ function Bookings() {
       )}
 
       {/* Cancel Modal */}
-      {showCancel && selected && (
+      {!readOnly && showCancel && selected && (
         <div className="modal-overlay" onClick={() => setShowCancel(false)}>
           <div className="modal-box confirm-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
@@ -708,7 +1359,7 @@ function Bookings() {
             <div className="confirm-body">
               <div className="confirm-icon amber"><IcoWarn /></div>
               <h4>Cancel this booking?</h4>
-              <p>Booking <strong>{selected.id}</strong> (Room {selected.roomNo}) for <strong>{selected.guest}</strong> will be marked as Cancelled and payment set to Refunded.</p>
+              <p>Booking <strong>{selected.id}</strong> (Room {selected.roomNumber}) for <strong>{selected.guest}</strong> will be marked as Cancelled and payment set to Refunded.</p>
             </div>
             <div className="modal-footer">
               <button className="btn-cancel" onClick={() => setShowCancel(false)}>Keep Booking</button>

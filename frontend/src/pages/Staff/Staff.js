@@ -1,13 +1,14 @@
 // ============================================================
 //  Staff.js — Staff Management Page (logic + JSX only)
-//  Sections: Staff table, Payroll summary, Attendance donut,
-//            Recent attendance, Quick actions, Dept bar chart,
-//            Payroll components donut, Leave summary
+//  Sections: Staff table, Payroll summary, Staff status donut,
+//            Recently joined staff, Quick actions, Dept bar chart,
+//            Salary distribution by department
 //  Icons  → ../../utils/icons/StaffIcons.js
 //  Styles → ../../styles/Staff.css
 // ============================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import axios from 'axios';
 import '../../styles/Staff.css';
 import {
   IcoPlus, IcoSearch, IcoFilter, IcoEye, IcoEdit, IcoTrash,
@@ -15,56 +16,16 @@ import {
   IcoLeave, IcoPayroll, IcoCheck, IcoCalendar, IcoDownload, IcoAttend,
 } from '../../utils/icons/Stafficons';
 
-// ── Constants ─────────────────────────────────────────────────
+// ── Config ────────────────────────────────────────────────────
+const API_BASE = 'http://localhost:5000/api/staff';
+
+// ── Constants (form options only — NOT data) ───────────────────
 const DEPARTMENTS  = ['Front Office','Housekeeping','F&B Service','Maintenance','Security','Accounts'];
 const DESIGNATIONS = ['Front Office Manager','Housekeeping Supervisor','Restaurant Manager','Receptionist','Maintenance Engineer','Room Attendant','Security Guard','Accountant','Chef','Waiter'];
 const AVATAR_COLORS= ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#6366f1','#ec4899','#14b8a6'];
+const STATUS_COLORS = { Active:'#10b981', 'On Leave':'#f59e0b', Inactive:'#ef4444' };
 
-// ── Sample Data ───────────────────────────────────────────────
-const INITIAL_STAFF = [
-  { id:'STF-1001', name:'Rahul Verma',   dept:'Front Office',  designation:'Front Office Manager',      phone:'+91 98765 43210', email:'rahul.verma@ph.com',   salary:'₹ 45,000', joinDate:'01 Jan 2020', status:'Active'   },
-  { id:'STF-1002', name:'Priya Sharma',  dept:'Housekeeping',  designation:'Housekeeping Supervisor',   phone:'+91 91234 56789', email:'priya.sharma@ph.com',   salary:'₹ 28,000', joinDate:'15 Mar 2021', status:'Active'   },
-  { id:'STF-1003', name:'Amit Singh',    dept:'F&B Service',   designation:'Restaurant Manager',        phone:'+91 99876 54321', email:'amit.singh@ph.com',     salary:'₹ 38,000', joinDate:'10 Jun 2019', status:'Active'   },
-  { id:'STF-1004', name:'Neha Patel',    dept:'Front Office',  designation:'Receptionist',              phone:'+91 90987 65432', email:'neha.patel@ph.com',     salary:'₹ 22,000', joinDate:'20 Aug 2022', status:'Active'   },
-  { id:'STF-1005', name:'Vikram Das',    dept:'Maintenance',   designation:'Maintenance Engineer',      phone:'+91 87654 32109', email:'vikram.das@ph.com',     salary:'₹ 30,000', joinDate:'05 Feb 2021', status:'Active'   },
-  { id:'STF-1006', name:'Sunita Devi',   dept:'Housekeeping',  designation:'Room Attendant',            phone:'+91 98712 34567', email:'sunita.devi@ph.com',    salary:'₹ 18,000', joinDate:'12 Sep 2023', status:'On Leave' },
-  { id:'STF-1007', name:'Rohit Kumar',   dept:'Security',      designation:'Security Guard',            phone:'+91 96543 21098', email:'rohit.kumar@ph.com',    salary:'₹ 20,000', joinDate:'01 Nov 2022', status:'Active'   },
-  { id:'STF-1008', name:'Meera Kapoor',  dept:'Accounts',      designation:'Accountant',                phone:'+91 82103 45678', email:'meera.kapoor@ph.com',   salary:'₹ 35,000', joinDate:'18 Apr 2021', status:'Active'   },
-];
-
-const DEPT_COUNTS = [
-  { dept:'Front Office', count:12 },
-  { dept:'Housekeeping', count:18 },
-  { dept:'F&B Service',  count:16 },
-  { dept:'Maintenance',  count:10 },
-  { dept:'Security',     count:14 },
-  { dept:'Accounts',     count:6  },
-  { dept:'Others',       count:10 },
-];
-
-const ATTEND_DATA = [
-  { label:'Present',  count:64, pct:'74.4%', color:'#10b981' },
-  { label:'Absent',   count:12, pct:'14.0%', color:'#ef4444' },
-  { label:'On Leave', count:7,  pct:'8.1%',  color:'#f59e0b' },
-  { label:'Half Day', count:3,  pct:'3.5%',  color:'#3b82f6' },
-];
-
-const RECENT_ATTEND = [
-  { name:'Rahul Verma',  dept:'Front Office',  status:'Present', color:'#3b82f6' },
-  { name:'Priya Sharma', dept:'Housekeeping',  status:'On Leave',color:'#10b981' },
-  { name:'Amit Singh',   dept:'F&B Service',   status:'Present', color:'#f59e0b' },
-  { name:'Vikram Das',   dept:'Maintenance',   status:'Present', color:'#8b5cf6' },
-  { name:'Rohit Kumar',  dept:'Security',      status:'Absent',  color:'#ef4444' },
-];
-
-const PAYCOMP = [
-  { label:'Basic Salary', pct:67, color:'#1a2a5e' },
-  { label:'Allowances',   pct:20, color:'#3b82f6'  },
-  { label:'Overtime',     pct:8,  color:'#f59e0b'  },
-  { label:'Bonuses',      pct:5,  color:'#10b981'  },
-];
-
-const EMPTY_FORM = { name:'', dept:'Front Office', designation:'Receptionist', phone:'', email:'', salary:'', joinDate:'', status:'Active' };
+const EMPTY_FORM = { name:'', dept:'', designation:'', phone:'', email:'', salary:'', joinDate:'', emergencyContact:'', status:'' };
 const PER_PAGE = 8;
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -72,8 +33,34 @@ const statusClass = (s) => {
   const m = { 'Active':'badge-active','On Leave':'badge-onleave','Inactive':'badge-inactive' };
   return `badge ${m[s]||''}`;
 };
-const initials = (name) => name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-const raClass   = (s) => { const m = { 'Present':'ra-present','On Leave':'ra-onleave','Absent':'ra-absent' }; return `ra-status ${m[s]||''}`; };
+const initials = (name='') => name.split(' ').filter(Boolean).map(n=>n[0]).join('').slice(0,2).toUpperCase();
+
+const parseSalary = (val) => {
+  const n = parseFloat(String(val ?? '').replace(/[^0-9.]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+};
+const formatCurrency = (n) => `₹ ${Math.round(n).toLocaleString('en-IN')}`;
+
+// Every field in the Add/Edit Staff form is mandatory.
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
+const PHONE_RE = /^[0-9+\-\s]{7,20}$/;
+const validateStaffForm = (form) => {
+  const errors = {};
+  if (!form.name.trim()) errors.name = 'Full name is required.';
+  if (!form.dept.trim()) errors.dept = 'Department is required.';
+  if (!form.designation.trim()) errors.designation = 'Designation is required.';
+  if (!form.phone.trim()) errors.phone = 'Phone number is required.';
+  else if (!PHONE_RE.test(form.phone.trim())) errors.phone = 'Enter a valid phone number.';
+  if (!form.email.trim()) errors.email = 'Email address is required.';
+  else if (!EMAIL_RE.test(form.email.trim())) errors.email = 'Enter a valid email address.';
+  if (!String(form.salary).trim()) errors.salary = 'Monthly salary is required.';
+  else if (parseSalary(form.salary) <= 0) errors.salary = 'Salary must be greater than 0.';
+  if (!form.joinDate.trim()) errors.joinDate = 'Join date is required.';
+  if (!form.emergencyContact.trim()) errors.emergencyContact = 'Emergency contact is required.';
+  else if (!PHONE_RE.test(form.emergencyContact.trim())) errors.emergencyContact = 'Enter a valid contact number.';
+  if (!form.status.trim()) errors.status = 'Status is required.';
+  return errors;
+};
 
 // ── Donut SVG helper ──────────────────────────────────────────
 const DonutChart = ({ segments, size=110, stroke=16, centerLabel, centerSub }) => {
@@ -81,7 +68,7 @@ const DonutChart = ({ segments, size=110, stroke=16, centerLabel, centerSub }) =
   const CX  = size / 2;
   const circ= 2 * Math.PI * R;
   let offset = 0;
-  const total = segments.reduce((s, seg) => s + seg.pct, 0);
+  const total = segments.reduce((s, seg) => s + seg.pct, 0) || 1;
   return (
     <div style={{ position:'relative', width:size, height:size }}>
       <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
@@ -111,15 +98,107 @@ const DonutChart = ({ segments, size=110, stroke=16, centerLabel, centerSub }) =
 };
 
 // ════════════════════════════════════════════════════════════
+//  STAFF FORM MODAL — top-level component (NOT declared inside
+//  Staff()). Keeping it here means React sees the same component
+//  type across re-renders while typing, so inputs keep focus.
+// ════════════════════════════════════════════════════════════
+const FieldError = ({ msg }) =>
+  msg ? <div style={{ color:'#dc2626', fontSize:11, marginTop:4 }}>{msg}</div> : null;
+
+const StaffFormModal = ({ title, form, onChange, onSave, onClose, submitting, errors = {} }) => (
+  <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-box" onClick={e=>e.stopPropagation()}>
+      <div className="modal-header"><h3>{title}</h3><button className="modal-close" onClick={onClose}>×</button></div>
+      <div className="modal-body">
+        <div className="modal-grid">
+          <div className="form-group full">
+            <label className="form-label">Full Name *</label>
+            <input className="form-input" name="name" value={form.name} onChange={onChange} placeholder="Enter full name" required
+              style={errors.name ? { borderColor:'#dc2626' } : undefined}/>
+            <FieldError msg={errors.name}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Department *</label>
+            <select className="form-select" name="dept" value={form.dept} onChange={onChange} required
+              style={errors.dept ? { borderColor:'#dc2626' } : undefined}>
+              <option value="" disabled>Select Department</option>
+              {DEPARTMENTS.map(d=><option key={d}>{d}</option>)}
+            </select>
+            <FieldError msg={errors.dept}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Designation *</label>
+            <select className="form-select" name="designation" value={form.designation} onChange={onChange} required
+              style={errors.designation ? { borderColor:'#dc2626' } : undefined}>
+              <option value="" disabled>Select Designation</option>
+              {DESIGNATIONS.map(d=><option key={d}>{d}</option>)}
+            </select>
+            <FieldError msg={errors.designation}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Phone Number *</label>
+            <input className="form-input" name="phone" value={form.phone} onChange={onChange} placeholder="+91 00000 00000" required
+              style={errors.phone ? { borderColor:'#dc2626' } : undefined}/>
+            <FieldError msg={errors.phone}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Email Address *</label>
+            <input className="form-input" name="email" value={form.email} onChange={onChange} placeholder="staff@hotel.com" required
+              style={errors.email ? { borderColor:'#dc2626' } : undefined}/>
+            <FieldError msg={errors.email}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Monthly Salary *</label>
+            <input className="form-input" name="salary" value={form.salary} onChange={onChange} placeholder="e.g. 25000" required
+              style={errors.salary ? { borderColor:'#dc2626' } : undefined}/>
+            <FieldError msg={errors.salary}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Join Date *</label>
+            <input className="form-input" type="date" name="joinDate" value={form.joinDate} onChange={onChange} required
+              style={errors.joinDate ? { borderColor:'#dc2626' } : undefined}/>
+            <FieldError msg={errors.joinDate}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Emergency Contact *</label>
+            <input className="form-input" name="emergencyContact" value={form.emergencyContact} onChange={onChange} placeholder="+91 00000 00000" required
+              style={errors.emergencyContact ? { borderColor:'#dc2626' } : undefined}/>
+            <FieldError msg={errors.emergencyContact}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Status *</label>
+            <select className="form-select" name="status" value={form.status} onChange={onChange} required
+              style={errors.status ? { borderColor:'#dc2626' } : undefined}>
+              <option value="" disabled>Select Status</option>
+              <option>Active</option><option>On Leave</option><option>Inactive</option>
+            </select>
+            <FieldError msg={errors.status}/>
+          </div>
+        </div>
+      </div>
+      <div className="modal-footer">
+        <button className="btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
+        <button className="btn-save" onClick={onSave} disabled={submitting}>
+          {submitting ? 'Saving...' : 'Save Staff'}
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+// ════════════════════════════════════════════════════════════
 //  COMPONENT
 // ════════════════════════════════════════════════════════════
 function Staff() {
-  const [staff, setStaff]             = useState(INITIAL_STAFF);
+  const [staff, setStaff]             = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [loadError, setLoadError]     = useState('');
   const [search, setSearch]           = useState('');
   const [filterDept, setFilterDept]   = useState('All Departments');
   const [filterDesig, setFilterDesig] = useState('All Designations');
   const [filterStatus, setFilterStatus] = useState('All Status');
   const [page, setPage]               = useState(1);
+  const [submitting, setSubmitting]   = useState(false);
 
   // Modals
   const [showAdd, setShowAdd]     = useState(false);
@@ -128,86 +207,151 @@ function Staff() {
   const [showDel, setShowDel]     = useState(false);
   const [selected, setSelected]   = useState(null);
   const [form, setForm]           = useState(EMPTY_FORM);
+  const [formErrors, setFormErrors] = useState({});
+
+  // ── Fetch staff from backend ──
+  const fetchStaff = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const res = await axios.get(API_BASE);
+      setStaff(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error(err);
+      setLoadError('Could not load staff. Is the backend running?');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchStaff(); }, [fetchStaff]);
 
   // ── Filter ──
   const filtered = staff.filter(s => {
-    const ms  = s.name.toLowerCase().includes(search.toLowerCase()) || s.id.toLowerCase().includes(search.toLowerCase()) || s.phone.includes(search);
+    const q = search.toLowerCase();
+    const ms  = (s.name||'').toLowerCase().includes(q)
+      || (s.staffId||'').toLowerCase().includes(q)
+      || (s.phone||'').includes(search)
+      || (s.dept||'').toLowerCase().includes(q)
+      || (s.designation||'').toLowerCase().includes(q)
+      || (s.email||'').toLowerCase().includes(q);
     const md  = filterDept   === 'All Departments'  || s.dept        === filterDept;
     const mde = filterDesig  === 'All Designations' || s.designation === filterDesig;
     const mst = filterStatus === 'All Status'        || s.status     === filterStatus;
     return ms && md && mde && mst;
   });
 
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paginated  = filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
 
+  // ════════════════════════════════════════════════════════
+  //  LIVE STATISTICS — all derived from the real `staff` array,
+  //  so every card recalculates the moment staff is added,
+  //  edited, or deleted.
+  // ════════════════════════════════════════════════════════
+  const stats = useMemo(() => {
+    const totalStaff = staff.length;
+    const totalDepartments = new Set(staff.map(s => s.dept).filter(Boolean)).size;
+    const onLeave = staff.filter(s => s.status === 'On Leave').length;
+    const inactive = staff.filter(s => s.status === 'Inactive').length;
+    const active = staff.filter(s => s.status === 'Active').length;
+    const grossSalary = staff.reduce((sum, s) => sum + parseSalary(s.salary), 0);
+
+    const deptCounts = DEPARTMENTS.map(dept => ({
+      dept,
+      count: staff.filter(s => s.dept === dept).length,
+    }));
+    const otherCount = staff.filter(s => !DEPARTMENTS.includes(s.dept)).length;
+    if (otherCount > 0) deptCounts.push({ dept: 'Others', count: otherCount });
+
+    const salaryByDept = DEPARTMENTS
+      .map(dept => ({
+        dept,
+        total: staff.filter(s => s.dept === dept).reduce((sum, s) => sum + parseSalary(s.salary), 0),
+      }))
+      .filter(d => d.total > 0);
+
+    const recentlyJoined = [...staff]
+      .filter(s => s.joinDate)
+      .sort((a, b) => new Date(b.joinDate) - new Date(a.joinDate))
+      .slice(0, 5);
+
+    return { totalStaff, totalDepartments, onLeave, inactive, active, grossSalary, deptCounts, salaryByDept, recentlyJoined };
+  }, [staff]);
+
+  const maxDept = Math.max(1, ...stats.deptCounts.map(d => d.count));
+  const maxSalaryDept = Math.max(1, ...stats.salaryByDept.map(d => d.total));
+
   // ── Handlers ──
-  const openAdd  = () => { setForm(EMPTY_FORM); setShowAdd(true); };
-  const openEdit = (s) => { setSelected(s); setForm({ name:s.name, dept:s.dept, designation:s.designation, phone:s.phone, email:s.email, salary:s.salary, joinDate:s.joinDate, status:s.status }); setShowEdit(true); };
+  const openAdd  = () => { setForm(EMPTY_FORM); setFormErrors({}); setShowAdd(true); };
+  const openEdit = (s) => {
+    setSelected(s);
+    setForm({ name:s.name, dept:s.dept, designation:s.designation, phone:s.phone, email:s.email, salary:s.salary, joinDate:s.joinDate ? s.joinDate.slice(0,10) : '', emergencyContact:s.emergencyContact || '', status:s.status });
+    setFormErrors({});
+    setShowEdit(true);
+  };
   const openView = (s) => { setSelected(s); setShowView(true); };
   const openDel  = (s) => { setSelected(s); setShowDel(true); };
 
-  const handleAdd  = () => { const ns = { ...form, id:`STF-${1009+staff.length}` }; setStaff(prev=>[ns,...prev]); setShowAdd(false); };
-  const handleEdit = () => { setStaff(prev=>prev.map(s=>s.id===selected.id?{...s,...form}:s)); setShowEdit(false); };
-  const handleDel  = () => { setStaff(prev=>prev.filter(s=>s.id!==selected.id)); setShowDel(false); };
-  const handleFormChange = (e) => { const{name,value}=e.target; setForm(prev=>({...prev,[name]:value})); };
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+    setFormErrors(prev => (prev[name] ? { ...prev, [name]: undefined } : prev));
+  };
 
-  // ── Staff Form Modal ──
-  const StaffFormModal = ({ title, onSave, onClose }) => (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e=>e.stopPropagation()}>
-        <div className="modal-header"><h3>{title}</h3><button className="modal-close" onClick={onClose}>×</button></div>
-        <div className="modal-body">
-          <div className="modal-grid">
-            <div className="form-group full">
-              <label className="form-label">Full Name</label>
-              <input className="form-input" name="name" value={form.name} onChange={handleFormChange} placeholder="Enter full name"/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Department</label>
-              <select className="form-select" name="dept" value={form.dept} onChange={handleFormChange}>
-                {DEPARTMENTS.map(d=><option key={d}>{d}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Designation</label>
-              <select className="form-select" name="designation" value={form.designation} onChange={handleFormChange}>
-                {DESIGNATIONS.map(d=><option key={d}>{d}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Phone Number</label>
-              <input className="form-input" name="phone" value={form.phone} onChange={handleFormChange} placeholder="+91 00000 00000"/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Email Address</label>
-              <input className="form-input" name="email" value={form.email} onChange={handleFormChange} placeholder="staff@hotel.com"/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Monthly Salary</label>
-              <input className="form-input" name="salary" value={form.salary} onChange={handleFormChange} placeholder="e.g. ₹ 25,000"/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Join Date</label>
-              <input className="form-input" type="date" name="joinDate" value={form.joinDate} onChange={handleFormChange}/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <select className="form-select" name="status" value={form.status} onChange={handleFormChange}>
-                <option>Active</option><option>On Leave</option><option>Inactive</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn-save" onClick={onSave}>Save Staff</button>
-        </div>
-      </div>
-    </div>
-  );
+  const handleAdd = async () => {
+    if (submitting) return;
+    const errs = validateStaffForm(form);
+    if (Object.keys(errs).length > 0) { setFormErrors(errs); return; }
+    setSubmitting(true);
+    try {
+      await axios.post(API_BASE, form);
+      await fetchStaff();
+      setShowAdd(false);
+      setForm(EMPTY_FORM);
+      setFormErrors({});
+    } catch (err) {
+      console.error(err);
+      alert('Failed to add staff. Please check the details and try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-  const maxDept = Math.max(...DEPT_COUNTS.map(d=>d.count));
+  const handleEdit = async () => {
+    if (submitting || !selected) return;
+    const errs = validateStaffForm(form);
+    if (Object.keys(errs).length > 0) { setFormErrors(errs); return; }
+    setSubmitting(true);
+    try {
+      await axios.put(`${API_BASE}/${selected.id}`, form);
+      await fetchStaff();
+      setShowEdit(false);
+      setSelected(null);
+      setFormErrors({});
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update staff. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDel = async () => {
+    if (submitting || !selected) return;
+    setSubmitting(true);
+    try {
+      await axios.delete(`${API_BASE}/${selected.id}`);
+      await fetchStaff();
+      setShowDel(false);
+      setSelected(null);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete staff. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // ════════════════════════════════════════════════════════════
   //  RENDER
@@ -229,23 +373,29 @@ function Staff() {
         </div>
       </div>
 
-      {/* ── Stat Cards ── */}
+      {loadError && (
+        <div style={{ background:'#fef2f2', color:'#b91c1c', padding:'10px 16px', borderRadius:8, marginBottom:16, fontSize:13 }}>
+          {loadError}
+        </div>
+      )}
+
+      {/* ── Stat Cards (all live, derived from real staff data) ── */}
       <div className="staff-stats">
         <div className="sstat-card">
           <div className="sstat-icon blue"><IcoUsers/></div>
-          <div><div className="sstat-label">Total Staff</div><div className="sstat-value">{staff.length}</div><div className="sstat-sub">↑ 6.2% from last month</div></div>
+          <div><div className="sstat-label">Total Staff</div><div className="sstat-value">{stats.totalStaff}</div><div className="sstat-sub">All registered staff</div></div>
         </div>
         <div className="sstat-card">
           <div className="sstat-icon green"><IcoDept/></div>
-          <div><div className="sstat-label">Departments</div><div className="sstat-value">8</div><div className="sstat-sub">Active Departments</div></div>
+          <div><div className="sstat-label">Total Departments</div><div className="sstat-value">{stats.totalDepartments}</div><div className="sstat-sub">Currently staffed</div></div>
         </div>
         <div className="sstat-card">
           <div className="sstat-icon orange"><IcoLeave/></div>
-          <div><div className="sstat-label">On Leave Today</div><div className="sstat-value">{staff.filter(s=>s.status==='On Leave').length}</div><div className="sstat-sub">8.1% of total staff</div></div>
+          <div><div className="sstat-label">On Leave</div><div className="sstat-value">{stats.onLeave}</div><div className="sstat-sub">{stats.totalStaff ? ((stats.onLeave/stats.totalStaff)*100).toFixed(1) : '0.0'}% of total staff</div></div>
         </div>
         <div className="sstat-card">
-          <div className="sstat-icon purple"><IcoPayroll/></div>
-          <div><div className="sstat-label">Monthly Payroll</div><div className="sstat-value" style={{fontSize:16}}>₹ 18,75,000</div><div className="sstat-sub gold">↑ 12.4% from last month</div></div>
+          <div className="sstat-icon purple"><IcoWarn/></div>
+          <div><div className="sstat-label">Inactive</div><div className="sstat-value">{stats.inactive}</div><div className="sstat-sub">{stats.totalStaff ? ((stats.inactive/stats.totalStaff)*100).toFixed(1) : '0.0'}% of total staff</div></div>
         </div>
       </div>
 
@@ -268,7 +418,6 @@ function Staff() {
               <option>All Status</option>
               <option>Active</option><option>On Leave</option><option>Inactive</option>
             </select>
-            <div style={{fontSize:12,color:'#6b7280'}}></div>
             <div style={{flex:1}}/>
             <button className="btn-filter"><IcoFilter/> Filter</button>
           </div>
@@ -289,11 +438,13 @@ function Staff() {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length===0 ? (
+                {loading ? (
+                  <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'#9ca3af'}}>Loading staff...</td></tr>
+                ) : paginated.length===0 ? (
                   <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'#9ca3af'}}>No staff found.</td></tr>
                 ) : paginated.map((s,idx)=>(
                   <tr key={s.id}>
-                    <td style={{fontWeight:600}}>{s.id}</td>
+                    <td style={{fontWeight:600}}>{s.staffId}</td>
                     <td>
                       <div className="staff-avatar-cell">
                         <div className="staff-avatar" style={{background:AVATAR_COLORS[idx%AVATAR_COLORS.length]}}>{initials(s.name)}</div>
@@ -309,6 +460,7 @@ function Staff() {
                       <div className="action-btns">
                         <button className="btn-icon btn-icon-view" title="View"   onClick={()=>openView(s)}><IcoEye/></button>
                         <button className="btn-icon btn-icon-edit" title="Edit"   onClick={()=>openEdit(s)}><IcoEdit/></button>
+                        <button className="btn-icon btn-icon-del"  title="Delete" onClick={()=>openDel(s)}><IcoTrash/></button>
                       </div>
                     </td>
                   </tr>
@@ -334,49 +486,56 @@ function Staff() {
         {/* ── RIGHT: Sidebar ── */}
         <div className="staff-sidebar">
 
-          {/* Payroll Summary */}
+          {/* Payroll Summary — derived from real salaries */}
           <div className="payroll-card">
             <div className="payroll-card-title">Payroll Summary</div>
-            {[['Total Employees','86'],['Gross Salary','₹ 18,75,000'],['Deductions','₹ 2,15,000']].map(([k,v])=>(
-              <div className="payroll-row" key={k}><span className="payroll-key">{k}</span><span className="payroll-value">{v}</span></div>
-            ))}
-            <div className="payroll-row payroll-net"><span>Net Salary Paid</span><span>₹ 16,60,000</span></div>
-            <button className="btn-process-payroll">Process Payroll</button>
+            <div className="payroll-row"><span className="payroll-key">Total Employees</span><span className="payroll-value">{stats.totalStaff}</span></div>
+            <div className="payroll-row payroll-net"><span>Total Gross Salary</span><span>{formatCurrency(stats.grossSalary)}</span></div>
+            <div style={{fontSize:11,color:'#9ca3af',marginTop:8}}>
+              Deductions and net payout require the Payroll module.
+            </div>
           </div>
 
-          {/* Attendance Overview */}
+          {/* Staff Status Overview — real Active / On Leave / Inactive split */}
           <div className="attend-card">
-            <div className="attend-card-title">Attendance Overview (May 2024)</div>
+            <div className="attend-card-title">Staff Status Overview</div>
             <div className="attend-donut-wrap">
               <DonutChart
-                segments={ATTEND_DATA.map(a=>({pct:a.count,color:a.color}))}
+                segments={[
+                  { pct: stats.active,  color: STATUS_COLORS.Active },
+                  { pct: stats.onLeave, color: STATUS_COLORS['On Leave'] },
+                  { pct: stats.inactive,color: STATUS_COLORS.Inactive },
+                ]}
                 size={110} stroke={18}
-                centerLabel="86" centerSub="Total Staff"
+                centerLabel={stats.totalStaff} centerSub="Total Staff"
               />
               <div className="attend-legend">
-                {ATTEND_DATA.map(a=>(
+                {[
+                  { label:'Active',    count:stats.active,   color:STATUS_COLORS.Active },
+                  { label:'On Leave',  count:stats.onLeave,  color:STATUS_COLORS['On Leave'] },
+                  { label:'Inactive',  count:stats.inactive, color:STATUS_COLORS.Inactive },
+                ].map(a=>(
                   <div className="attend-leg-item" key={a.label}>
                     <span className="attend-dot" style={{background:a.color}}/>
                     <span>{a.label}</span>
                     <span className="attend-leg-count">{a.count}</span>
-                    <span className="attend-leg-pct">({a.pct})</span>
+                    <span className="attend-leg-pct">({stats.totalStaff ? ((a.count/stats.totalStaff)*100).toFixed(1) : '0.0'}%)</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          </div>
-        
-          </div>
+        </div>
+      </div>
 
-      {/* ── Bottom 3-col row ── */}
+      {/* ── Bottom row ── */}
       <div className="staff-bottom">
 
-        {/* Department wise staff bar chart */}
+        {/* Department wise staff bar chart — real counts */}
         <div className="dept-chart-card">
           <div className="dept-chart-title">Department Wise Staff</div>
-          {DEPT_COUNTS.map(d=>(
+          {stats.deptCounts.map(d=>(
             <div className="dept-bar-item" key={d.dept}>
               <span className="dept-bar-label">{d.dept}</span>
               <div className="dept-bar-track">
@@ -387,43 +546,35 @@ function Staff() {
           ))}
         </div>
 
-        {/* Payroll components donut */}
-        <div className="paycomp-card">
-          <div className="paycomp-title">Payroll Components (May 2024)</div>
-          <div className="paycomp-wrap">
-            <div className="paycomp-donut">
-              <DonutChart
-                segments={PAYCOMP.map(p=>({pct:p.pct,color:p.color}))}
-                size={110} stroke={18}
-                centerLabel="₹18,75k" centerSub="Total Payroll"
-              />
+        {/* Salary distribution by department — real, derived from salary field */}
+        <div className="dept-chart-card">
+          <div className="dept-chart-title">Salary Distribution by Department</div>
+          {stats.salaryByDept.length === 0 ? (
+            <div style={{color:'#9ca3af',fontSize:13,padding:'12px 0'}}>No salary data yet.</div>
+          ) : stats.salaryByDept.map(d=>(
+            <div className="dept-bar-item" key={d.dept}>
+              <span className="dept-bar-label">{d.dept}</span>
+              <div className="dept-bar-track">
+                <div className="dept-bar-fill" style={{width:`${(d.total/maxSalaryDept)*100}%`}}/>
+              </div>
+              <span className="dept-bar-count">{formatCurrency(d.total)}</span>
             </div>
-            <div className="paycomp-legend">
-              {PAYCOMP.map(p=>(
-                <div className="paycomp-leg-item" key={p.label}>
-                  <span className="paycomp-dot" style={{background:p.color}}/>
-                  <span>{p.label}</span>
-                  <span className="paycomp-pct">{p.pct}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Leave Summary */}
+        {/* Recently joined staff — real, sorted by joinDate */}
         <div className="leave-card">
-          <div className="leave-title">Leave Summary (May 2024)</div>
-          {[
-            { label:'Total Leaves', count:42, icon:'📋', bg:'#eff6ff' },
-            { label:'Approved',     count:28, icon:'✅', bg:'#f0fdf4' },
-            { label:'Pending',      count:10, icon:'⏳', bg:'#fffbeb' },
-            { label:'Rejected',     count:4,  icon:'❌', bg:'#fef2f2' },
-          ].map(l=>(
-            <div className="leave-item" key={l.label}>
-              <div className="leave-icon-wrap" style={{background:l.bg}}>{l.icon}</div>
+          <div className="leave-title">Recently Joined Staff</div>
+          {stats.recentlyJoined.length === 0 ? (
+            <div style={{color:'#9ca3af',fontSize:13,padding:'12px 0'}}>No join dates recorded yet.</div>
+          ) : stats.recentlyJoined.map(s=>(
+            <div className="leave-item" key={s.id}>
+              <div className="leave-icon-wrap" style={{background:'#eff6ff'}}>
+                <span style={{fontSize:12,fontWeight:700,color:'#3b82f6'}}>{initials(s.name)}</span>
+              </div>
               <div className="leave-info">
-                <div className="leave-label">{l.label}</div>
-                <div className="leave-count">{l.count}</div>
+                <div className="leave-label">{s.name}</div>
+                <div className="leave-count" style={{fontSize:12,fontWeight:500,color:'#6b7280'}}>{s.dept} · {s.joinDate ? s.joinDate.slice(0,10) : '—'}</div>
               </div>
             </div>
           ))}
@@ -431,16 +582,36 @@ function Staff() {
       </div>
 
       {/* ══════════ MODALS ══════════ */}
-      {showAdd  && <StaffFormModal title="Add New Staff" onSave={handleAdd}  onClose={()=>setShowAdd(false)}/>}
-      {showEdit && <StaffFormModal title="Edit Staff"      onSave={handleEdit} onClose={()=>setShowEdit(false)}/>}
+      {showAdd && (
+        <StaffFormModal
+          title="Add New Staff"
+          form={form}
+          onChange={handleFormChange}
+          onSave={handleAdd}
+          onClose={()=>setShowAdd(false)}
+          submitting={submitting}
+          errors={formErrors}
+        />
+      )}
+      {showEdit && (
+        <StaffFormModal
+          title="Edit Staff"
+          form={form}
+          onChange={handleFormChange}
+          onSave={handleEdit}
+          onClose={()=>setShowEdit(false)}
+          submitting={submitting}
+          errors={formErrors}
+        />
+      )}
 
       {/* View Modal */}
       {showView && selected && (
         <div className="modal-overlay" onClick={()=>setShowView(false)}>
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
-            <div className="modal-header"><h3>Staff Details — {selected.id}</h3><button className="modal-close" onClick={()=>setShowView(false)}>×</button></div>
+            <div className="modal-header"><h3>Staff Details — {selected.staffId}</h3><button className="modal-close" onClick={()=>setShowView(false)}>×</button></div>
             <div className="modal-body">
-              {[['Staff ID',selected.id],['Full Name',selected.name],['Department',selected.dept],['Designation',selected.designation],['Phone',selected.phone],['Email',selected.email],['Monthly Salary',selected.salary],['Join Date',selected.joinDate],['Status',selected.status]].map(([k,v])=>(
+              {[['Staff ID',selected.staffId],['Full Name',selected.name],['Department',selected.dept],['Designation',selected.designation],['Phone',selected.phone],['Email',selected.email],['Monthly Salary',formatCurrency(parseSalary(selected.salary))],['Join Date',selected.joinDate ? selected.joinDate.slice(0,10) : '—'],['Emergency Contact',selected.emergencyContact || '—'],['Status',selected.status]].map(([k,v])=>(
                 <div className="detail-row" key={k}><span className="detail-key">{k}</span><span className="detail-value">{v}</span></div>
               ))}
             </div>
@@ -460,8 +631,8 @@ function Staff() {
               <p>This staff member will be permanently removed. This action cannot be undone.</p>
             </div>
             <div className="modal-footer">
-              <button className="btn-cancel" onClick={()=>setShowDel(false)}>Cancel</button>
-              <button className="btn-danger" onClick={handleDel}>Yes, Delete</button>
+              <button className="btn-cancel" onClick={()=>setShowDel(false)} disabled={submitting}>Cancel</button>
+              <button className="btn-danger" onClick={handleDel} disabled={submitting}>{submitting ? 'Deleting...' : 'Yes, Delete'}</button>
             </div>
           </div>
         </div>
