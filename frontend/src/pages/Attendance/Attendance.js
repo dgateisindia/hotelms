@@ -5,9 +5,24 @@
 //            donut, Top performers, Alerts
 //  Icons  → ../../utils/icons/AttendanceIcons.js
 //  Styles → ../../styles/Attendance.css
+//
+//  Backend contract (matches the `attendance` table):
+//    attendance_id INT PK, staff_id INT FK -> staff.staff_id,
+//    attendance_date DATE, check_in_time TIME, check_out_time TIME,
+//    status ENUM('present','absent','half_day','leave')
+//
+//  GET  /api/attendance?date=YYYY-MM-DD
+//    -> [{ staff_id, staffCode, name, dept, check_in_time, check_out_time, status }]
+//    (controller should JOIN staff to include staffCode/name/dept —
+//     attendance table alone doesn't carry those)
+//
+//  PUT  /api/attendance/:staff_id
+//    body: { attendance_date, check_in_time, check_out_time, status }
+//    (status must be one of the 4 enum values, lowercase)
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import axios from 'axios';
 import '../../styles/Attendance.css';
 import {
   IcoFilter, IcoSearch, IcoExport, IcoEye, IcoEdit,
@@ -16,87 +31,76 @@ import {
   IcoStar, IcoAlert,
 } from '../../utils/icons/AttendanceIcons';
 
-// ── Constants ─────────────────────────────────────────────────
+// ── Config ────────────────────────────────────────────────────
+const API_BASE        = 'http://localhost:5000/api/attendance';
+const LEAVE_API       = 'http://localhost:5000/api/leave-requests';
+const BIRTHDAY_API    = 'http://localhost:5000/api/staff/birthdays';
+const PERFORMANCE_API = 'http://localhost:5000/api/performance/top';
+
+// ── Constants (form options / display config only — NOT data) ──
 const AVATAR_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#6366f1'];
-const initials = (name) => name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-const DEPARTMENTS = ['Front Office','Housekeeping','F&B Service','Maintenance','Security','Accounts'];
+const DEPARTMENTS   = ['Front Office','Housekeeping','F&B Service','Maintenance','Security','Accounts'];
 
-// ── Sample Data ───────────────────────────────────────────────
-const INITIAL_ATTENDANCE = [
-  { id:'STF-1001', name:'Rahul Verma',  dept:'Front Office',  checkIn:'08:58 AM', checkOut:'05:12 PM', hours:'8h 14m', status:'Present' },
-  { id:'STF-1002', name:'Priya Sharma', dept:'Housekeeping',  checkIn:'09:05 AM', checkOut:'05:18 PM', hours:'8h 13m', status:'Present' },
-  { id:'STF-1003', name:'Amit Singh',   dept:'F&B Service',   checkIn:'09:00 AM', checkOut:'05:07 PM', hours:'8h 07m', status:'Present' },
-  { id:'STF-1004', name:'Neha Patel',   dept:'Front Office',  checkIn:'09:02 AM', checkOut:'02:15 PM', hours:'5h 13m', status:'Half Day' },
-  { id:'STF-1005', name:'Vikram Das',   dept:'Maintenance',   checkIn:'-',        checkOut:'-',        hours:'-',      status:'On Leave' },
-  { id:'STF-1006', name:'Sunita Devi',  dept:'Housekeeping',  checkIn:'-',        checkOut:'-',        hours:'-',      status:'On Leave' },
-  { id:'STF-1007', name:'Rohit Kumar',  dept:'Security',      checkIn:'09:10 AM', checkOut:'05:20 PM', hours:'8h 10m', status:'Present' },
-  { id:'STF-1008', name:'Meera Kapoor', dept:'Accounts',      checkIn:'09:00 AM', checkOut:'05:05 PM', hours:'8h 05m', status:'Present' },
-];
+// DB enum <-> display label. The `status` column only supports these 4 values —
+// there is no "Late" state in the schema, so it has been removed from the UI.
+const STATUS_LABEL = { present:'Present', absent:'Absent', half_day:'Half Day', leave:'On Leave' };
+const STATUS_ENUM  = { Present:'present', Absent:'absent', 'Half Day':'half_day', 'On Leave':'leave' };
+const STATUS_COLORS = { Present:'#10b981', Absent:'#ef4444', 'On Leave':'#f59e0b', 'Half Day':'#3b82f6' };
 
-const ATTEND_SUMMARY = [
-  { label:'Present',  count:64, pct:'74.4%', color:'#10b981' },
-  { label:'Absent',   count:12, pct:'14.0%', color:'#ef4444' },
-  { label:'On Leave', count:7,  pct:'8.1%',  color:'#f59e0b' },
-  { label:'Half Day', count:3,  pct:'3.5%',  color:'#3b82f6' },
-];
-
-const LEAVE_REQUESTS = [
-  { name:'Vikram Das',  dept:'Maintenance',  type:'Annual Leave', dates:'23 - 26 May 2024', status:'Pending',  color:'#8b5cf6' },
-  { name:'Sunita Devi', dept:'Housekeeping', type:'Sick Leave',   dates:'22 May 2024',       status:'Approved', color:'#10b981' },
-  { name:'Rohit Kumar', dept:'Security',     type:'Casual Leave', dates:'24 May 2024',       status:'Pending',  color:'#f97316' },
-];
-
-const BIRTHDAYS = [
-  { name:'Priya Sharma', dept:'Housekeeping', date:'24 May' },
-  { name:'Amit Singh',   dept:'F&B Service',  date:'27 May' },
-  { name:'Neha Patel',   dept:'Front Office', date:'30 May' },
-];
-
-const ALERTS = [
-  { text:'12 staff members are absent today', color:'red' },
-  { text:'3 leave requests are pending approval', color:'orange' },
-  { text:'2 staff members have late check-in', color:'blue' },
-];
-
-const DEPT_PRESENT = [
-  { dept:'Front Office', present:14, total:18 },
-  { dept:'Housekeeping', present:18, total:23 },
-  { dept:'F&B Service',  present:12, total:15 },
-  { dept:'Maintenance',  present:6,  total:10 },
-  { dept:'Security',     present:8,  total:9  },
-  { dept:'Accounts',     present:6,  total:6  },
-];
-
-const PERFORMANCE = [
-  { label:'Excellent',       pct:22, color:'#10b981' },
-  { label:'Good',            pct:38, color:'#3b82f6' },
-  { label:'Average',         pct:30, color:'#f59e0b' },
-  { label:'Needs Improvement', pct:9, color:'#ef4444' },
-];
-
-const TOP_PERFORMERS = [
-  { rank:1, name:'Rahul Verma',  dept:'Front Office', score:4.8 },
-  { rank:2, name:'Priya Sharma', dept:'Housekeeping', score:4.7 },
-  { rank:3, name:'Amit Singh',   dept:'F&B Service',  score:4.6 },
-];
-
-const TABS = ['Daily Summary','Weekly Summary','Monthly Summary','Attendance Exceptions'];
+const TABS     = ['Daily Summary','Weekly Summary','Monthly Summary','Attendance Exceptions'];
 const PER_PAGE = 8;
 
 // ── Helpers ───────────────────────────────────────────────────
-const statusClass = (s) => {
-  const m = { 'Present':'badge-present','Absent':'badge-absent','On Leave':'badge-onleave','Half Day':'badge-halfday','Late':'badge-late' };
-  return `badge ${m[s]||''}`;
+const initials = (name='') => name.split(' ').filter(Boolean).map(n=>n[0]).join('').slice(0,2).toUpperCase();
+
+const statusClass = (label) => {
+  const m = { 'Present':'badge-present','Absent':'badge-absent','On Leave':'badge-onleave','Half Day':'badge-halfday' };
+  return `badge ${m[label]||''}`;
 };
 const leaveBadgeClass = (s) => {
   const m = { 'Pending':'lr-pending','Approved':'lr-approved','Rejected':'lr-rejected' };
   return `lr-badge ${m[s]||''}`;
 };
 
+// TIME column comes back as "HH:MM:SS" (or null). Display as "09:00 AM".
+const formatTime = (t) => {
+  if (!t) return '-';
+  const [hStr, mStr] = t.split(':');
+  let h = parseInt(hStr, 10);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${String(h).padStart(2,'0')}:${mStr} ${suffix}`;
+};
+// For <input type="time">, which needs "HH:MM".
+const toTimeInputValue = (t) => (t ? t.slice(0,5) : '');
+
+const timeToMinutes = (t) => {
+  if (!t) return null;
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+};
+const minutesToHoursLabel = (mins) => {
+  if (mins == null || mins <= 0) return '-';
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return `${h}h ${String(m).padStart(2,'0')}m`;
+};
+// Working hours are computed client-side from check_in_time/check_out_time —
+// the schema has no stored "hours" column.
+const workedMinutes = (checkIn, checkOut) => {
+  const inM = timeToMinutes(checkIn);
+  const outM = timeToMinutes(checkOut);
+  if (inM == null || outM == null) return 0;
+  return Math.max(0, outM - inM);
+};
+
+const todayISO = () => new Date().toISOString().slice(0,10);
+const formatDateLabel = (iso) => new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+
 // ── Donut Chart Helper ───────────────────────────────────────
 const DonutChart = ({ segments, size=110, stroke=18, centerLabel, centerSub }) => {
   const R=((size-stroke)/2), CX=size/2, circ=2*Math.PI*R;
-  const total=segments.reduce((s,sg)=>s+sg.pct,0);
+  const total=segments.reduce((s,sg)=>s+sg.pct,0) || 1;
   let offset=0;
   return (
     <div style={{position:'relative',width:size,height:size,flexShrink:0}}>
@@ -122,48 +126,218 @@ const DonutChart = ({ segments, size=110, stroke=18, centerLabel, centerSub }) =
 //  COMPONENT
 // ════════════════════════════════════════════════════════════
 function Attendance() {
-  const [attendance, setAttendance]   = useState(INITIAL_ATTENDANCE);
+  // ── Core attendance data (from backend, raw DB shape) ──
+  const [attendance, setAttendance]   = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [loadError, setLoadError]     = useState('');
+  // Lazy initializer: evaluated once per mount, so a fresh login/page load
+  // always starts on the real current date rather than a stale closure.
+  const [date, setDate]               = useState(() => todayISO());
+  // Tracks whether the user manually picked a date, so the midnight
+  // auto-advance below never overrides an explicit choice.
+  const userPickedDateRef             = useRef(false);
+
+  // ── Sidebar / bottom-row data (separate backend modules) ──
+  const [leaveRequests, setLeaveRequests]       = useState([]);
+  const [leaveError, setLeaveError]             = useState(false);
+  const [birthdays, setBirthdays]               = useState([]);
+  const [birthdayError, setBirthdayError]       = useState(false);
+  const [topPerformers, setTopPerformers]       = useState([]);
+  const [performanceError, setPerformanceError] = useState(false);
+
   const [activeTab, setActiveTab]     = useState('Daily Summary');
   const [search, setSearch]           = useState('');
   const [filterDept, setFilterDept]   = useState('All Departments');
   const [page, setPage]               = useState(1);
+  const [submitting, setSubmitting]   = useState(false);
+
   const [showEdit, setShowEdit]       = useState(false);
   const [showView, setShowView]       = useState(false);
   const [selected, setSelected]       = useState(null);
-  const [form, setForm]               = useState({ checkIn:'', checkOut:'', status:'Present' });
+  const [form, setForm]               = useState({ check_in_time:'', check_out_time:'', status:'Present' });
 
-  // ── Filter ──
+  // ── Fetch attendance for the selected date ──
+  const fetchAttendance = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const res = await axios.get(API_BASE, { params: { date } });
+      const rows = Array.isArray(res.data) ? res.data : [];
+      // Normalize once here so the rest of the component works with a
+      // consistent shape regardless of exact backend key casing.
+      const normalized = rows.map(r => ({
+        staff_id: r.staff_id,
+        staffCode: r.staffCode || r.staff_code || `STF-${r.staff_id}`,
+        name: r.name,
+        dept: r.dept,
+        check_in_time: r.check_in_time,
+        check_out_time: r.check_out_time,
+        status: STATUS_LABEL[r.status] || r.status,
+      }));
+      setAttendance(normalized);
+    } catch (err) {
+      console.error(err);
+      setAttendance([]);
+      setLoadError('Could not load attendance. Is the backend running?');
+    } finally {
+      setLoading(false);
+    }
+  }, [date]);
+
+  useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
+
+  // If this tab is left open across midnight, roll the date field forward
+  // to the new "today" automatically — but only while the user hasn't
+  // manually picked a specific date to look at.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (userPickedDateRef.current) return;
+      const currentToday = todayISO();
+      setDate(prev => (prev !== currentToday ? currentToday : prev));
+    }, 60 * 1000); // check once a minute
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Fetch supporting sidebar data (each fails independently/silently) ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await axios.get(LEAVE_API, { params: { limit: 5 } });
+        setLeaveRequests(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error(err);
+        setLeaveError(true);
+      }
+    })();
+    (async () => {
+      try {
+        const res = await axios.get(BIRTHDAY_API, { params: { upcoming: 5 } });
+        setBirthdays(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error(err);
+        setBirthdayError(true);
+      }
+    })();
+    (async () => {
+      try {
+        const res = await axios.get(PERFORMANCE_API, { params: { limit: 3 } });
+        setTopPerformers(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error(err);
+        setPerformanceError(true);
+      }
+    })();
+  }, []);
+
+  // ── Filter (table) ──
   const filtered = attendance.filter(a => {
-    const ms = a.name.toLowerCase().includes(search.toLowerCase()) || a.id.toLowerCase().includes(search.toLowerCase());
+    const ms = (a.name||'').toLowerCase().includes(search.toLowerCase()) || (a.staffCode||'').toLowerCase().includes(search.toLowerCase());
     const md = filterDept === 'All Departments' || a.dept === filterDept;
     return ms && md;
   });
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paginated  = filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
+
+  // ════════════════════════════════════════════════════════
+  //  LIVE STATISTICS — derived from the real `attendance` rows.
+  // ════════════════════════════════════════════════════════
+  const stats = useMemo(() => {
+    const totalStaff = attendance.length;
+    const present     = attendance.filter(a => a.status === 'Present').length;
+    const onLeave     = attendance.filter(a => a.status === 'On Leave').length;
+    const absent      = attendance.filter(a => a.status === 'Absent').length;
+    const halfDay     = attendance.filter(a => a.status === 'Half Day').length;
+
+    const workingMinutesList = attendance
+      .filter(a => a.status === 'Present' || a.status === 'Half Day')
+      .map(a => workedMinutes(a.check_in_time, a.check_out_time))
+      .filter(m => m > 0);
+    const avgMinutes = workingMinutesList.length
+      ? workingMinutesList.reduce((s,m)=>s+m,0) / workingMinutesList.length
+      : 0;
+
+    const pct = (n) => totalStaff ? ((n/totalStaff)*100).toFixed(1) : '0.0';
+
+    const summary = [
+      { label:'Present',  count:present, pct:`${pct(present)}%`, color:STATUS_COLORS.Present },
+      { label:'Absent',   count:absent,  pct:`${pct(absent)}%`,  color:STATUS_COLORS.Absent },
+      { label:'On Leave', count:onLeave, pct:`${pct(onLeave)}%`, color:STATUS_COLORS['On Leave'] },
+      { label:'Half Day', count:halfDay, pct:`${pct(halfDay)}%`, color:STATUS_COLORS['Half Day'] },
+    ];
+
+    const deptPresent = DEPARTMENTS.map(dept => {
+      const deptRecords = attendance.filter(a => a.dept === dept);
+      const deptPresentCount = deptRecords.filter(a => a.status === 'Present' || a.status === 'Half Day').length;
+      return { dept, present: deptPresentCount, total: deptRecords.length };
+    }).filter(d => d.total > 0);
+
+    return { totalStaff, present, onLeave, absent, halfDay, avgMinutes, summary, deptPresent };
+  }, [attendance]);
+
+  const maxDept = Math.max(1, ...stats.deptPresent.map(d => d.total));
+
+  // Alerts derived from real stats/leave data — no "late check-in" alert
+  // since the status enum has no "late" value to detect it from.
+  const alerts = useMemo(() => {
+    const list = [];
+    if (stats.absent > 0) list.push({ text:`${stats.absent} staff member${stats.absent>1?'s are':' is'} absent today`, color:'red' });
+    const pendingLeave = leaveRequests.filter(lr => lr.status === 'Pending').length;
+    if (pendingLeave > 0) list.push({ text:`${pendingLeave} leave request${pendingLeave>1?'s are':' is'} pending approval`, color:'orange' });
+    return list;
+  }, [stats, leaveRequests]);
 
   // ── Handlers ──
   const openView = (a) => { setSelected(a); setShowView(true); };
-  const openEdit = (a) => { setSelected(a); setForm({ checkIn:a.checkIn, checkOut:a.checkOut, status:a.status }); setShowEdit(true); };
-  const handleEdit = () => {
-    setAttendance(prev => prev.map(a => a.id===selected.id ? { ...a, ...form } : a));
-    setShowEdit(false);
+  const openEdit = (a) => {
+    setSelected(a);
+    setForm({
+      check_in_time: toTimeInputValue(a.check_in_time),
+      check_out_time: toTimeInputValue(a.check_out_time),
+      status: a.status,
+    });
+    setShowEdit(true);
   };
   const handleFormChange = (e) => { const{name,value}=e.target; setForm(prev=>({...prev,[name]:value})); };
 
-// ── Export handler ──
-const handleExport = () => {
-  const headers = ['Staff ID','Name','Department','Check-in','Check-out','Working Hours','Status'];
-  const rows = filtered.map(a => [a.id, a.name, a.dept, a.checkIn, a.checkOut, a.hours, a.status]);
-  const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `attendance-${new Date().toISOString().slice(0,10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-};
-  const maxDept = Math.max(...DEPT_PRESENT.map(d=>d.total));
+  const handleEdit = async () => {
+    if (submitting || !selected) return;
+    setSubmitting(true);
+    try {
+      await axios.put(`${API_BASE}/${selected.staff_id}`, {
+        attendance_date: date,
+        check_in_time: form.check_in_time || null,
+        check_out_time: form.check_out_time || null,
+        status: STATUS_ENUM[form.status],
+      });
+      await fetchAttendance();
+      setShowEdit(false);
+      setSelected(null);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update attendance. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── Export handler (exports the real fetched data) ──
+  const handleExport = () => {
+    const headers = ['Staff ID','Name','Department','Check-in','Check-out','Working Hours','Status'];
+    const rows = filtered.map(a => [
+      a.staffCode, a.name, a.dept,
+      formatTime(a.check_in_time), formatTime(a.check_out_time),
+      minutesToHoursLabel(workedMinutes(a.check_in_time, a.check_out_time)),
+      a.status,
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `attendance-${date}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   // ════════════════════════════════════════════════════════════
   //  RENDER
@@ -177,7 +351,15 @@ const handleExport = () => {
           <p>Track daily attendance and working hours</p>
         </div>
         <div className="page-header-right">
-          <div className="date-badge"><IcoCalendar/> 22 May 2024</div>
+          <div className="date-badge" style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <IcoCalendar/>
+            <input
+              type="date"
+              value={date}
+              onChange={e => { userPickedDateRef.current = true; setDate(e.target.value); setPage(1); }}
+              style={{ border:'none', background:'transparent', font:'inherit', color:'inherit' }}
+            />
+          </div>
           <select className="dept-select" value={filterDept} onChange={e=>{setFilterDept(e.target.value);setPage(1);}}>
             <option>All Departments</option>
             {DEPARTMENTS.map(d=><option key={d}>{d}</option>)}
@@ -186,27 +368,33 @@ const handleExport = () => {
         </div>
       </div>
 
-      {/* ── Stat Cards ── */}
+      {loadError && (
+        <div style={{ background:'#fef2f2', color:'#b91c1c', padding:'10px 16px', borderRadius:8, marginBottom:16, fontSize:13 }}>
+          {loadError}
+        </div>
+      )}
+
+      {/* ── Stat Cards (all live, derived from fetched attendance) ── */}
       <div className="attend-stats">
         <div className="astat-card">
           <div className="astat-icon blue"><IcoUsers/></div>
-          <div><div className="astat-label">Total Staff</div><div className="astat-value">86</div><div className="astat-sub">↑ 6.2% from last month</div></div>
+          <div><div className="astat-label">Total Staff</div><div className="astat-value">{stats.totalStaff}</div><div className="astat-sub">Marked for {formatDateLabel(date)}</div></div>
         </div>
         <div className="astat-card">
           <div className="astat-icon green"><IcoPresent/></div>
-          <div><div className="astat-label">Present Today</div><div className="astat-value">64</div><div className="astat-sub">74.4% of total staff</div></div>
+          <div><div className="astat-label">Present Today</div><div className="astat-value">{stats.present}</div><div className="astat-sub">{stats.totalStaff ? ((stats.present/stats.totalStaff)*100).toFixed(1) : '0.0'}% of total staff</div></div>
         </div>
         <div className="astat-card">
           <div className="astat-icon orange"><IcoLeave/></div>
-          <div><div className="astat-label">On Leave</div><div className="astat-value">7</div><div className="astat-sub muted">8.1% of total staff</div></div>
+          <div><div className="astat-label">On Leave</div><div className="astat-value">{stats.onLeave}</div><div className="astat-sub muted">{stats.totalStaff ? ((stats.onLeave/stats.totalStaff)*100).toFixed(1) : '0.0'}% of total staff</div></div>
         </div>
         <div className="astat-card">
           <div className="astat-icon red"><IcoAbsent/></div>
-          <div><div className="astat-label">Absent Today</div><div className="astat-value">12</div><div className="astat-sub muted">14.0% of total staff</div></div>
+          <div><div className="astat-label">Absent Today</div><div className="astat-value">{stats.absent}</div><div className="astat-sub muted">{stats.totalStaff ? ((stats.absent/stats.totalStaff)*100).toFixed(1) : '0.0'}% of total staff</div></div>
         </div>
         <div className="astat-card">
           <div className="astat-icon purple"><IcoClock/></div>
-          <div><div className="astat-label">Avg Working Hours</div><div className="astat-value">8h 15m</div><div className="astat-sub muted">0.4h from last week</div></div>
+          <div><div className="astat-label">Avg Working Hours</div><div className="astat-value">{minutesToHoursLabel(stats.avgMinutes)}</div><div className="astat-sub muted">Based on present staff today</div></div>
         </div>
       </div>
 
@@ -241,11 +429,13 @@ const handleExport = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length===0 ? (
+                {loading ? (
+                  <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'#9ca3af'}}>Loading attendance...</td></tr>
+                ) : paginated.length===0 ? (
                   <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'#9ca3af'}}>No records found.</td></tr>
                 ) : paginated.map((a,idx)=>(
-                  <tr key={a.id}>
-                    <td style={{fontWeight:600}}>{a.id}</td>
+                  <tr key={a.staff_id}>
+                    <td style={{fontWeight:600}}>{a.staffCode}</td>
                     <td>
                       <div className="staff-avatar-cell">
                         <div className="staff-avatar" style={{background:AVATAR_COLORS[idx%AVATAR_COLORS.length]}}>{initials(a.name)}</div>
@@ -253,9 +443,9 @@ const handleExport = () => {
                       </div>
                     </td>
                     <td>{a.dept}</td>
-                    <td>{a.checkIn}</td>
-                    <td>{a.checkOut}</td>
-                    <td>{a.hours}</td>
+                    <td>{formatTime(a.check_in_time)}</td>
+                    <td>{formatTime(a.check_out_time)}</td>
+                    <td>{minutesToHoursLabel(workedMinutes(a.check_in_time, a.check_out_time))}</td>
                     <td><span className={statusClass(a.status)}>{a.status}</span></td>
                     <td>
                       <div className="action-btns">
@@ -286,13 +476,13 @@ const handleExport = () => {
         {/* ── RIGHT: Sidebar ── */}
         <div className="attend-sidebar">
 
-          {/* Attendance Summary */}
+          {/* Attendance Summary — real, derived from fetched attendance */}
           <div className="summary-card">
-            <div className="summary-title">Attendance Summary (May 2024)</div>
+            <div className="summary-title">Attendance Summary ({formatDateLabel(date)})</div>
             <div className="summary-donut-wrap">
-              <DonutChart segments={ATTEND_SUMMARY.map(a=>({pct:a.count,color:a.color}))} size={100} stroke={16} centerLabel="86" centerSub="Total Staff"/>
+              <DonutChart segments={stats.summary.map(a=>({pct:a.count,color:a.color}))} size={100} stroke={16} centerLabel={stats.totalStaff} centerSub="Total Staff"/>
               <div className="summary-legend">
-                {ATTEND_SUMMARY.map(a=>(
+                {stats.summary.map(a=>(
                   <div className="summary-leg-item" key={a.label}>
                     <span className="summary-dot" style={{background:a.color}}/>
                     <span>{a.label}</span>
@@ -304,15 +494,19 @@ const handleExport = () => {
             </div>
           </div>
 
-          {/* Leave Requests */}
+          {/* Leave Requests — from backend */}
           <div className="leave-req-card">
             <div className="sidebar-card-header">
               <span className="sidebar-card-title">Leave Requests</span>
               <span className="view-all-link">View All</span>
             </div>
-            {LEAVE_REQUESTS.map((lr,i)=>(
-              <div className="leave-req-item" key={i}>
-                <div className="lr-avatar" style={{background:lr.color}}>{initials(lr.name)}</div>
+            {leaveError ? (
+              <div style={{fontSize:11,color:'#9ca3af'}}>Leave Requests module unavailable.</div>
+            ) : leaveRequests.length === 0 ? (
+              <div style={{fontSize:12,color:'#9ca3af',padding:'8px 0'}}>No leave requests.</div>
+            ) : leaveRequests.map((lr,i)=>(
+              <div className="leave-req-item" key={lr.id ?? i}>
+                <div className="lr-avatar" style={{background:AVATAR_COLORS[i%AVATAR_COLORS.length]}}>{initials(lr.name)}</div>
                 <div className="lr-info">
                   <div className="lr-name">{lr.name}</div>
                   <div className="lr-dept">{lr.dept}</div>
@@ -324,13 +518,17 @@ const handleExport = () => {
             ))}
           </div>
 
-          {/* Upcoming Birthdays */}
+          {/* Upcoming Birthdays — from backend */}
           <div className="birthday-card">
             <div className="sidebar-card-header">
               <span className="sidebar-card-title">Upcoming Birthdays</span>
               <span className="view-all-link">View All</span>
             </div>
-            {BIRTHDAYS.map((b,i)=>(
+            {birthdayError ? (
+              <div style={{fontSize:11,color:'#9ca3af'}}>Birthdays module unavailable.</div>
+            ) : birthdays.length === 0 ? (
+              <div style={{fontSize:12,color:'#9ca3af',padding:'8px 0'}}>No upcoming birthdays.</div>
+            ) : birthdays.map((b,i)=>(
               <div className="birthday-item" key={i}>
                 <div className="bday-icon"><IcoBirthday/></div>
                 <div className="bday-info">
@@ -342,13 +540,15 @@ const handleExport = () => {
             ))}
           </div>
 
-          {/* Alerts */}
+          {/* Alerts — derived from real stats + leave data */}
           <div className="alerts-card">
             <div className="sidebar-card-header">
               <span className="sidebar-card-title">Alerts</span>
               <span className="view-all-link">View All Alerts</span>
             </div>
-            {ALERTS.map((a,i)=>(
+            {alerts.length === 0 ? (
+              <div style={{fontSize:12,color:'#9ca3af',padding:'8px 0'}}>No alerts today.</div>
+            ) : alerts.map((a,i)=>(
               <div className="alert-item" key={i}>
                 <span className={`alert-dot ${a.color}`}/>
                 {a.text}
@@ -361,43 +561,47 @@ const handleExport = () => {
       {/* ── Bottom 3-col ── */}
       <div className="attend-bottom">
 
-        {/* Department wise present bar chart */}
+        {/* Department wise present bar chart — real, derived from fetched attendance */}
         <div className="dept-bar-card">
           <div className="dept-bar-title">Department Wise Present</div>
-          {DEPT_PRESENT.map(d=>(
+          {stats.deptPresent.length === 0 ? (
+            <div style={{color:'#9ca3af',fontSize:13,padding:'12px 0'}}>No attendance data yet.</div>
+          ) : stats.deptPresent.map(d=>(
             <div className="dept-bar-item" key={d.dept}>
               <span className="dept-bar-label">{d.dept}</span>
               <div className="dept-bar-track">
                 <div className="dept-bar-fill" style={{width:`${(d.present/maxDept)*100}%`}}/>
               </div>
-              <span className="dept-bar-count">{d.present} ({Math.round((d.present/d.total)*100)}%)</span>
+              <span className="dept-bar-count">{d.present} ({d.total ? Math.round((d.present/d.total)*100) : 0}%)</span>
             </div>
           ))}
         </div>
 
-        {/* Performance Overview donut */}
+        {/* Performance Overview — requires the Performance module (not attendance data) */}
         <div className="perf-card">
           <div className="perf-title">Performance Overview</div>
-          <div className="perf-wrap">
-            <DonutChart segments={PERFORMANCE} size={100} stroke={16} centerLabel="86" centerSub="Total Staff"/>
-            <div className="perf-legend">
-              {PERFORMANCE.map(p=>(
-                <div className="perf-leg-item" key={p.label}>
-                  <span className="perf-dot" style={{background:p.color}}/>
-                  <span>{p.label}</span>
-                  <span className="perf-pct">{p.pct}%</span>
-                </div>
-              ))}
+          {performanceError || topPerformers.length === 0 ? (
+            <div style={{color:'#9ca3af',fontSize:13,padding:'12px 0'}}>Performance ratings require the Performance module.</div>
+          ) : (
+            <div className="perf-wrap">
+              <DonutChart
+                segments={topPerformers.map((p,i)=>({ pct:1, color:AVATAR_COLORS[i%AVATAR_COLORS.length] }))}
+                size={100} stroke={16} centerLabel={stats.totalStaff} centerSub="Total Staff"
+              />
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Top Performers */}
+        {/* Top Performers — from backend */}
         <div className="top-perf-card">
           <div className="top-perf-title"><IcoStar/> Top Performers</div>
-          {TOP_PERFORMERS.map((tp,i)=>(
-            <div className="top-perf-item" key={i}>
-              <div className={`tp-rank ${i===0?'gold':i===1?'silver':'bronze'}`}>{tp.rank}</div>
+          {performanceError ? (
+            <div style={{fontSize:12,color:'#9ca3af',padding:'8px 0'}}>Performance module unavailable.</div>
+          ) : topPerformers.length === 0 ? (
+            <div style={{fontSize:12,color:'#9ca3af',padding:'8px 0'}}>No performance data yet.</div>
+          ) : topPerformers.map((tp,i)=>(
+            <div className="top-perf-item" key={tp.id ?? i}>
+              <div className={`tp-rank ${i===0?'gold':i===1?'silver':'bronze'}`}>{i+1}</div>
               <div className="tp-avatar" style={{background:AVATAR_COLORS[i%AVATAR_COLORS.length]}}>{initials(tp.name)}</div>
               <div className="tp-info"><div className="tp-name">{tp.name}</div><div className="tp-dept">{tp.dept}</div></div>
               <div className="tp-score"><IcoStar/> {tp.score}</div>
@@ -416,17 +620,20 @@ const handleExport = () => {
             <div className="modal-header"><h3>Edit Attendance — {selected.name}</h3><button className="modal-close" onClick={()=>setShowEdit(false)}>×</button></div>
             <div className="modal-body">
               <div className="modal-grid">
-                <div className="form-group"><label className="form-label">Check-in Time</label><input className="form-input" name="checkIn" value={form.checkIn} onChange={handleFormChange} placeholder="e.g. 09:00 AM"/></div>
-                <div className="form-group"><label className="form-label">Check-out Time</label><input className="form-input" name="checkOut" value={form.checkOut} onChange={handleFormChange} placeholder="e.g. 05:00 PM"/></div>
+                <div className="form-group"><label className="form-label">Check-in Time</label><input className="form-input" type="time" name="check_in_time" value={form.check_in_time} onChange={handleFormChange}/></div>
+                <div className="form-group"><label className="form-label">Check-out Time</label><input className="form-input" type="time" name="check_out_time" value={form.check_out_time} onChange={handleFormChange}/></div>
                 <div className="form-group full">
                   <label className="form-label">Status</label>
                   <select className="form-select" name="status" value={form.status} onChange={handleFormChange}>
-                    <option>Present</option><option>Absent</option><option>On Leave</option><option>Half Day</option><option>Late</option>
+                    <option>Present</option><option>Absent</option><option>On Leave</option><option>Half Day</option>
                   </select>
                 </div>
               </div>
             </div>
-            <div className="modal-footer"><button className="btn-cancel" onClick={()=>setShowEdit(false)}>Cancel</button><button className="btn-save" onClick={handleEdit}>Save Changes</button></div>
+            <div className="modal-footer">
+              <button className="btn-cancel" onClick={()=>setShowEdit(false)} disabled={submitting}>Cancel</button>
+              <button className="btn-save" onClick={handleEdit} disabled={submitting}>{submitting ? 'Saving...' : 'Save Changes'}</button>
+            </div>
           </div>
         </div>
       )}
@@ -435,9 +642,17 @@ const handleExport = () => {
       {showView && selected && (
         <div className="modal-overlay" onClick={()=>setShowView(false)}>
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
-            <div className="modal-header"><h3>Attendance Details — {selected.id}</h3><button className="modal-close" onClick={()=>setShowView(false)}>×</button></div>
+            <div className="modal-header"><h3>Attendance Details — {selected.staffCode}</h3><button className="modal-close" onClick={()=>setShowView(false)}>×</button></div>
             <div className="modal-body">
-              {[['Staff ID',selected.id],['Name',selected.name],['Department',selected.dept],['Check-in',selected.checkIn],['Check-out',selected.checkOut],['Working Hours',selected.hours],['Status',selected.status]].map(([k,v])=>(
+              {[
+                ['Staff ID',selected.staffCode],
+                ['Name',selected.name],
+                ['Department',selected.dept],
+                ['Check-in',formatTime(selected.check_in_time)],
+                ['Check-out',formatTime(selected.check_out_time)],
+                ['Working Hours',minutesToHoursLabel(workedMinutes(selected.check_in_time, selected.check_out_time))],
+                ['Status',selected.status],
+              ].map(([k,v])=>(
                 <div className="detail-row" key={k}><span className="detail-key">{k}</span><span className="detail-value">{v}</span></div>
               ))}
             </div>

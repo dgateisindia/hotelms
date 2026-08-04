@@ -1,14 +1,17 @@
 // ============================================================
 //  Reports.js — Reports & Analytics Page (logic + JSX only)
-//  Sections: Stat cards, Revenue overview, Revenue by room type,
-//            Occupancy overview, Occupancy by room type,
-//            Daily booking trend, Top booking channels,
-//            Monthly performance table, Revenue forecast, Insights
+//  Data is fetched from GET /api/reports/overview?period=...
+//  A "view" dropdown (Revenue / Bookings / Rooms / Staff) controls
+//  which detail cards render below the always-visible stat row.
+//  Defaults to Revenue when nothing is selected.
 //  Icons  → ../../utils/icons/ReportsIcons.js
 //  Styles → ../../styles/Reports.css
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import axios from 'axios';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import '../../styles/Reports.css';
 import {
   IcoCalendar, IcoExport, IcoRevenue, IcoOccupancy, IcoBookings,
@@ -16,114 +19,163 @@ import {
   IcoLightning, IcoTarget, IcoBolt,
 } from '../../utils/icons/ReportsIcons';
 
-// ── Sample Data ───────────────────────────────────────────────
-const REVENUE_DATA = [
-  { date:'01 May', thisPeriod:14000, lastPeriod:12000 },
-  { date:'08 May', thisPeriod:18000, lastPeriod:15000 },
-  { date:'15 May', thisPeriod:16000, lastPeriod:17000 },
-  { date:'22 May', thisPeriod:24000, lastPeriod:19000 },
-  { date:'31 May', thisPeriod:28000, lastPeriod:22000 },
+// Not exported from ReportsIcons — defined locally instead of touching that file.
+const IcoArrowDown = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <polyline points="19 12 12 19 5 12" />
+  </svg>
+);
+
+const PERIODS = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
 ];
 
-const REVENUE_BY_ROOM = [
-  { label:'Deluxe Room',       pct:35.0, color:'#3b82f6' },
-  { label:'Premium Room',      pct:28.0, color:'#10b981' },
-  { label:'Suite Room',        pct:20.0, color:'#f59e0b' },
-  { label:'Executive Room',    pct:10.0, color:'#8b5cf6' },
-  { label:'Presidential Suite',pct:7.0,  color:'#ef4444' },
+const PERIOD_TITLE = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+
+const VIEWS = [
+  { value: 'revenue', label: 'Revenue' },
+  { value: 'bookings', label: 'Bookings' },
+  { value: 'rooms', label: 'Rooms' },
+  { value: 'staff', label: 'Staff' },
 ];
 
-const OCCUPANCY_BY_ROOM = [
-  { label:'Deluxe Room',        pct:72 },
-  { label:'Premium Room',       pct:65 },
-  { label:'Suite Room',         pct:58 },
-  { label:'Executive Room',     pct:55 },
-  { label:'Presidential Suite', pct:48 },
-];
+const VIEW_HEADER = {
+  revenue: { title: 'Reports & Analytics', subtitle: 'Data-driven insights for better decisions and higher performance' },
+  bookings: { title: 'Booking Reports & Analytics', subtitle: 'Track booking trends, status, and occupancy performance' },
+  rooms: { title: 'Room Reports & Analytics', subtitle: 'Monitor room occupancy and revenue by room type' },
+  staff: { title: 'Staff Reports & Analytics', subtitle: 'Review staff headcount, attendance, and department distribution' },
+};
 
-const DAILY_BOOKINGS = [38, 52, 44, 60, 48, 70, 55, 62, 58, 75, 50, 68, 42, 80, 65, 58, 72, 48, 90, 55, 62, 70, 48, 65, 58, 72, 50, 80, 60, 95, 70];
+// ── Dual-series chart (line / area / bar) ──────────────────────
+const DualSeriesChart = ({ data, aKey, bKey, type = 'line', aColor = '#3b82f6', bColor = '#9ca3af', gradId }) => {
+  const W = 600, H = 180, PAD = { top: 14, right: 16, bottom: 28, left: 48 };
+  const iW = W - PAD.left - PAD.right, iH = H - PAD.top - PAD.bottom;
+  const n = data.length;
+  const allVals = data.flatMap(d => [d[aKey], d[bKey]]).filter(v => v != null);
+  const max = Math.max(1, ...allVals);
+  const x = (i) => PAD.left + (n <= 1 ? 0 : (i / (n - 1)) * iW);
+  const y = (v) => PAD.top + iH - ((v / max) * iH);
+  const ticks = [0, Math.round(max * 0.25), Math.round(max * 0.5), Math.round(max * 0.75), max];
 
-const TOP_CHANNELS = [
-  { label:'Direct Booking', pct:42, color:'#3b82f6' },
-  { label:'Booking.com',    pct:28, color:'#10b981' },
-  { label:'MakeMyTrip',     pct:15, color:'#f59e0b' },
-  { label:'Expedia',        pct:10, color:'#8b5cf6' },
-  { label:'Others',         pct:5,  color:'#9ca3af' },
-];
-
-const MONTHLY_SUMMARY = [
-  { month:'May 2024', revenue:'24,50,000', occ:'62.5%', adr:'6,600', revpar:'4,125', bookings:'1,248' },
-  { month:'Apr 2024', revenue:'21,25,000', occ:'57.6%', adr:'6,300', revpar:'3,629', bookings:'1,127' },
-  { month:'Mar 2024', revenue:'19,80,000', occ:'55.2%', adr:'6,100', revpar:'3,366', bookings:'1,043' },
-  { month:'Feb 2024', revenue:'18,30,000', occ:'52.3%', adr:'5,900', revpar:'3,086', bookings:'982'   },
-  { month:'Jan 2024', revenue:'16,75,000', occ:'50.1%', adr:'5,700', revpar:'2,854', bookings:'915'   },
-];
-
-const FORECAST_DATA = [
-  { day:'01 Jun', actual:18000, forecast:18000 },
-  { day:'08 Jun', actual:20000, forecast:21000 },
-  { day:'15 Jun', actual:null,  forecast:24000 },
-  { day:'22 Jun', actual:null,  forecast:27000 },
-  { day:'30 Jun', actual:null,  forecast:30000 },
-];
-
-const INSIGHTS = [
-  { icon:<IcoArrowUp/>, color:'green',  text:'Revenue is up by 15.2% compared to last month.' },
-  { icon:<IcoArrowUp/>, color:'blue',   text:'Occupancy rate improved by 8.7% compared to last month.' },
-  { icon:<IcoBolt/>,    color:'gold',   text:'Deluxe Rooms are generating the highest revenue.' },
-  { icon:<IcoTarget/>,  color:'purple', text:'Direct bookings contribute 42% of total bookings.' },
-];
-
-// ── Line Chart (Revenue Overview, dual line) ───────────────────
-const RevenueLineChart = ({ data }) => {
-  const W=600, H=180, PAD={top:14,right:16,bottom:28,left:48};
-  const iW=W-PAD.left-PAD.right, iH=H-PAD.top-PAD.bottom;
-  const max=Math.max(...data.map(d=>Math.max(d.thisPeriod,d.lastPeriod)));
-  const x=(i)=>PAD.left+(i/(data.length-1))*iW;
-  const y=(v)=>PAD.top+iH-((v/max)*iH);
-  const line1=data.map((d,i)=>`${i===0?'M':'L'}${x(i)},${y(d.thisPeriod)}`).join(' ');
-  const line2=data.map((d,i)=>`${i===0?'M':'L'}${x(i)},${y(d.lastPeriod)}`).join(' ');
-  const area1=`${line1} L${x(data.length-1)},${PAD.top+iH} L${x(0)},${PAD.top+iH} Z`;
-  const ticks=[0,Math.round(max*0.25),Math.round(max*0.5),Math.round(max*0.75),max];
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto'}}>
-      <defs>
-        <linearGradient id="revLineGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.15"/>
-          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.01"/>
-        </linearGradient>
-      </defs>
-      {ticks.map(t=>(
+  const axisEls = (
+    <>
+      {ticks.map(t => (
         <g key={t}>
-          <line x1={PAD.left} y1={y(t)} x2={W-PAD.right} y2={y(t)} stroke="#f1f4f9" strokeWidth="1"/>
-          <text x={PAD.left-6} y={y(t)+4} textAnchor="end" fontSize="10" fill="#9ca3af">{t===0?'0':`${Math.round(t/1000)}k`}</text>
+          <line x1={PAD.left} y1={y(t)} x2={W - PAD.right} y2={y(t)} stroke="#f1f4f9" strokeWidth="1" />
+          <text x={PAD.left - 6} y={y(t) + 4} textAnchor="end" fontSize="10" fill="#9ca3af">{t === 0 ? '0' : `${Math.round(t / 1000)}k`}</text>
         </g>
       ))}
-      <path d={area1} fill="url(#revLineGrad)"/>
-      {/* Last period dashed */}
-      <path d={line2} fill="none" stroke="#9ca3af" strokeWidth="2" strokeDasharray="5,4" strokeLinejoin="round" strokeLinecap="round"/>
-      {/* This period solid */}
-      <path d={line1} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
-      {data.map((d,i)=><circle key={i} cx={x(i)} cy={y(d.thisPeriod)} r="4" fill="#fff" stroke="#3b82f6" strokeWidth="2.5"/>)}
-      {data.map((d,i)=><text key={i} x={x(i)} y={H-8} textAnchor="middle" fontSize="10" fill="#9ca3af">{d.date}</text>)}
+      {data.map((d, i) => <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="#9ca3af">{d.label}</text>)}
+    </>
+  );
+
+  if (type === 'bar') {
+    const groupW = n > 0 ? iW / n : iW;
+    const barW = Math.min(18, groupW * 0.32);
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+        {axisEls}
+        {data.map((d, i) => {
+          const cx = x(i);
+          return (
+            <g key={i}>
+              {d[bKey] != null && (
+                <rect x={cx - barW - 2} y={y(d[bKey])} width={barW} height={Math.max(0, (PAD.top + iH) - y(d[bKey]))} fill={bColor} opacity={0.55} rx={2} />
+              )}
+              {d[aKey] != null && (
+                <rect x={cx + 2} y={y(d[aKey])} width={barW} height={Math.max(0, (PAD.top + iH) - y(d[aKey]))} fill={aColor} rx={2} />
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    );
+  }
+
+  const buildPath = (key) => {
+    let path = ''; let started = false;
+    data.forEach((d, i) => {
+      const v = d[key];
+      if (v == null) { started = false; return; }
+      path += `${started ? 'L' : 'M'}${x(i)},${y(v)} `;
+      started = true;
+    });
+    return path.trim();
+  };
+
+  const hasNullA = data.some(d => d[aKey] == null);
+  const lineA = buildPath(aKey);
+  const lineB = buildPath(bKey);
+  const areaKey = hasNullA ? bKey : aKey;
+  const areaColor = areaKey === aKey ? aColor : bColor;
+  const areaLine = buildPath(areaKey);
+  const areaPath = areaLine ? `${areaLine} L${x(n - 1)},${PAD.top + iH} L${x(0)},${PAD.top + iH} Z` : '';
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={areaColor} stopOpacity="0.15" />
+          <stop offset="100%" stopColor={areaColor} stopOpacity="0.01" />
+        </linearGradient>
+      </defs>
+      {axisEls}
+      {areaPath && (type === 'area' || !hasNullA) && <path d={areaPath} fill={`url(#${gradId})`} />}
+      <path d={lineB} fill="none" stroke={bColor} strokeWidth="2" strokeDasharray="5,4" strokeLinejoin="round" strokeLinecap="round" />
+      <path d={lineA} fill="none" stroke={aColor} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {data.map((d, i) => d[aKey] != null && <circle key={i} cx={x(i)} cy={y(d[aKey])} r="4" fill="#fff" stroke={aColor} strokeWidth="2.5" />)}
+    </svg>
+  );
+};
+
+// ── Single-series chart (bar / line) ─
+const SingleSeriesChart = ({ data, valueKey, type = 'bar', color = '#3b82f6' }) => {
+  const W = 600, H = 150, PAD = { top: 10, right: 10, bottom: 22, left: 30 };
+  const iW = W - PAD.left - PAD.right, iH = H - PAD.top - PAD.bottom;
+  const n = data.length;
+  const max = Math.max(1, ...data.map(d => d[valueKey] || 0));
+  const x = (i) => PAD.left + (n <= 1 ? 0 : (i / (n - 1)) * iW);
+  const y = (v) => PAD.top + iH - ((v / max) * iH);
+
+  if (type === 'line') {
+    const path = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(d[valueKey] || 0)}`).join(' ');
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+        <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d[valueKey] || 0)} r="3.5" fill="#fff" stroke={color} strokeWidth="2" />)}
+        {data.map((d, i) => <text key={i} x={x(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.label}</text>)}
+      </svg>
+    );
+  }
+
+  const groupW = n > 0 ? iW / n : iW;
+  const barW = Math.min(24, groupW * 0.6);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+      {data.map((d, i) => (
+        <rect key={i} x={x(i) - barW / 2} y={y(d[valueKey] || 0)} width={barW} height={Math.max(0, (PAD.top + iH) - y(d[valueKey] || 0))} fill={color} rx={2} />
+      ))}
+      {data.map((d, i) => <text key={i} x={x(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">{d.label}</text>)}
     </svg>
   );
 };
 
 // ── Donut Chart ───────────────────────────────────────────────
-const DonutChart = ({ segments, size=110, stroke=18, centerContent }) => {
-  const R=((size-stroke)/2), CX=size/2, circ=2*Math.PI*R;
-  const total=segments.reduce((s,sg)=>s+sg.pct,0);
-  let offset=0;
+const DonutChart = ({ segments, size = 110, stroke = 18, centerContent }) => {
+  const R = ((size - stroke) / 2), CX = size / 2, circ = 2 * Math.PI * R;
+  const total = segments.reduce((s, sg) => s + sg.pct, 0) || 1;
+  let offset = 0;
   return (
-    <div style={{position:'relative',width:size,height:size,flexShrink:0}}>
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
-        <circle cx={CX} cy={CX} r={R} fill="none" stroke="#f1f4f9" strokeWidth={stroke}/>
-        {segments.map((sg,i)=>{
-          const dash=(sg.pct/total)*circ;
-          const el=<circle key={i} cx={CX} cy={CX} r={R} fill="none" stroke={sg.color} strokeWidth={stroke} strokeDasharray={`${dash} ${circ}`} strokeDashoffset={-offset} transform={`rotate(-90 ${CX} ${CX})`}/>;
-          offset+=dash; return el;
+        <circle cx={CX} cy={CX} r={R} fill="none" stroke="#f1f4f9" strokeWidth={stroke} />
+        {segments.map((sg, i) => {
+          const dash = (sg.pct / total) * circ;
+          const el = <circle key={i} cx={CX} cy={CX} r={R} fill="none" stroke={sg.color} strokeWidth={stroke} strokeDasharray={`${dash} ${circ}`} strokeDashoffset={-offset} transform={`rotate(-90 ${CX} ${CX})`} />;
+          offset += dash; return el;
         })}
       </svg>
       {centerContent}
@@ -131,245 +183,995 @@ const DonutChart = ({ segments, size=110, stroke=18, centerContent }) => {
   );
 };
 
-// ── Mini Forecast Line Chart ───────────────────────────────────
-const ForecastChart = ({ data }) => {
-  const W=300, H=120, PAD={top:10,right:10,bottom:20,left:36};
-  const iW=W-PAD.left-PAD.right, iH=H-PAD.top-PAD.bottom;
-  const allVals = data.flatMap(d=>[d.actual,d.forecast]).filter(v=>v!=null);
-  const max=Math.max(...allVals);
-  const x=(i)=>PAD.left+(i/(data.length-1))*iW;
-  const y=(v)=>PAD.top+iH-((v/max)*iH);
+// ── Horizontal bar list ──
+const HBarList = ({ items, axisMax = 100 }) => (
+  <>
+    {items.map(item => (
+      <div className="hbar-item" key={item.label}>
+        <div className="hbar-top"><span className="hbar-label">{item.label}</span><span className="hbar-pct">{item.pct}%</span></div>
+        <div className="hbar-track"><div className="hbar-fill" style={{ width: `${item.pct}%`, background: item.color }} /></div>
+      </div>
+    ))}
+    <div className="hbar-axis"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+  </>
+);
 
-  const actualPts = data.map((d,i)=>d.actual!=null?[x(i),y(d.actual)]:null).filter(Boolean);
-  const forecastPts = data.map((d,i)=>[x(i),y(d.forecast)]);
+// ── Small chart-type picker ────────────────
+const ChartTypePicker = ({ value, onChange, options }) => (
+  <select
+    className="chart-type-picker"
+    value={value}
+    onChange={(e) => onChange(e.target.value)}
+    style={{ fontSize: 12, border: '1px solid #e4e8f0', borderRadius: 6, padding: '2px 6px', color: '#6b7280', background: '#fff' }}
+  >
+    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+  </select>
+);
 
-  const actualLine = actualPts.map((p,i)=>`${i===0?'M':'L'}${p[0]},${p[1]}`).join(' ');
-  const forecastLine = forecastPts.map((p,i)=>`${i===0?'M':'L'}${p[0]},${p[1]}`).join(' ');
-  const area = `${forecastLine} L${x(data.length-1)},${PAD.top+iH} L${x(0)},${PAD.top+iH} Z`;
-  const ticks=[0,Math.round(max*0.5),max];
+const CardHeader = ({ title, chartType, onChartTypeChange, options }) => (
+  <div className="rep-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <span>{title}</span>
+    {options && <ChartTypePicker value={chartType} onChange={onChartTypeChange} options={options} />}
+  </div>
+);
 
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto'}}>
-      <defs>
-        <linearGradient id="forecastGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.15"/>
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.01"/>
-        </linearGradient>
-      </defs>
-      {ticks.map(t=>(
-        <g key={t}>
-          <line x1={PAD.left} y1={y(t)} x2={W-PAD.right} y2={y(t)} stroke="#f1f4f9" strokeWidth="1"/>
-          <text x={PAD.left-4} y={y(t)+4} textAnchor="end" fontSize="9" fill="#9ca3af">{t===0?'0':`${Math.round(t/1000)}k`}</text>
-        </g>
-      ))}
-      <path d={area} fill="url(#forecastGrad)"/>
-      <path d={forecastLine} fill="none" stroke="#9ca3af" strokeWidth="2" strokeDasharray="4,3" strokeLinejoin="round" strokeLinecap="round"/>
-      <path d={actualLine} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
-      {data.map((d,i)=><text key={i} x={x(i)} y={H-2} textAnchor="middle" fontSize="8" fill="#9ca3af">{d.day}</text>)}
-    </svg>
-  );
+const formatINR = (n) => `₹ ${Number(n || 0).toLocaleString('en-IN')}`;
+
+const escapeCsv = (val) => {
+  const s = String(val ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
+
+function buildReportCsv(data, anchorDate, view) {
+  const {
+    period, rangeLabel, stats, revenueTrend, revenueByRoom, occupancyByRoom,
+    bookingTrend, bookingStatusBreakdown, monthlySummary, forecast, insights,
+    staffOverview,
+  } = data;
+  const lines = [];
+
+  lines.push('Hotel Management System - Reports Export');
+  lines.push(`View,${view}`);
+  lines.push(`Period,${period}`);
+  lines.push(`Anchor Date,${anchorDate}`);
+  lines.push(`Range,${rangeLabel}`);
+  lines.push('');
+
+  lines.push('Summary Stats');
+  lines.push('Metric,Value,Change vs Previous Period');
+  if (view === 'bookings') {
+    lines.push(`Rooms Occupied,${stats.occupiedRooms} / ${stats.totalRoomsCount},`);
+  } else {
+    lines.push(`Total Revenue,${stats.totalRevenue},${stats.totalRevenueChangePct}%`);
+  }
+  lines.push(`Occupancy Rate,${stats.occupancyRate}%,${stats.occupancyRateChangePct}%`);
+  lines.push(`Total Bookings,${stats.totalBookings},${stats.totalBookingsChangePct}%`);
+  lines.push(`Cancellation Rate,${stats.cancellationRate}%,${stats.cancellationRateChangePp} pts`);
+  lines.push(`RevPAR,${stats.revpar},`);
+  lines.push('');
+
+  if (view === 'revenue') {
+    lines.push('Revenue Trend');
+    lines.push('Label,This Period,Last Period');
+    revenueTrend.forEach(r => lines.push(`${escapeCsv(r.label)},${r.thisPeriod},${r.lastPeriod}`));
+    lines.push('');
+
+    lines.push('Revenue by Room Type');
+    lines.push('Room Type,Percent of Revenue');
+    revenueByRoom.forEach(r => lines.push(`${escapeCsv(r.label)},${r.pct}%`));
+    lines.push('');
+
+    lines.push('Monthly Performance Summary (last 6 calendar months)');
+    lines.push('Month,Total Revenue,Occupancy Rate,Average Daily Rate,RevPAR,Total Bookings');
+    monthlySummary.forEach(m => lines.push(`${escapeCsv(m.month)},${m.revenue},${m.occ}%,${m.adr},${m.revpar},${m.bookings}`));
+    lines.push('');
+
+    lines.push('Revenue Forecast');
+    lines.push('Label,Actual,Forecast');
+    forecast.forEach(f => lines.push(`${escapeCsv(f.label)},${f.actual ?? ''},${f.forecast}`));
+    lines.push('');
+
+    lines.push('Insights');
+    insights.forEach(i => lines.push(escapeCsv(i.text)));
+  } else if (view === 'bookings') {
+    lines.push(`${period.charAt(0).toUpperCase() + period.slice(1)} Booking Trend`);
+    lines.push('Label,Bookings');
+    bookingTrend.forEach(r => lines.push(`${escapeCsv(r.label)},${r.count}`));
+    lines.push('');
+
+    lines.push('Booking Status Breakdown');
+    lines.push('Status,Percent');
+    bookingStatusBreakdown.forEach(r => lines.push(`${escapeCsv(r.label)},${r.pct}%`));
+    lines.push('');
+
+    lines.push('Monthly Performance Summary (last 6 calendar months)');
+    lines.push('Month,Total Bookings,Occupancy Rate');
+    monthlySummary.forEach(m => lines.push(`${escapeCsv(m.month)},${m.bookings},${m.occ}%`));
+    lines.push('');
+
+    lines.push('Insights');
+    insights.forEach(i => lines.push(escapeCsv(i.text)));
+  } else if (view === 'rooms') {
+    lines.push('Occupancy by Room Type');
+    lines.push('Room Type,Occupancy %');
+    occupancyByRoom.forEach(r => lines.push(`${escapeCsv(r.label)},${r.pct}%`));
+    lines.push('');
+
+    lines.push('Revenue by Room Type');
+    lines.push('Room Type,Percent of Revenue');
+    revenueByRoom.forEach(r => lines.push(`${escapeCsv(r.label)},${r.pct}%`));
+    lines.push('');
+
+    lines.push('Monthly Performance Summary (last 6 calendar months)');
+    lines.push('Month,Occupancy Rate,RevPAR');
+    monthlySummary.forEach(m => lines.push(`${escapeCsv(m.month)},${m.occ}%,${m.revpar}`));
+    lines.push('');
+
+    lines.push('Insights');
+    insights.forEach(i => lines.push(escapeCsv(i.text)));
+  } else if (view === 'staff' && staffOverview) {
+    lines.push('Staff Summary');
+    lines.push('Metric,Value');
+    lines.push(`Total Staff,${staffOverview.totalStaff}`);
+    lines.push(`Active,${staffOverview.activeStaff}`);
+    lines.push(`On Leave,${staffOverview.onLeaveStaff}`);
+    lines.push(`Attendance Rate (selected range),${staffOverview.attendanceRate}%`);
+    lines.push('');
+
+    lines.push('Staff by Department');
+    lines.push('Department,Percent of Staff');
+    staffOverview.staffByDept.forEach(d => lines.push(`${escapeCsv(d.label)},${d.pct}%`));
+    lines.push('');
+
+    lines.push(`${period.charAt(0).toUpperCase() + period.slice(1)} Attendance Rate`);
+    lines.push('Label,Attendance %');
+    staffOverview.attendanceTrend.forEach(r => lines.push(`${escapeCsv(r.label)},${r.count}%`));
+    lines.push('');
+
+    lines.push('Attendance Status Breakdown');
+    lines.push('Status,Percent');
+    staffOverview.attendanceStatusBreakdown.forEach(r => lines.push(`${escapeCsv(r.label)},${r.pct}%`));
+    lines.push('');
+
+    lines.push('Staff Monthly Summary (last 6 calendar months)');
+    lines.push('Month,Total Staff,Attendance Rate');
+    staffOverview.staffMonthlySummary.forEach(m => lines.push(`${escapeCsv(m.month)},${m.totalStaff},${m.attendanceRate}%`));
+    lines.push('');
+
+    lines.push('Insights');
+    staffOverview.insights.forEach(i => lines.push(escapeCsv(i.text)));
+  }
+
+  return lines.join('\n');
+}
 
 // ════════════════════════════════════════════════════════════
 //  COMPONENT
 // ════════════════════════════════════════════════════════════
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
 function Reports() {
-  const [dateRange] = useState('01 May 2024 - 31 May 2024');
+  const [period, setPeriod] = useState('monthly');
+  const [anchorDate, setAnchorDate] = useState(todayStr());
+  const [view, setView] = useState('revenue'); // revenue | bookings | rooms | staff — defaults to revenue
+  const dateInputRef = useRef(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const statsRef = useRef(null);
+  const row1Ref = useRef(null);
+  const row2Ref = useRef(null);
+  const row3Ref = useRef(null);
+
+  const [chartTypes, setChartTypes] = useState({
+    revenue: 'line',        // line | area | bar
+    bookingTrend: 'bar',    // bar | line
+    revenueByRoom: 'donut', // donut | bar
+    occupancyByRoom: 'bar', // bar | donut
+    statusBreakdown: 'bar', // bar | donut
+    forecast: 'line',       // line | bar
+    attendanceTrend: 'bar', // bar | line
+  });
+
+  const setChartType = (key, value) => setChartTypes(prev => ({ ...prev, [key]: value }));
+
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axios.get('http://localhost:5000/api/reports/overview', { params: { period, date: anchorDate } });
+      setData(res.data.data);
+    } catch (err) {
+      console.error(err);
+      setError('Could not load report data. Is the backend running?');
+    } finally {
+      setLoading(false);
+    }
+  }, [period, anchorDate]);
+
+  useEffect(() => { fetchReports(); }, [fetchReports]);
+
+  const handleExport = () => {
+    if (!data) return;
+    const csvContent = buildReportCsv(data, anchorDate, view);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `hotel-report-${view}-${data.period}-${anchorDate}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPdf = async () => {
+    if (!data || exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 28;
+      let cursorY = margin;
+
+      pdf.setFontSize(16);
+      pdf.setFont(undefined, 'bold');
+      pdf.text(VIEW_HEADER[view].title, margin, cursorY + 10);
+      pdf.setFontSize(9);
+      pdf.setFont(undefined, 'normal');
+      pdf.setTextColor(110);
+      pdf.text(
+        `${VIEWS.find(v => v.value === view)?.label} view  |  ${PERIOD_TITLE[data.period]}  |  Range: ${data.rangeLabel}  |  Generated ${new Date().toLocaleString('en-IN')}`,
+        margin, cursorY + 26
+      );
+      pdf.setTextColor(0);
+      cursorY += 46;
+
+      const captureOpts = {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        ignoreElements: (el) => el.tagName === 'SELECT',
+      };
+
+      const sections = [statsRef, row1Ref, row2Ref, row3Ref];
+      for (const ref of sections) {
+        if (!ref.current) continue;
+        const canvas = await html2canvas(ref.current, captureOpts);
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = pageWidth - margin * 2;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        if (cursorY + imgHeight > pageHeight - margin && cursorY > margin) {
+          pdf.addPage();
+          cursorY = margin;
+        }
+        pdf.addImage(imgData, 'PNG', margin, cursorY, imgWidth, imgHeight);
+        cursorY += imgHeight + 14;
+      }
+
+      const pageCount = pdf.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(150);
+        pdf.text(`Page ${i} of ${pageCount}`, pageWidth - margin - 60, pageHeight - 14);
+      }
+
+      pdf.save(`hotel-report-${view}-${data.period}-${anchorDate}.pdf`);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('Failed to generate the PDF — check the browser console for details.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  if (loading && !data) {
+    return <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>Loading reports…</div>;
+  }
+  if (error) {
+    return <div style={{ padding: 40, textAlign: 'center', color: '#ef4444' }}>{error}</div>;
+  }
+  if (!data) return null;
+
+  const {
+    stats, revenueTrend, revenueByRoom, occupancyByRoom, bookingTrend,
+    bookingStatusBreakdown, monthlySummary, forecast, insights, staffOverview,
+  } = data;
+
+  const changeBadge = (pct) => (
+    <div className={`repstat-change ${pct < 0 ? 'neg' : ''}`}>
+      {pct >= 0 ? <IcoArrowUp /> : <IcoArrowDown />} {Math.abs(pct)}% from previous period
+    </div>
+  );
 
   return (
     <>
       {/* ── Page Header ── */}
       <div className="page-header">
         <div className="page-header-left">
-          <h2>Reports &amp; Analytics</h2>
-          <p>Data-driven insights for better decisions and higher performance</p>
+          <h2>{VIEW_HEADER[view].title}</h2>
+          <p>{VIEW_HEADER[view].subtitle}</p>
         </div>
         <div className="page-header-right">
-          <div className="date-range-badge"><IcoCalendar/> {dateRange} <IcoChevron/></div>
-          <button className="btn-export-report"><IcoExport/> Export Report</button>
+          <select
+            value={view}
+            onChange={(e) => setView(e.target.value)}
+            title="Choose what to report on — defaults to Revenue"
+            style={{ fontSize: 13, border: '1px solid #e4e8f0', borderRadius: 6, padding: '6px 10px', color: '#374151', background: '#fff', cursor: 'pointer' }}
+          >
+            {VIEWS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+          </select>
+          <div className="date-range-badge" style={{ display: 'flex', gap: 4, padding: 4, alignItems: 'center', position: 'relative' }}>
+            <button
+              type="button"
+              title="Choose a date"
+              onClick={() => {
+                const el = dateInputRef.current;
+                if (!el) return;
+                if (typeof el.showPicker === 'function') el.showPicker();
+                else el.focus();
+              }}
+              style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 4px' }}
+            >
+              <IcoCalendar />
+            </button>
+            <input
+              ref={dateInputRef}
+              type="date"
+              value={anchorDate}
+              max={todayStr()}
+              onChange={(e) => e.target.value && setAnchorDate(e.target.value)}
+              style={{ border: 'none', background: 'transparent', fontSize: 13, color: '#374151', cursor: 'pointer', width: 118 }}
+            />
+            {PERIODS.map(p => (
+              <button
+                key={p.value}
+                onClick={() => setPeriod(p.value)}
+                style={{
+                  border: 'none', cursor: 'pointer', borderRadius: 6, padding: '4px 10px', fontSize: 13,
+                  background: period === p.value ? '#3b82f6' : 'transparent',
+                  color: period === p.value ? '#fff' : '#374151',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <button className="btn-export-report" onClick={handleExport} disabled={!data} style={!data ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}>
+            <IcoExport /> Export CSV
+          </button>
+          <button
+            className="btn-export-report"
+            onClick={handleExportPdf}
+            disabled={!data || exportingPdf}
+            style={(!data || exportingPdf) ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+          >
+            <IcoExport /> {exportingPdf ? 'Generating PDF…' : 'Export PDF'}
+          </button>
         </div>
       </div>
 
-      {/* ── Stat Cards ── */}
-      <div className="rep-stats">
-        <div className="repstat-card">
-          <div className="repstat-icon green"><IcoRevenue/></div>
-          <div><div className="repstat-label">Total Revenue</div><div className="repstat-value">₹ 24,50,000</div><div className="repstat-change"><IcoArrowUp/> 15.2% from Apr 2024</div></div>
-        </div>
-        <div className="repstat-card">
-          <div className="repstat-icon blue"><IcoOccupancy/></div>
-          <div><div className="repstat-label">Occupancy Rate</div><div className="repstat-value">62.5%</div><div className="repstat-change"><IcoArrowUp/> 8.7% from Apr 2024</div></div>
-        </div>
-        <div className="repstat-card">
-          <div className="repstat-icon purple"><IcoBookings/></div>
-          <div><div className="repstat-label">Total Bookings</div><div className="repstat-value">1,248</div><div className="repstat-change"><IcoArrowUp/> 10.8% from Apr 2024</div></div>
-        </div>
-        <div className="repstat-card">
-          <div className="repstat-icon red"><IcoCancel/></div>
-          <div><div className="repstat-label">Cancellation Rate</div><div className="repstat-value">6.2%</div><div className="repstat-change neg"><IcoArrowUp/> 1.3% from Apr 2024</div></div>
-        </div>
-        <div className="repstat-card">
-          <div className="repstat-icon teal"><IcoUsers/></div>
-          <div><div className="repstat-label">RevPAR</div><div className="repstat-value">₹ 4,125</div><div className="repstat-change"><IcoArrowUp/> 12.5% from Apr 2024</div></div>
-        </div>
+      {/* ── Stat Cards — fully customized per view ── */}
+      <div className="rep-stats" ref={statsRef}>
+        {view === 'staff' && staffOverview ? (
+          <>
+            <div className="repstat-card">
+              <div className="repstat-icon teal"><IcoUsers /></div>
+              <div><div className="repstat-label">Total Staff</div><div className="repstat-value">{staffOverview.totalStaff}</div></div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon green"><IcoOccupancy /></div>
+              <div><div className="repstat-label">Active Staff</div><div className="repstat-value">{staffOverview.activeStaff}</div></div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon red"><IcoCancel /></div>
+              <div><div className="repstat-label">On Leave</div><div className="repstat-value">{staffOverview.onLeaveStaff}</div></div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon blue"><IcoBookings /></div>
+              <div><div className="repstat-label">Attendance Rate</div><div className="repstat-value">{staffOverview.attendanceRate}%</div></div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon purple"><IcoRevenue /></div>
+              <div><div className="repstat-label">Departments</div><div className="repstat-value">{staffOverview.staffByDept.length}</div></div>
+            </div>
+          </>
+        ) : view === 'rooms' ? (
+          <>
+            <div className="repstat-card">
+              <div className="repstat-icon blue"><IcoOccupancy /></div>
+              <div><div className="repstat-label">Occupancy Rate</div><div className="repstat-value">{stats.occupancyRate}%</div>{changeBadge(stats.occupancyRateChangePct)}</div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon purple"><IcoBookings /></div>
+              <div><div className="repstat-label">Rooms Occupied</div><div className="repstat-value">{stats.occupiedRooms} / {stats.totalRoomsCount}</div></div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon teal"><IcoUsers /></div>
+              <div><div className="repstat-label">RevPAR</div><div className="repstat-value">{formatINR(stats.revpar)}</div></div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon green"><IcoRevenue /></div>
+              <div><div className="repstat-label">Room Revenue</div><div className="repstat-value">{formatINR(stats.totalRevenue)}</div>{changeBadge(stats.totalRevenueChangePct)}</div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon red"><IcoCancel /></div>
+              <div><div className="repstat-label">Cancellation Rate</div><div className="repstat-value">{stats.cancellationRate}%</div>
+                <div className={`repstat-change ${stats.cancellationRateChangePp > 0 ? 'neg' : ''}`}>
+                  {stats.cancellationRateChangePp >= 0 ? <IcoArrowUp /> : <IcoArrowDown />} {Math.abs(stats.cancellationRateChangePp)} pts from previous period
+                </div>
+              </div>
+            </div>
+          </>
+        ) : view === 'bookings' ? (
+          <>
+            <div className="repstat-card">
+              <div className="repstat-icon purple"><IcoBookings /></div>
+              <div>
+                <div className="repstat-label">Rooms Occupied</div>
+                <div className="repstat-value">{stats.occupiedRooms} / {stats.totalRoomsCount}</div>
+                <div className="repstat-change">{stats.occupancyRate}% of rooms occupied</div>
+              </div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon blue"><IcoOccupancy /></div>
+              <div><div className="repstat-label">Occupancy Rate</div><div className="repstat-value">{stats.occupancyRate}%</div>{changeBadge(stats.occupancyRateChangePct)}</div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon purple"><IcoBookings /></div>
+              <div><div className="repstat-label">Total Bookings</div><div className="repstat-value">{stats.totalBookings}</div>{changeBadge(stats.totalBookingsChangePct)}</div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon red"><IcoCancel /></div>
+              <div><div className="repstat-label">Cancellation Rate</div><div className="repstat-value">{stats.cancellationRate}%</div>
+                <div className={`repstat-change ${stats.cancellationRateChangePp > 0 ? 'neg' : ''}`}>
+                  {stats.cancellationRateChangePp >= 0 ? <IcoArrowUp /> : <IcoArrowDown />} {Math.abs(stats.cancellationRateChangePp)} pts from previous period
+                </div>
+              </div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon teal"><IcoUsers /></div>
+              <div><div className="repstat-label">RevPAR</div><div className="repstat-value">{formatINR(stats.revpar)}</div></div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="repstat-card">
+              <div className="repstat-icon green"><IcoRevenue /></div>
+              <div><div className="repstat-label">Total Revenue</div><div className="repstat-value">{formatINR(stats.totalRevenue)}</div>{changeBadge(stats.totalRevenueChangePct)}</div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon blue"><IcoOccupancy /></div>
+              <div><div className="repstat-label">Occupancy Rate</div><div className="repstat-value">{stats.occupancyRate}%</div>{changeBadge(stats.occupancyRateChangePct)}</div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon purple"><IcoBookings /></div>
+              <div><div className="repstat-label">Total Bookings</div><div className="repstat-value">{stats.totalBookings}</div>{changeBadge(stats.totalBookingsChangePct)}</div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon red"><IcoCancel /></div>
+              <div><div className="repstat-label">Cancellation Rate</div><div className="repstat-value">{stats.cancellationRate}%</div>
+                <div className={`repstat-change ${stats.cancellationRateChangePp > 0 ? 'neg' : ''}`}>
+                  {stats.cancellationRateChangePp >= 0 ? <IcoArrowUp /> : <IcoArrowDown />} {Math.abs(stats.cancellationRateChangePp)} pts from previous period
+                </div>
+              </div>
+            </div>
+            <div className="repstat-card">
+              <div className="repstat-icon teal"><IcoUsers /></div>
+              <div><div className="repstat-label">RevPAR</div><div className="repstat-value">{formatINR(stats.revpar)}</div></div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ── Row 1: Revenue Overview | Revenue by Room Type | Occupancy Overview ── */}
-      <div className="rep-row-1">
+      {/* ── Row 1: view-dependent (3 cards) ── */}
+      <div className="rep-row-1" ref={row1Ref}>
 
-        {/* Revenue Overview */}
-        <div className="rep-card">
-          <div className="rep-card-title">Revenue Overview</div>
-          <RevenueLineChart data={REVENUE_DATA}/>
-          <div className="rep-legend-inline">
-            <div className="rep-legend-item"><span className="rep-legend-dash solid"/> This Period</div>
-            <div className="rep-legend-item"><span className="rep-legend-dash dashed"/> Last Period</div>
+        {view === 'revenue' && (
+          <>
+            {/* Revenue Overview */}
+            <div className="rep-card">
+              <CardHeader
+                title="Revenue Overview"
+                chartType={chartTypes.revenue}
+                onChartTypeChange={(v) => setChartType('revenue', v)}
+                options={[{ value: 'line', label: 'Line' }, { value: 'area', label: 'Area' }, { value: 'bar', label: 'Bar' }]}
+              />
+              <DualSeriesChart data={revenueTrend} aKey="thisPeriod" bKey="lastPeriod" type={chartTypes.revenue} gradId="revLineGrad" />
+              <div className="rep-legend-inline">
+                <div className="rep-legend-item"><span className="rep-legend-dash solid" /> This Period</div>
+                <div className="rep-legend-item"><span className="rep-legend-dash dashed" /> Last Period</div>
+              </div>
+            </div>
+
+            {/* Revenue by Room Type */}
+            <div className="rep-card">
+              <CardHeader
+                title="Revenue by Room Type"
+                chartType={chartTypes.revenueByRoom}
+                onChartTypeChange={(v) => setChartType('revenueByRoom', v)}
+                options={[{ value: 'donut', label: 'Donut' }, { value: 'bar', label: 'Bar' }]}
+              />
+              {chartTypes.revenueByRoom === 'donut' ? (
+                <div className="donut-wrap-rep">
+                  <DonutChart
+                    segments={revenueByRoom}
+                    size={110} stroke={20}
+                    centerContent={
+                      <div className="donut-center-rep">
+                        <span className="donut-amt-rep">{formatINR(stats.totalRevenue)}</span>
+                        <span className="donut-sub-rep">Total Revenue</span>
+                      </div>
+                    }
+                  />
+                  <div className="donut-legend-rep">
+                    {revenueByRoom.map(r => (
+                      <div className="donut-leg-item-rep" key={r.label}>
+                        <span className="donut-dot-rep" style={{ background: r.color }} />
+                        <span>{r.label}</span>
+                        <span className="donut-pct-rep">{r.pct.toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <HBarList items={revenueByRoom} />
+              )}
+            </div>
+
+            {/* Occupancy Overview */}
+            <div className="rep-card">
+              <div className="rep-card-title">Occupancy Overview</div>
+              <div className="occ-donut-wrap">
+                <DonutChart
+                  segments={[{ pct: stats.occupancyRate, color: '#10b981' }, { pct: Math.max(0, 100 - stats.occupancyRate), color: '#f1f4f9' }]}
+                  size={120} stroke={16}
+                  centerContent={
+                    <div className="occ-center">
+                      <span className="occ-pct">{stats.occupancyRate}%</span>
+                      <span className="occ-label">Occupancy Rate</span>
+                    </div>
+                  }
+                />
+                <div className={`occ-change ${stats.occupancyRateChangePct < 0 ? 'neg' : ''}`}>
+                  {stats.occupancyRateChangePct >= 0 ? <IcoArrowUp /> : <IcoArrowDown />} {Math.abs(stats.occupancyRateChangePct)}% from previous period
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {view === 'bookings' && (
+          <>
+            {/* Booking Trend */}
+            <div className="rep-card">
+              <CardHeader
+                title={`${PERIOD_TITLE[period]} Booking Trend`}
+                chartType={chartTypes.bookingTrend}
+                onChartTypeChange={(v) => setChartType('bookingTrend', v)}
+                options={[{ value: 'bar', label: 'Bar' }, { value: 'line', label: 'Line' }]}
+              />
+              <SingleSeriesChart data={bookingTrend} valueKey="count" type={chartTypes.bookingTrend} />
+              <div className="vbar-legend"><span className="vbar-legend-dot" /> Bookings</div>
+            </div>
+
+            {/* Booking Status Breakdown */}
+            <div className="rep-card">
+              <CardHeader
+                title="Booking Status Breakdown"
+                chartType={chartTypes.statusBreakdown}
+                onChartTypeChange={(v) => setChartType('statusBreakdown', v)}
+                options={[{ value: 'bar', label: 'Bar' }, { value: 'donut', label: 'Donut' }]}
+              />
+              {chartTypes.statusBreakdown === 'bar' ? (
+                <HBarList items={bookingStatusBreakdown} />
+              ) : (
+                <div className="donut-wrap-rep">
+                  <DonutChart segments={bookingStatusBreakdown} size={110} stroke={20} />
+                  <div className="donut-legend-rep">
+                    {bookingStatusBreakdown.map(r => (
+                      <div className="donut-leg-item-rep" key={r.label}>
+                        <span className="donut-dot-rep" style={{ background: r.color }} />
+                        <span>{r.label}</span>
+                        <span className="donut-pct-rep">{r.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Occupancy Overview */}
+            <div className="rep-card">
+              <div className="rep-card-title">Occupancy Overview</div>
+              <div className="occ-donut-wrap">
+                <DonutChart
+                  segments={[{ pct: stats.occupancyRate, color: '#10b981' }, { pct: Math.max(0, 100 - stats.occupancyRate), color: '#f1f4f9' }]}
+                  size={120} stroke={16}
+                  centerContent={
+                    <div className="occ-center">
+                      <span className="occ-pct">{stats.occupancyRate}%</span>
+                      <span className="occ-label">Occupancy Rate</span>
+                    </div>
+                  }
+                />
+                <div className={`occ-change ${stats.occupancyRateChangePct < 0 ? 'neg' : ''}`}>
+                  {stats.occupancyRateChangePct >= 0 ? <IcoArrowUp /> : <IcoArrowDown />} {Math.abs(stats.occupancyRateChangePct)}% from previous period
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {view === 'rooms' && (
+          <>
+            {/* Occupancy Overview */}
+            <div className="rep-card">
+              <div className="rep-card-title">Occupancy Overview</div>
+              <div className="occ-donut-wrap">
+                <DonutChart
+                  segments={[{ pct: stats.occupancyRate, color: '#10b981' }, { pct: Math.max(0, 100 - stats.occupancyRate), color: '#f1f4f9' }]}
+                  size={120} stroke={16}
+                  centerContent={
+                    <div className="occ-center">
+                      <span className="occ-pct">{stats.occupancyRate}%</span>
+                      <span className="occ-label">Occupancy Rate</span>
+                    </div>
+                  }
+                />
+                <div className={`occ-change ${stats.occupancyRateChangePct < 0 ? 'neg' : ''}`}>
+                  {stats.occupancyRateChangePct >= 0 ? <IcoArrowUp /> : <IcoArrowDown />} {Math.abs(stats.occupancyRateChangePct)}% from previous period
+                </div>
+              </div>
+            </div>
+
+            {/* Occupancy by Room Type */}
+            <div className="rep-card">
+              <CardHeader
+                title="Occupancy by Room Type"
+                chartType={chartTypes.occupancyByRoom}
+                onChartTypeChange={(v) => setChartType('occupancyByRoom', v)}
+                options={[{ value: 'bar', label: 'Bar' }, { value: 'donut', label: 'Donut' }]}
+              />
+              {chartTypes.occupancyByRoom === 'bar' ? (
+                <HBarList items={occupancyByRoom.map(r => ({ ...r, color: '#3b82f6' }))} />
+              ) : (
+                <div className="donut-wrap-rep">
+                  <DonutChart segments={occupancyByRoom.map((r, i) => ({ ...r, color: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'][i % 5] }))} size={110} stroke={20} />
+                  <div className="donut-legend-rep">
+                    {occupancyByRoom.map((r, i) => (
+                      <div className="donut-leg-item-rep" key={r.label}>
+                        <span className="donut-dot-rep" style={{ background: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'][i % 5] }} />
+                        <span>{r.label}</span>
+                        <span className="donut-pct-rep">{r.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Revenue by Room Type */}
+            <div className="rep-card">
+              <CardHeader
+                title="Revenue by Room Type"
+                chartType={chartTypes.revenueByRoom}
+                onChartTypeChange={(v) => setChartType('revenueByRoom', v)}
+                options={[{ value: 'donut', label: 'Donut' }, { value: 'bar', label: 'Bar' }]}
+              />
+              {chartTypes.revenueByRoom === 'donut' ? (
+                <div className="donut-wrap-rep">
+                  <DonutChart
+                    segments={revenueByRoom}
+                    size={110} stroke={20}
+                    centerContent={
+                      <div className="donut-center-rep">
+                        <span className="donut-amt-rep">{formatINR(stats.totalRevenue)}</span>
+                        <span className="donut-sub-rep">Total Revenue</span>
+                      </div>
+                    }
+                  />
+                  <div className="donut-legend-rep">
+                    {revenueByRoom.map(r => (
+                      <div className="donut-leg-item-rep" key={r.label}>
+                        <span className="donut-dot-rep" style={{ background: r.color }} />
+                        <span>{r.label}</span>
+                        <span className="donut-pct-rep">{r.pct.toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <HBarList items={revenueByRoom} />
+              )}
+            </div>
+          </>
+        )}
+
+        {view === 'staff' && staffOverview && (
+          <>
+            {/* Staff by Department */}
+            <div className="rep-card">
+              <div className="rep-card-title">Staff by Department</div>
+              <div className="donut-wrap-rep">
+                <DonutChart
+                  segments={staffOverview.staffByDept}
+                  size={110} stroke={20}
+                  centerContent={
+                    <div className="donut-center-rep">
+                      <span className="donut-amt-rep">{staffOverview.totalStaff}</span>
+                      <span className="donut-sub-rep">Total Staff</span>
+                    </div>
+                  }
+                />
+                <div className="donut-legend-rep">
+                  {staffOverview.staffByDept.map(d => (
+                    <div className="donut-leg-item-rep" key={d.label}>
+                      <span className="donut-dot-rep" style={{ background: d.color }} />
+                      <span>{d.label}</span>
+                      <span className="donut-pct-rep">{d.pct.toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Attendance Trend */}
+            <div className="rep-card">
+              <CardHeader
+                title={`${PERIOD_TITLE[period]} Attendance Rate`}
+                chartType={chartTypes.attendanceTrend}
+                onChartTypeChange={(v) => setChartType('attendanceTrend', v)}
+                options={[{ value: 'bar', label: 'Bar' }, { value: 'line', label: 'Line' }]}
+              />
+              <SingleSeriesChart data={staffOverview.attendanceTrend} valueKey="count" type={chartTypes.attendanceTrend} color="#10b981" />
+              <div className="vbar-legend"><span className="vbar-legend-dot" /> Attendance %</div>
+            </div>
+
+            {/* Attendance Status Breakdown */}
+            <div className="rep-card">
+              <div className="rep-card-title">Attendance Status Breakdown</div>
+              <HBarList items={staffOverview.attendanceStatusBreakdown} />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Row 2: bonus detail cards — only shown for the Revenue view ── */}
+      {view === 'revenue' && (
+        <div className="rep-row-2" ref={row2Ref}>
+
+          {/* Occupancy by Room Type */}
+          <div className="rep-card">
+            <CardHeader
+              title="Occupancy by Room Type"
+              chartType={chartTypes.occupancyByRoom}
+              onChartTypeChange={(v) => setChartType('occupancyByRoom', v)}
+              options={[{ value: 'bar', label: 'Bar' }, { value: 'donut', label: 'Donut' }]}
+            />
+            {chartTypes.occupancyByRoom === 'bar' ? (
+              <HBarList items={occupancyByRoom.map(r => ({ ...r, color: '#3b82f6' }))} />
+            ) : (
+              <div className="donut-wrap-rep">
+                <DonutChart segments={occupancyByRoom.map((r, i) => ({ ...r, color: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'][i % 5] }))} size={110} stroke={20} />
+                <div className="donut-legend-rep">
+                  {occupancyByRoom.map((r, i) => (
+                    <div className="donut-leg-item-rep" key={r.label}>
+                      <span className="donut-dot-rep" style={{ background: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'][i % 5] }} />
+                      <span>{r.label}</span>
+                      <span className="donut-pct-rep">{r.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Booking Trend */}
+          <div className="rep-card">
+            <CardHeader
+              title={`${PERIOD_TITLE[period]} Booking Trend`}
+              chartType={chartTypes.bookingTrend}
+              onChartTypeChange={(v) => setChartType('bookingTrend', v)}
+              options={[{ value: 'bar', label: 'Bar' }, { value: 'line', label: 'Line' }]}
+            />
+            <SingleSeriesChart data={bookingTrend} valueKey="count" type={chartTypes.bookingTrend} />
+            <div className="vbar-legend"><span className="vbar-legend-dot" /> Bookings</div>
+          </div>
+
+          {/* Booking Status Breakdown */}
+          <div className="rep-card">
+            <CardHeader
+              title="Booking Status Breakdown"
+              chartType={chartTypes.statusBreakdown}
+              onChartTypeChange={(v) => setChartType('statusBreakdown', v)}
+              options={[{ value: 'bar', label: 'Bar' }, { value: 'donut', label: 'Donut' }]}
+            />
+            {chartTypes.statusBreakdown === 'bar' ? (
+              <HBarList items={bookingStatusBreakdown} />
+            ) : (
+              <div className="donut-wrap-rep">
+                <DonutChart segments={bookingStatusBreakdown} size={110} stroke={20} />
+                <div className="donut-legend-rep">
+                  {bookingStatusBreakdown.map(r => (
+                    <div className="donut-leg-item-rep" key={r.label}>
+                      <span className="donut-dot-rep" style={{ background: r.color }} />
+                      <span>{r.label}</span>
+                      <span className="donut-pct-rep">{r.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
+      )}
 
-        {/* Revenue by Room Type */}
-        <div className="rep-card">
-          <div className="rep-card-title">Revenue by Room Type</div>
-          <div className="donut-wrap-rep">
-            <div style={{position:'relative'}}>
-              <DonutChart
-                segments={REVENUE_BY_ROOM}
-                size={110} stroke={20}
-                centerContent={
-                  <div className="donut-center-rep">
-                    <span className="donut-amt-rep">₹ 24,50,000</span>
-                    <span className="donut-sub-rep">Total Revenue</span>
-                  </div>
-                }
-              />
+      {/* ── Row 3: view-dependent summary table + insights (+ forecast for Revenue) ── */}
+      <div className="rep-row-3" ref={row3Ref}>
+
+        {view === 'revenue' && (
+          <>
+            <div className="rep-card">
+              <div className="rep-card-title">Monthly Performance Summary</div>
+              <table className="perf-table">
+                <thead>
+                  <tr>
+                    <th>Month</th><th>Total Revenue (₹)</th><th>Occupancy Rate</th>
+                    <th>Average Daily Rate (₹)</th><th>RevPAR (₹)</th><th>Total Bookings</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlySummary.map(m => (
+                    <tr key={m.month}>
+                      <td style={{ fontWeight: 600 }}>{m.month}</td>
+                      <td>{m.revenue.toLocaleString('en-IN')}</td>
+                      <td>{m.occ}%</td>
+                      <td>{m.adr.toLocaleString('en-IN')}</td>
+                      <td>{m.revpar.toLocaleString('en-IN')}</td>
+                      <td>{m.bookings}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div className="donut-legend-rep">
-              {REVENUE_BY_ROOM.map(r=>(
-                <div className="donut-leg-item-rep" key={r.label}>
-                  <span className="donut-dot-rep" style={{background:r.color}}/>
-                  <span>{r.label}</span>
-                  <span className="donut-pct-rep">{r.pct.toFixed(1)}%</span>
+
+            <div className="rep-card">
+              <CardHeader
+                title={`Revenue Forecast (Next ${forecast.length - revenueTrend.length} ${period === 'daily' ? 'Days' : period === 'weekly' ? 'Weeks' : 'Months'})`}
+                chartType={chartTypes.forecast}
+                onChartTypeChange={(v) => setChartType('forecast', v)}
+                options={[{ value: 'line', label: 'Line' }, { value: 'bar', label: 'Bar' }]}
+              />
+              <DualSeriesChart data={forecast} aKey="actual" bKey="forecast" type={chartTypes.forecast} aColor="#10b981" bColor="#9ca3af" gradId="forecastGrad" />
+              <div className="forecast-legend">
+                <div className="rep-legend-item"><span className="rep-legend-dash solid" style={{ background: '#10b981' }} /> Actual</div>
+                <div className="rep-legend-item"><span className="rep-legend-dash dashed" /> Forecast</div>
+              </div>
+              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
+                Simple growth-rate projection based on recent trend — a rough estimate, not a financial forecast.
+              </div>
+            </div>
+
+            <div className="rep-card">
+              <div className="rep-card-title">Insights</div>
+              {insights.map((ins, i) => (
+                <div className="insight-item" key={i}>
+                  <div className={`insight-icon ${ins.type === 'up' ? 'green' : ins.type === 'down' ? 'red' : ins.type === 'top' ? 'gold' : 'purple'}`}>
+                    {ins.type === 'up' ? <IcoArrowUp /> : ins.type === 'down' ? <IcoArrowDown /> : ins.type === 'top' ? <IcoBolt /> : <IcoTarget />}
+                  </div>
+                  <span>{ins.text}</span>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+          </>
+        )}
 
-        {/* Occupancy Overview */}
-        <div className="rep-card">
-          <div className="rep-card-title">Occupancy Overview</div>
-          <div className="occ-donut-wrap">
-            <div style={{position:'relative'}}>
-              <DonutChart
-                segments={[{pct:62.5,color:'#10b981'},{pct:37.5,color:'#f1f4f9'}]}
-                size={120} stroke={16}
-                centerContent={
-                  <div className="occ-center">
-                    <span className="occ-pct">62.5%</span>
-                    <span className="occ-label">Occupancy Rate</span>
+        {view === 'bookings' && (
+          <>
+            <div className="rep-card">
+              <div className="rep-card-title">Monthly Performance Summary</div>
+              <table className="perf-table">
+                <thead>
+                  <tr><th>Month</th><th>Total Bookings</th><th>Occupancy Rate</th></tr>
+                </thead>
+                <tbody>
+                  {monthlySummary.map(m => (
+                    <tr key={m.month}>
+                      <td style={{ fontWeight: 600 }}>{m.month}</td>
+                      <td>{m.bookings}</td>
+                      <td>{m.occ}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="rep-card">
+              <div className="rep-card-title">Insights</div>
+              {insights.map((ins, i) => (
+                <div className="insight-item" key={i}>
+                  <div className={`insight-icon ${ins.type === 'up' ? 'green' : ins.type === 'down' ? 'red' : ins.type === 'top' ? 'gold' : 'purple'}`}>
+                    {ins.type === 'up' ? <IcoArrowUp /> : ins.type === 'down' ? <IcoArrowDown /> : ins.type === 'top' ? <IcoBolt /> : <IcoTarget />}
                   </div>
-                }
-              />
-            </div>
-            <div className="occ-change"><IcoArrowUp/> 8.7% from Apr 2024</div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Row 2: Occupancy by Room Type | Daily Booking Trend | Top Booking Channels ── */}
-      <div className="rep-row-2">
-
-        {/* Occupancy by Room Type — horizontal bars */}
-        <div className="rep-card">
-          <div className="rep-card-title">Occupancy by Room Type</div>
-          {OCCUPANCY_BY_ROOM.map(r=>(
-            <div className="hbar-item" key={r.label}>
-              <div className="hbar-top"><span className="hbar-label">{r.label}</span><span className="hbar-pct">{r.pct}%</span></div>
-              <div className="hbar-track"><div className="hbar-fill" style={{width:`${r.pct}%`}}/></div>
-            </div>
-          ))}
-          <div className="hbar-axis"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
-        </div>
-
-        {/* Daily Booking Trend — vertical bars */}
-        <div className="rep-card">
-          <div className="rep-card-title">Daily Booking Trend</div>
-          <div className="vbar-wrap">
-            {DAILY_BOOKINGS.map((v,i)=>(
-              <div className="vbar-col" key={i}>
-                <div className="vbar-bar" style={{height:`${(v/Math.max(...DAILY_BOOKINGS))*100}%`}}/>
-              </div>
-            ))}
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'#9ca3af',marginTop:4}}>
-            <span>01 May</span><span>08 May</span><span>15 May</span><span>22 May</span><span>31 May</span>
-          </div>
-          <div className="vbar-legend"><span className="vbar-legend-dot"/> Bookings</div>
-        </div>
-
-        {/* Top Booking Channels */}
-        <div className="rep-card">
-          <div className="rep-card-title">Top Booking Channels</div>
-          {TOP_CHANNELS.map(c=>(
-            <div className="channel-item" key={c.label}>
-              <div className="channel-top"><span className="channel-label">{c.label}</span><span className="channel-pct">{c.pct}%</span></div>
-              <div className="channel-track"><div className="channel-fill" style={{width:`${c.pct}%`,background:c.color}}/></div>
-            </div>
-          ))}
-          <div className="channel-axis"><span>0%</span><span>20%</span><span>40%</span><span>60%</span><span>80%</span><span>100%</span></div>
-        </div>
-      </div>
-
-      {/* ── Row 3: Monthly Performance | Revenue Forecast | Insights ── */}
-      <div className="rep-row-3">
-
-        {/* Monthly Performance Summary table */}
-        <div className="rep-card">
-          <div className="rep-card-title">Monthly Performance Summary</div>
-          <table className="perf-table">
-            <thead>
-              <tr>
-                <th>Month</th><th>Total Revenue (₹)</th><th>Occupancy Rate</th>
-                <th>Average Daily Rate (₹)</th><th>RevPAR (₹)</th><th>Total Bookings</th>
-              </tr>
-            </thead>
-            <tbody>
-              {MONTHLY_SUMMARY.map(m=>(
-                <tr key={m.month}>
-                  <td style={{fontWeight:600}}>{m.month}</td>
-                  <td>{m.revenue}</td>
-                  <td>{m.occ}</td>
-                  <td>{m.adr}</td>
-                  <td>{m.revpar}</td>
-                  <td>{m.bookings}</td>
-                </tr>
+                  <span>{ins.text}</span>
+                </div>
               ))}
-            </tbody>
-          </table>
-          <div className="view-detail-link">View Detailed Report <IcoArrowRight/></div>
-        </div>
-
-        {/* Revenue Forecast */}
-        <div className="rep-card">
-          <div className="rep-card-title">Revenue Forecast (Next 30 Days)</div>
-          <ForecastChart data={FORECAST_DATA}/>
-          <div className="forecast-legend">
-            <div className="rep-legend-item"><span className="rep-legend-dash solid" style={{background:'#10b981'}}/> Actual</div>
-            <div className="rep-legend-item"><span className="rep-legend-dash dashed"/> Forecast</div>
-          </div>
-        </div>
-
-        {/* Insights */}
-        <div className="rep-card">
-          <div className="rep-card-title">Insights</div>
-          {INSIGHTS.map((ins,i)=>(
-            <div className="insight-item" key={i}>
-              <div className={`insight-icon ${ins.color}`}>{ins.icon}</div>
-              <span>{ins.text}</span>
             </div>
-          ))}
-          <div className="view-all-insights">View All Insights <IcoArrowRight/></div>
-        </div>
+          </>
+        )}
+
+        {view === 'rooms' && (
+          <>
+            <div className="rep-card">
+              <div className="rep-card-title">Monthly Performance Summary</div>
+              <table className="perf-table">
+                <thead>
+                  <tr><th>Month</th><th>Occupancy Rate</th><th>RevPAR (₹)</th></tr>
+                </thead>
+                <tbody>
+                  {monthlySummary.map(m => (
+                    <tr key={m.month}>
+                      <td style={{ fontWeight: 600 }}>{m.month}</td>
+                      <td>{m.occ}%</td>
+                      <td>{m.revpar.toLocaleString('en-IN')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="rep-card">
+              <div className="rep-card-title">Insights</div>
+              {insights.map((ins, i) => (
+                <div className="insight-item" key={i}>
+                  <div className={`insight-icon ${ins.type === 'up' ? 'green' : ins.type === 'down' ? 'red' : ins.type === 'top' ? 'gold' : 'purple'}`}>
+                    {ins.type === 'up' ? <IcoArrowUp /> : ins.type === 'down' ? <IcoArrowDown /> : ins.type === 'top' ? <IcoBolt /> : <IcoTarget />}
+                  </div>
+                  <span>{ins.text}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {view === 'staff' && staffOverview && (
+          <>
+            <div className="rep-card">
+              <div className="rep-card-title">Staff Monthly Summary</div>
+              <table className="perf-table">
+                <thead>
+                  <tr><th>Month</th><th>Total Staff</th><th>Attendance Rate</th></tr>
+                </thead>
+                <tbody>
+                  {staffOverview.staffMonthlySummary.map(m => (
+                    <tr key={m.month}>
+                      <td style={{ fontWeight: 600 }}>{m.month}</td>
+                      <td>{m.totalStaff}</td>
+                      <td>{m.attendanceRate}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="rep-card">
+              <div className="rep-card-title">Insights</div>
+              {staffOverview.insights.map((ins, i) => (
+                <div className="insight-item" key={i}>
+                  <div className={`insight-icon ${ins.type === 'up' ? 'green' : ins.type === 'down' ? 'red' : ins.type === 'top' ? 'gold' : 'purple'}`}>
+                    {ins.type === 'up' ? <IcoArrowUp /> : ins.type === 'down' ? <IcoArrowDown /> : ins.type === 'top' ? <IcoBolt /> : <IcoTarget />}
+                  </div>
+                  <span>{ins.text}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </>
   );

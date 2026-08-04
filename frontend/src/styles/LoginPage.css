@@ -234,60 +234,108 @@
 }
 
 /* Input */
-.input-wrapper {
-  position: relative;
+/* ============================================================
+   LOGIN INPUTS
+============================================================ */
+
+.auth-page .form-group {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.input-icon {
-  position: absolute;
-  left: 14px;
-  color: #9ca3af;
-  display: flex;
-  align-items: center;
-  pointer-events: none;
-}
-
-.form-input {
-  width: 100%;
-  padding: 13px 14px 13px 42px;
+.auth-page .form-label {
   font-size: 14px;
-  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  color: #1a1f36;
+}
+
+.auth-page .input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.auth-page .input-icon {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.auth-page .input-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.auth-page .form-input {
+  width: 100%;
+  height: 48px;
+  box-sizing: border-box;
+
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+  padding-left: 52px !important;
+  padding-right: 46px !important;
+
   border: 1.5px solid #e2e6ef;
   border-radius: 10px;
-  background: #ffffff;
+  background: #fff;
+
+  font-size: 14px;
+  font-family: "Inter", sans-serif;
   color: #1a1f36;
+
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all .2s ease;
 }
 
-.form-input::placeholder {
+.auth-page .form-input::placeholder {
   color: #9ca3af;
+  opacity: 1;
 }
 
-.form-input:focus {
-  border-color: #0d1b4b;
-  box-shadow: 0 0 0 3px rgba(13, 27, 75, 0.08);
+.auth-page .form-input:focus {
+  border-color: #0d1b4b !important;
+  box-shadow: 0 0 0 3px rgba(13,27,75,.08);
 }
 
-/* Password toggle button */
-.input-right-icon {
+.auth-page .input-right-icon {
   position: absolute;
-  right: 14px;
-  color: #9ca3af;
-  cursor: pointer;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  width: 18px;
+  height: 18px;
+
   display: flex;
   align-items: center;
-  background: none;
+  justify-content: center;
+
   border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
   padding: 0;
 }
 
-.input-right-icon:hover {
-  color: #1a1f36;
+.auth-page .input-right-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
+.auth-page .input-right-icon:hover {
+  color: #0d1b4b;
+}
 /* Remember me + Forgot row */
 .auth-form-row {
   display: flex;
@@ -370,35 +418,6 @@
   flex: 1;
   height: 1px;
   background: #e2e6ef;
-}
-
-/* Social Buttons */
-.auth-social-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.btn-social {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 11px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #1a1f36;
-  background: #ffffff;
-  border: 1.5px solid #e2e6ef;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
-  font-family: 'Inter', sans-serif;
-}
-
-.btn-social:hover {
-  border-color: #aaa;
-  background: #f8f9fb;
 }
 
 /* Sign up link */
@@ -487,11 +506,10 @@
 
 @media (max-width: 600px) {
   .auth-panel-right { padding: 32px 20px; }
-  .auth-social-buttons { grid-template-columns: 1fr; }
   .auth-footer { grid-template-columns: 1fr 1fr; padding: 16px 20px; }
 }
+
 /* ============================================================
-   APPEND THIS TO YOUR EXISTING LoginPage.css
    Register section additions
    ============================================================ */
 
@@ -516,31 +534,35 @@
   white-space: nowrap;
 }
 
-/* ── Social buttons ── */
+/* ── Social buttons (single, centered Google button) ── */
 .auth-social-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  display: flex;
+  justify-content: center;
 }
 
 .btn-social {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
+  gap: 10px;
+  padding: 11px 16px;
+  font-size: 14px;
   font-weight: 500;
   color: #1a1f36;
   background: #ffffff;
   border: 1.5px solid #e2e6ef;
   border-radius: 10px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s ease, background 0.2s ease;
   font-family: 'Inter', sans-serif;
-  white-space: nowrap;
+  width: 100%;
+  max-width: 320px;
 }
-.btn-social:hover { border-color: #aaa; background: #f8f9fb; }
+
+.btn-social:hover {
+  border-color: #aaa;
+  background: #f8f9fb;
+}
 
 /* ── Register box ── */
 .auth-register-box {

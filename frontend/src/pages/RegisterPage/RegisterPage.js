@@ -1,518 +1,899 @@
-// ============================================================
-//  RegisterPage.js — Hotel Registration (logic + JSX only)
-//  Step 1: Admin Account Details
-//  Step 2: Hotel Information (name, type, desc, star, year, GST, PAN, reg no, logo)
-//  Step 3: Review & Submit
-//  Icons  → ../../utils/icons/RegisterIcons.js
-//  Styles → ../../styles/RegisterPage.css
-// ============================================================
+import React, { useEffect, useRef, useState } from "react";
+import { useAuth, useSignUp } from "@clerk/clerk-react";
+import { Link } from "react-router-dom";
 
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import '../../styles/RegisterPage.css';
+import "../../styles/RegisterPage.css";
+
 import {
-  IconHotel, IconType, IconDesc, IconStar, IconYear,
-  IconGST, IconPAN, IconReg, IconUpload, IconArrow,
-  IconCheck, IconEmail, IconLock, IconPhone, IconUser,
-  IconEye, GoogleLogo, HotelierCrown,
-} from '../../utils/icons/RegisterIcons';
+  IconCheck,
+  IconEmail,
+  IconEye,
+  IconLock,
+  IconPhone,
+  IconUser,
+  HotelierCrown,
+} from "../../utils/icons/RegisterIcons";
 
-// ── Hotel type options ───────────────────────────────────────
-const HOTEL_TYPES = [
-  'Resort',
-  'Business Hotel',
-  'Budget Hotel',
-  'Boutique Hotel',
-  'Homestay',
-  'Lodge',
-];
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
-// ── Step definitions ─────────────────────────────────────────
-const STEPS = [
-  { label: 'Account',  num: 1 },
-  { label: 'Hotel Info', num: 2 },
-  { label: 'Review',   num: 3 },
-];
-
-// ── Empty form ───────────────────────────────────────────────
-const EMPTY_FORM = {
-  // Step 1 — Admin account
-  adminName: '',
-  adminEmail: '',
-  adminPhone: '',
-  password: '',
-  confirmPassword: '',
-
-  // Step 2 — Hotel info
-  hotelName: '',
-  hotelType: '',
-  hotelDesc: '',
-  starRating: 0,
-  yearEstablished: '',
-  gstNumber: '',
-  panNumber: '',
-  businessRegNumber: '',
-  hotelLogo: null,        // { file, name, url, size }
-
-  // Step 3
+const INITIAL_FORM = {
+  fullName: "",
+  email: "",
+  phone: "",
+  password: "",
+  confirmPassword: "",
   agreeTerms: false,
 };
 
-// ════════════════════════════════════════════════════════════
-//  COMPONENT
-// ════════════════════════════════════════════════════════════
+function getClerkError(error, fallbackMessage) {
+  return (
+    error?.errors?.[0]?.longMessage ||
+    error?.errors?.[0]?.message ||
+    error?.message ||
+    fallbackMessage
+  );
+}
+
 function RegisterPage() {
-  const navigate = useNavigate();
-  const [step, setStep]           = useState(1);
-  const [form, setForm]           = useState(EMPTY_FORM);
-  const [errors, setErrors]       = useState({});
-  const [showPass, setShowPass]   = useState(false);
-  const [showConf, setShowConf]   = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const { isLoaded, signUp, setActive } = useSignUp();
+  const { isSignedIn, getToken } = useAuth();
 
-  // ── Field change ──
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-    setErrors(prev => ({ ...prev, [name]: '' }));
-  };
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [verificationCode, setVerificationCode] = useState("");
 
-  // ── Star rating ──
-  const handleStar = (val) => {
-    setForm(prev => ({ ...prev, starRating: val }));
-    setErrors(prev => ({ ...prev, starRating: '' }));
-  };
+  const [phase, setPhase] = useState("register");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
-  // ── Logo upload ──
-  const handleLogoUpload = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    const url  = URL.createObjectURL(file);
-    const size = (file.size / 1024).toFixed(1) + ' KB';
-    setForm(prev => ({ ...prev, hotelLogo: { file, name: file.name, url, size } }));
-  };
+  const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
 
-  const removeLogo = () => setForm(prev => ({ ...prev, hotelLogo: null }));
+  const [profilePending, setProfilePending] = useState(false);
+  const [profileRetry, setProfileRetry] = useState(0);
 
-  // ── Google register ──
-  const handleGoogleRegister = () => {
-    // TODO: Google OAuth flow
-    alert('Google registration coming soon!');
-  };
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState(false);
 
-  // ── Validate per step ──
-  const validate = () => {
-    const e = {};
-    if (step === 1) {
-      if (!form.adminName.trim())   e.adminName   = 'Full name is required.';
-      if (!form.adminEmail.trim())  e.adminEmail  = 'Email is required.';
-      else if (!/\S+@\S+\.\S+/.test(form.adminEmail)) e.adminEmail = 'Enter a valid email.';
-      if (!form.adminPhone.trim())  e.adminPhone  = 'Phone number is required.';
-      if (!form.password)           e.password    = 'Password is required.';
-      else if (form.password.length < 8) e.password = 'Minimum 8 characters.';
-      if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match.';
+  const profileRequestStarted = useRef(false);
+
+  /*
+   * After Clerk email verification:
+   * 1. Clerk session becomes active
+   * 2. A Clerk token is generated
+   * 3. The authenticated Super Admin profile is stored in MySQL
+   */
+  useEffect(() => {
+    if (
+      !profilePending ||
+      !isSignedIn ||
+      profileRequestStarted.current
+    ) {
+      return;
     }
-    if (step === 2) {
-      if (!form.hotelName.trim())         e.hotelName         = 'Hotel name is required.';
-      if (!form.hotelType)                e.hotelType         = 'Please select a hotel type.';
-      if (!form.hotelDesc.trim())         e.hotelDesc         = 'Hotel description is required.';
-      if (!form.starRating)               e.starRating        = 'Please select a star rating.';
-      if (!form.yearEstablished.trim())   e.yearEstablished   = 'Year established is required.';
-      if (!form.gstNumber.trim())         e.gstNumber         = 'GST number is required.';
-      if (!form.panNumber.trim())         e.panNumber         = 'PAN number is required.';
-      if (!form.businessRegNumber.trim()) e.businessRegNumber = 'Business registration number is required.';
-    }
-    if (step === 3) {
-      if (!form.agreeTerms) e.agreeTerms = 'You must agree to the terms to proceed.';
-    }
-    setErrors(e);
-    return Object.keys(e).length === 0;
+
+    profileRequestStarted.current = true;
+
+    const createSuperAdminProfile = async () => {
+      try {
+        setPhase("saving");
+        setError("");
+
+        const token = await getToken();
+
+        if (!token) {
+          throw new Error(
+            "Clerk session token could not be generated."
+          );
+        }
+
+        const response = await fetch(
+          `${API_BASE_URL}/auth/register-super-admin`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              full_name: form.fullName.trim(),
+              phone: form.phone.trim() || null,
+            }),
+          }
+        );
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Super Admin profile could not be created."
+          );
+        }
+
+        setMessage(
+          data.message || "Super Admin registered successfully."
+        );
+        setPhase("success");
+      } catch (requestError) {
+        console.error(
+          "Super Admin profile registration error:",
+          requestError
+        );
+
+        profileRequestStarted.current = false;
+
+        setError(
+          requestError.message ||
+            "Your Clerk account was created, but the HMS profile could not be saved."
+        );
+
+        setPhase("profile-error");
+      }
+    };
+
+    createSuperAdminProfile();
+  }, [
+    profilePending,
+    profileRetry,
+    isSignedIn,
+    getToken,
+    form.fullName,
+    form.phone,
+  ]);
+
+  const handleChange = (event) => {
+    const { name, value, type, checked } = event.target;
+
+    setForm((currentForm) => ({
+      ...currentForm,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+
+    setError("");
   };
 
-  const handleNext = () => { if (validate()) setStep(s => s + 1); };
-  const handleBack = () => { setStep(s => s - 1); setErrors({}); };
+  const validateRegistrationForm = () => {
+    const fullName = form.fullName.trim();
+    const email = form.email.trim();
 
-  const handleSubmit = () => {
-    if (!validate()) return;
-    // TODO: POST to /api/auth/register
-    console.log('Registering hotel:', form);
-    setSubmitted(true);
+    if (!fullName) {
+      return "Full name is required.";
+    }
+
+    if (fullName.length > 150) {
+      return "Full name must not exceed 150 characters.";
+    }
+
+    if (!email) {
+      return "Email address is required.";
+    }
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      return "Enter a valid email address.";
+    }
+
+    if (form.phone.trim().length > 30) {
+      return "Phone number must not exceed 30 characters.";
+    }
+
+    if (!form.password) {
+      return "Password is required.";
+    }
+
+    if (form.password.length < 8) {
+      return "Password must contain at least 8 characters.";
+    }
+
+    if (form.password !== form.confirmPassword) {
+      return "Password and confirm password do not match.";
+    }
+
+    if (!form.agreeTerms) {
+      return "You must accept the terms and privacy policy.";
+    }
+
+    return "";
   };
 
-  // ── Step circle helper ──
-  const stepStatus = (n) => n < step ? 'done' : n === step ? 'active' : '';
-  const lineStatus = (n) => n < step ? 'done' : '';
+  const handleRegistration = async (event) => {
+    event.preventDefault();
 
-  // ════════════════════════════════════════════════════════════
-  //  RENDER
-  // ════════════════════════════════════════════════════════════
+    const validationError = validateRegistrationForm();
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    if (!isLoaded || !signUp) {
+      setError("Clerk is still loading. Please try again.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await signUp.create({
+        emailAddress: form.email.trim().toLowerCase(),
+        password: form.password,
+      });
+
+      await signUp.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+
+      setMessage(
+        `Verification code has been sent to ${form.email.trim()}.`
+      );
+
+      setPhase("verify");
+    } catch (registrationError) {
+      console.error(
+        "Clerk Super Admin registration error:",
+        registrationError
+      );
+
+      setError(
+        getClerkError(
+          registrationError,
+          "Unable to create the Clerk account."
+        )
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVerifyEmail = async (event) => {
+    event.preventDefault();
+
+    const code = verificationCode.trim();
+
+    if (!code) {
+      setError("Verification code is required.");
+      return;
+    }
+
+    if (!isLoaded || !signUp) {
+      setError("Clerk is still loading. Please try again.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const verificationResult =
+        await signUp.attemptEmailAddressVerification({
+          code,
+        });
+
+      if (
+        verificationResult.status !== "complete" ||
+        !verificationResult.createdSessionId
+      ) {
+        setError(
+          "Email verification is incomplete. Please try again."
+        );
+        return;
+      }
+
+      await setActive({
+        session: verificationResult.createdSessionId,
+      });
+
+      /*
+       * The useEffect above will create the MySQL profile
+       * after Clerk reports that the session is active.
+       */
+      setProfilePending(true);
+      setPhase("saving");
+    } catch (verificationError) {
+      console.error(
+        "Email verification error:",
+        verificationError
+      );
+
+      setError(
+        getClerkError(
+          verificationError,
+          "The verification code is invalid or expired."
+        )
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!isLoaded || !signUp) {
+      setError("Clerk is still loading. Please try again.");
+      return;
+    }
+
+    setResending(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await signUp.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+
+      setMessage(
+        `A new verification code has been sent to ${form.email.trim()}.`
+      );
+    } catch (resendError) {
+      console.error(
+        "Verification code resend error:",
+        resendError
+      );
+
+      setError(
+        getClerkError(
+          resendError,
+          "Unable to resend the verification code."
+        )
+      );
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleRetryProfile = () => {
+    profileRequestStarted.current = false;
+    setError("");
+    setPhase("saving");
+    setProfileRetry((currentValue) => currentValue + 1);
+  };
+
+  const handleStartAgain = () => {
+    window.location.reload();
+  };
+
+  const currentStep = phase === "register" ? 1 : 2;
+
   return (
     <div className="register-page">
-
-      {/* ── Top bar ── */}
       <div className="register-topbar">
         <div className="register-logo">
           <HotelierCrown />
+
           <div className="register-logo-text">
             <h1>Hotel Management System</h1>
-            <p>Register Your Hotel</p>
+            <p>Super Admin Registration</p>
           </div>
         </div>
+
         <div className="register-topbar-link">
           Already registered? <Link to="/login">Sign In</Link>
         </div>
       </div>
 
-      {/* ── Main ── */}
       <div className="register-main">
         <div className="register-card">
-
-          {/* ── Card header + steps ── */}
           <div className="register-card-header">
             <h2>
-              {submitted ? '🎉 Registration Complete!' :
-               step === 1 ? 'Create Your Admin Account' :
-               step === 2 ? 'Hotel Information' :
-               'Review & Submit'}
+              {phase === "register" &&
+                "Create Super Admin Account"}
+
+              {phase === "verify" && "Verify Email Address"}
+
+              {phase === "saving" &&
+                "Creating HMS Profile"}
+
+              {phase === "profile-error" &&
+                "Profile Creation Failed"}
+
+              {phase === "success" &&
+                "Registration Complete"}
             </h2>
+
             <p>
-              {submitted ? 'Your hotel has been successfully registered.' :
-               step === 1 ? 'Set up your administrator login credentials.' :
-               step === 2 ? 'Tell us about your hotel — all fields marked * are required.' :
-               'Review your details before submitting.'}
+              {phase === "register" &&
+                "Create the business owner's account. Hotels will be created separately after login."}
+
+              {phase === "verify" &&
+                "Enter the verification code sent by Clerk to your email address."}
+
+              {phase === "saving" &&
+                "Your Clerk account is verified. The HMS profile is now being created."}
+
+              {phase === "profile-error" &&
+                "The Clerk account exists, but the HMS database profile could not be saved."}
+
+              {phase === "success" &&
+                "Your Super Admin account is ready."}
             </p>
 
-            {/* Step indicator */}
-            {!submitted && (
-              <div className="register-steps">
-                {STEPS.map((s, i) => (
-                  <React.Fragment key={s.num}>
-                    <div className="step-item">
-                      <div className={`step-circle ${stepStatus(s.num)}`}>
-                        {step > s.num ? <IconCheck /> : s.num}
-                      </div>
-                      <span className={`step-label ${stepStatus(s.num)}`}>{s.label}</span>
+            {phase !== "success" &&
+              phase !== "profile-error" && (
+                <div className="register-steps">
+                  <div className="step-item">
+                    <div
+                      className={`step-circle ${
+                        currentStep > 1 ? "done" : "active"
+                      }`}
+                    >
+                      {currentStep > 1 ? <IconCheck /> : 1}
                     </div>
-                    {i < STEPS.length - 1 && (
-                      <div className={`step-line ${lineStatus(s.num)}`} />
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
+
+                    <span
+                      className={`step-label ${
+                        currentStep > 1 ? "done" : "active"
+                      }`}
+                    >
+                      Account
+                    </span>
+                  </div>
+
+                  <div
+                    className={`step-line ${
+                      currentStep > 1 ? "done" : ""
+                    }`}
+                  />
+
+                  <div className="step-item">
+                    <div
+                      className={`step-circle ${
+                        currentStep === 2 ? "active" : ""
+                      }`}
+                    >
+                      2
+                    </div>
+
+                    <span
+                      className={`step-label ${
+                        currentStep === 2 ? "active" : ""
+                      }`}
+                    >
+                      Verify
+                    </span>
+                  </div>
+                </div>
+              )}
           </div>
 
-          {/* ══════════ SUCCESS ══════════ */}
-          {submitted && (
+          {phase === "register" && (
+            <form onSubmit={handleRegistration} noValidate>
+              <div className="register-card-body">
+                {error && (
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      marginBottom: "20px",
+                      borderRadius: "9px",
+                      background: "#fef2f2",
+                      border: "1px solid #fecaca",
+                      color: "#b91c1c",
+                      fontSize: "13px",
+                    }}
+                  >
+                    {error}
+                  </div>
+                )}
+
+                <div className="reg-section-title">
+                  <IconUser />
+                  Business Owner Details
+                </div>
+
+                <div className="reg-grid">
+                  <div className="form-group">
+                    <label
+                      className="form-label"
+                      htmlFor="fullName"
+                    >
+                      <span className="req">*</span>
+                      Full Name
+                    </label>
+
+                    <div className="input-wrapper">
+                      <span className="input-icon">
+                        <IconUser />
+                      </span>
+
+                      <input
+                        id="fullName"
+                        name="fullName"
+                        type="text"
+                        className="form-input"
+                        placeholder="Enter full name"
+                        autoComplete="name"
+                        maxLength={150}
+                        value={form.fullName}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label
+                      className="form-label"
+                      htmlFor="phone"
+                    >
+                      Phone Number
+                    </label>
+
+                    <div className="input-wrapper">
+                      <span className="input-icon">
+                        <IconPhone />
+                      </span>
+
+                      <input
+                        id="phone"
+                        name="phone"
+                        type="tel"
+                        className="form-input"
+                        placeholder="+91 00000 00000"
+                        autoComplete="tel"
+                        maxLength={30}
+                        value={form.phone}
+                        onChange={handleChange}
+                      />
+                    </div>
+
+                    <span className="field-hint">
+                      Phone number is optional.
+                    </span>
+                  </div>
+
+                  <div className="form-group full">
+                    <label
+                      className="form-label"
+                      htmlFor="email"
+                    >
+                      <span className="req">*</span>
+                      Email Address
+                    </label>
+
+                    <div className="input-wrapper">
+                      <span className="input-icon">
+                        <IconEmail />
+                      </span>
+
+                      <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        className="form-input"
+                        placeholder="owner@hotel.com"
+                        autoComplete="email"
+                        value={form.email}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label
+                      className="form-label"
+                      htmlFor="password"
+                    >
+                      <span className="req">*</span>
+                      Password
+                    </label>
+
+                    <div className="input-wrapper">
+                      <span className="input-icon">
+                        <IconLock />
+                      </span>
+
+                      <input
+                        id="password"
+                        name="password"
+                        type={
+                          showPassword ? "text" : "password"
+                        }
+                        className="form-input"
+                        placeholder="Minimum 8 characters"
+                        autoComplete="new-password"
+                        value={form.password}
+                        onChange={handleChange}
+                        style={{ paddingRight: "44px" }}
+                      />
+
+                      <button
+                        type="button"
+                        className="input-right-icon"
+                        onClick={() =>
+                          setShowPassword(
+                            (currentValue) => !currentValue
+                          )
+                        }
+                        aria-label={
+                          showPassword
+                            ? "Hide password"
+                            : "Show password"
+                        }
+                      >
+                        <IconEye open={showPassword} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label
+                      className="form-label"
+                      htmlFor="confirmPassword"
+                    >
+                      <span className="req">*</span>
+                      Confirm Password
+                    </label>
+
+                    <div className="input-wrapper">
+                      <span className="input-icon">
+                        <IconLock />
+                      </span>
+
+                      <input
+                        id="confirmPassword"
+                        name="confirmPassword"
+                        type={
+                          showConfirmPassword
+                            ? "text"
+                            : "password"
+                        }
+                        className="form-input"
+                        placeholder="Re-enter password"
+                        autoComplete="new-password"
+                        value={form.confirmPassword}
+                        onChange={handleChange}
+                        style={{ paddingRight: "44px" }}
+                      />
+
+                      <button
+                        type="button"
+                        className="input-right-icon"
+                        onClick={() =>
+                          setShowConfirmPassword(
+                            (currentValue) => !currentValue
+                          )
+                        }
+                        aria-label={
+                          showConfirmPassword
+                            ? "Hide confirm password"
+                            : "Show confirm password"
+                        }
+                      >
+                        <IconEye open={showConfirmPassword} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="terms-group">
+                  <input
+                    id="agreeTerms"
+                    name="agreeTerms"
+                    type="checkbox"
+                    checked={form.agreeTerms}
+                    onChange={handleChange}
+                  />
+
+                  <label
+                    className="terms-text"
+                    htmlFor="agreeTerms"
+                  >
+                    I agree to the Terms and Privacy Policy.
+                  </label>
+                </div>
+
+                {/*
+                  Clerk bot protection mounts its CAPTCHA here
+                  when the Clerk instance requires it.
+                */}
+                <div id="clerk-captcha" />
+              </div>
+
+              <div className="register-card-footer">
+                <span className="footer-step-info">
+                  Step 1 of 2
+                </span>
+
+                <button
+                  type="submit"
+                  className="btn-next"
+                  disabled={submitting || !isLoaded}
+                >
+                  {submitting
+                    ? "Creating Account..."
+                    : "Create Account"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {phase === "verify" && (
+            <form onSubmit={handleVerifyEmail} noValidate>
+              <div className="register-card-body">
+                {message && (
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      marginBottom: "20px",
+                      borderRadius: "9px",
+                      background: "#ecfdf5",
+                      border: "1px solid #a7f3d0",
+                      color: "#047857",
+                      fontSize: "13px",
+                    }}
+                  >
+                    {message}
+                  </div>
+                )}
+
+                {error && (
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      marginBottom: "20px",
+                      borderRadius: "9px",
+                      background: "#fef2f2",
+                      border: "1px solid #fecaca",
+                      color: "#b91c1c",
+                      fontSize: "13px",
+                    }}
+                  >
+                    {error}
+                  </div>
+                )}
+
+                <div className="reg-section-title">
+                  <IconEmail />
+                  Email Verification
+                </div>
+
+                <div className="reg-grid single">
+                  <div className="form-group">
+                    <label
+                      className="form-label"
+                      htmlFor="verificationCode"
+                    >
+                      <span className="req">*</span>
+                      Verification Code
+                    </label>
+
+                    <div className="input-wrapper">
+                      <span className="input-icon">
+                        <IconLock />
+                      </span>
+
+                      <input
+                        id="verificationCode"
+                        name="verificationCode"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        className="form-input"
+                        placeholder="Enter the email verification code"
+                        value={verificationCode}
+                        onChange={(event) => {
+                          setVerificationCode(
+                            event.target.value
+                          );
+                          setError("");
+                        }}
+                      />
+                    </div>
+
+                    <span className="field-hint">
+                      Code sent to {form.email.trim()}.
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="btn-back"
+                    onClick={handleStartAgain}
+                  >
+                    Change Email
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn-back"
+                    onClick={handleResendCode}
+                    disabled={resending}
+                  >
+                    {resending
+                      ? "Sending..."
+                      : "Resend Code"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="register-card-footer">
+                <span className="footer-step-info">
+                  Step 2 of 2
+                </span>
+
+                <button
+                  type="submit"
+                  className="btn-next"
+                  disabled={
+                    submitting ||
+                    !verificationCode.trim()
+                  }
+                >
+                  {submitting
+                    ? "Verifying..."
+                    : "Verify & Register"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {phase === "saving" && (
             <div className="reg-success">
-              <div className="reg-success-icon">✅</div>
-              <h3>Hotel Registered Successfully!</h3>
+              <div className="reg-success-icon">⏳</div>
+
+              <h3>Creating Super Admin Profile</h3>
+
               <p>
-                Your hotel <strong>{form.hotelName}</strong> has been registered. Our team will review your details and activate your account within 24 hours.
+                Email verification is complete. Please wait
+                while your HMS profile is saved securely.
               </p>
-              <button className="btn-next" onClick={() => navigate('/login')}>
-                Go to Login <IconArrow />
+            </div>
+          )}
+
+          {phase === "profile-error" && (
+            <div className="reg-success">
+              <div
+                className="reg-success-icon"
+                style={{ background: "#fef2f2" }}
+              >
+                ⚠
+              </div>
+
+              <h3>Profile Could Not Be Saved</h3>
+
+              <p>{error}</p>
+
+              <button
+                type="button"
+                className="btn-next"
+                onClick={handleRetryProfile}
+              >
+                Retry Profile Creation
               </button>
             </div>
           )}
 
-          {/* ══════════ STEP 1 — Admin Account ══════════ */}
-          {!submitted && step === 1 && (
-            <>
-              <div className="register-card-body">
-                {/* Google register */}
-                <button className="btn-google-reg" onClick={handleGoogleRegister}>
-                  <GoogleLogo />
-                  Register with Google
-                </button>
-                <div className="or-divider">
-                  <span className="or-divider-line" />
-                  <span className="or-divider-text">or fill in your details</span>
-                  <span className="or-divider-line" />
-                </div>
-
-                <div className="reg-section-title"><IconUser /> Admin Account Details</div>
-
-                <div className="reg-grid">
-                  {/* Full Name */}
-                  <div className="form-group full">
-                    <label className="form-label"><span className="req">*</span> Full Name</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconUser /></span>
-                      <input className={`form-input ${errors.adminName ? 'error-input' : ''}`} name="adminName" value={form.adminName} onChange={handleChange} placeholder="Enter your full name" />
-                    </div>
-                    {errors.adminName && <span className="field-error">{errors.adminName}</span>}
-                  </div>
-
-                  {/* Email */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> Email Address</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconEmail /></span>
-                      <input className={`form-input ${errors.adminEmail ? 'error-input' : ''}`} name="adminEmail" type="email" value={form.adminEmail} onChange={handleChange} placeholder="admin@hotel.com" />
-                    </div>
-                    {errors.adminEmail && <span className="field-error">{errors.adminEmail}</span>}
-                  </div>
-
-                  {/* Phone */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> Phone Number</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconPhone /></span>
-                      <input className={`form-input ${errors.adminPhone ? 'error-input' : ''}`} name="adminPhone" value={form.adminPhone} onChange={handleChange} placeholder="+91 00000 00000" />
-                    </div>
-                    {errors.adminPhone && <span className="field-error">{errors.adminPhone}</span>}
-                  </div>
-
-                  {/* Password */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> Password</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconLock /></span>
-                      <input className={`form-input ${errors.password ? 'error-input' : ''}`} name="password" type={showPass ? 'text' : 'password'} value={form.password} onChange={handleChange} placeholder="Min. 8 characters" style={{ paddingRight: 40 }} />
-                      <button type="button" className="input-right-icon" onClick={() => setShowPass(p => !p)}><IconEye open={showPass} /></button>
-                    </div>
-                    {errors.password && <span className="field-error">{errors.password}</span>}
-                    <span className="field-hint">At least 8 characters</span>
-                  </div>
-
-                  {/* Confirm Password */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> Confirm Password</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconLock /></span>
-                      <input className={`form-input ${errors.confirmPassword ? 'error-input' : ''}`} name="confirmPassword" type={showConf ? 'text' : 'password'} value={form.confirmPassword} onChange={handleChange} placeholder="Re-enter password" style={{ paddingRight: 40 }} />
-                      <button type="button" className="input-right-icon" onClick={() => setShowConf(p => !p)}><IconEye open={showConf} /></button>
-                    </div>
-                    {errors.confirmPassword && <span className="field-error">{errors.confirmPassword}</span>}
-                  </div>
-                </div>
+          {phase === "success" && (
+            <div className="reg-success">
+              <div className="reg-success-icon">
+                <IconCheck />
               </div>
 
-              <div className="register-card-footer">
-                <span className="footer-step-info">Step 1 of 3</span>
-                <button className="btn-next" onClick={handleNext}>
-                  Next: Hotel Info <IconArrow />
-                </button>
-              </div>
-            </>
-          )}
+              <h3>Super Admin Registered Successfully</h3>
 
-          {/* ══════════ STEP 2 — Hotel Information ══════════ */}
-          {!submitted && step === 2 && (
-            <>
-              <div className="register-card-body">
+              <p>
+                {message}
+                <br />
+                Your password and login session are managed
+                securely by Clerk. No password was stored in
+                MySQL.
+              </p>
 
-                {/* ── Basic Info ── */}
-                <div className="reg-section-title"><IconHotel /> Basic Hotel Information</div>
-                <div className="reg-grid">
-
-                  {/* Hotel Name */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> Hotel Name</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconHotel /></span>
-                      <input className={`form-input ${errors.hotelName ? 'error-input' : ''}`} name="hotelName" value={form.hotelName} onChange={handleChange} placeholder="e.g. Grand Palace Hotel" />
-                    </div>
-                    {errors.hotelName && <span className="field-error">{errors.hotelName}</span>}
-                  </div>
-
-                  {/* Hotel Type */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> Hotel Type</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconType /></span>
-                      <select className={`form-select ${errors.hotelType ? 'error-input' : ''}`} name="hotelType" value={form.hotelType} onChange={handleChange}>
-                        <option value="">Select hotel type</option>
-                        {HOTEL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    {errors.hotelType && <span className="field-error">{errors.hotelType}</span>}
-                  </div>
-
-                  {/* Star Rating */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> Star Rating</label>
-                    <div className={`star-rating ${errors.starRating ? 'error-input' : ''}`}>
-                      {[1, 2, 3, 4, 5].map(n => (
-                        <button key={n} type="button" className="star-btn" onClick={() => handleStar(n)}>
-                          <span className={n <= form.starRating ? 'star-filled' : 'star-empty'}>★</span>
-                        </button>
-                      ))}
-                      <span className="star-label">
-                        {form.starRating ? `${form.starRating} Star${form.starRating > 1 ? 's' : ''}` : 'Select rating'}
-                      </span>
-                    </div>
-                    {errors.starRating && <span className="field-error">{errors.starRating}</span>}
-                  </div>
-
-                  {/* Year Established */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> Year Established</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconYear /></span>
-                      <input className={`form-input ${errors.yearEstablished ? 'error-input' : ''}`} name="yearEstablished" value={form.yearEstablished} onChange={handleChange} placeholder="e.g. 2005" maxLength={4} />
-                    </div>
-                    {errors.yearEstablished && <span className="field-error">{errors.yearEstablished}</span>}
-                  </div>
-
-                  {/* Hotel Description */}
-                  <div className="form-group full">
-                    <label className="form-label"><span className="req">*</span> Hotel Description</label>
-                    <textarea className={`form-textarea ${errors.hotelDesc ? 'error-input' : ''}`} name="hotelDesc" value={form.hotelDesc} onChange={handleChange} placeholder="Describe your hotel — location, facilities, unique features..." rows={4} />
-                    {errors.hotelDesc && <span className="field-error">{errors.hotelDesc}</span>}
-                    <span className="field-hint">{form.hotelDesc.length}/500 characters</span>
-                  </div>
-                </div>
-
-                {/* ── Legal & Tax Info ── */}
-                <div className="reg-section-title"><IconReg /> Legal & Tax Information</div>
-                <div className="reg-grid three">
-
-                  {/* GST Number */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> GST Number</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconGST /></span>
-                      <input className={`form-input ${errors.gstNumber ? 'error-input' : ''}`} name="gstNumber" value={form.gstNumber} onChange={handleChange} placeholder="e.g. 22ABCDE1234F1Z5" style={{ textTransform: 'uppercase' }} />
-                    </div>
-                    {errors.gstNumber && <span className="field-error">{errors.gstNumber}</span>}
-                    <span className="field-hint">15-digit GST Identification Number</span>
-                  </div>
-
-                  {/* PAN Number */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> PAN Number</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconPAN /></span>
-                      <input className={`form-input ${errors.panNumber ? 'error-input' : ''}`} name="panNumber" value={form.panNumber} onChange={handleChange} placeholder="e.g. ABCDE1234F" style={{ textTransform: 'uppercase' }} maxLength={10} />
-                    </div>
-                    {errors.panNumber && <span className="field-error">{errors.panNumber}</span>}
-                    <span className="field-hint">10-character PAN</span>
-                  </div>
-
-                  {/* Business Registration Number */}
-                  <div className="form-group">
-                    <label className="form-label"><span className="req">*</span> Business Registration No.</label>
-                    <div className="input-wrapper">
-                      <span className="input-icon"><IconReg /></span>
-                      <input className={`form-input ${errors.businessRegNumber ? 'error-input' : ''}`} name="businessRegNumber" value={form.businessRegNumber} onChange={handleChange} placeholder="e.g. U55101MH2005PTC153147" />
-                    </div>
-                    {errors.businessRegNumber && <span className="field-error">{errors.businessRegNumber}</span>}
-                  </div>
-                </div>
-
-                {/* ── Hotel Logo ── */}
-                <div className="reg-section-title"><IconUpload /> Hotel Logo</div>
-                {!form.hotelLogo ? (
-                  <div className="logo-upload-box">
-                    <input type="file" accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp" onChange={handleLogoUpload} />
-                    <div className="logo-upload-icon"><IconUpload /></div>
-                    <div className="logo-upload-title">Click or drag to upload your hotel logo</div>
-                    <div className="logo-upload-sub">PNG, JPG, SVG, WEBP — Max 5MB</div>
-                  </div>
-                ) : (
-                  <div className="logo-preview-wrap">
-                    <img src={form.hotelLogo.url} alt="Hotel Logo" className="logo-preview-img" />
-                    <div className="logo-preview-info">
-                      <div className="logo-preview-name">{form.hotelLogo.name}</div>
-                      <div className="logo-preview-size">{form.hotelLogo.size}</div>
-                    </div>
-                    <button className="logo-preview-remove" onClick={removeLogo}>Remove</button>
-                  </div>
-                )}
-
-              </div>
-
-              <div className="register-card-footer">
-                <button className="btn-back" onClick={handleBack}>← Back</button>
-                <span className="footer-step-info">Step 2 of 3</span>
-                <button className="btn-next" onClick={handleNext}>
-                  Review Details <IconArrow />
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* ══════════ STEP 3 — Review & Submit ══════════ */}
-          {!submitted && step === 3 && (
-            <>
-              <div className="register-card-body">
-                <div className="reg-section-title"><IconUser /> Admin Account</div>
-                <div className="reg-grid">
-                  {[
-                    ['Full Name',    form.adminName],
-                    ['Email',        form.adminEmail],
-                    ['Phone',        form.adminPhone],
-                    ['Password',     '••••••••'],
-                  ].map(([k, v]) => (
-                    <div className="form-group" key={k}>
-                      <label className="form-label" style={{ color: '#9ca3af', fontWeight: 500 }}>{k}</label>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1f36', padding: '10px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e4e8f0' }}>{v || '—'}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="reg-section-title"><IconHotel /> Hotel Information</div>
-                <div className="reg-grid">
-                  {[
-                    ['Hotel Name',        form.hotelName],
-                    ['Hotel Type',        form.hotelType],
-                    ['Star Rating',       form.starRating ? `${'★'.repeat(form.starRating)} (${form.starRating} Star${form.starRating > 1 ? 's' : ''})` : '—'],
-                    ['Year Established',  form.yearEstablished],
-                    ['GST Number',        form.gstNumber],
-                    ['PAN Number',        form.panNumber],
-                    ['Business Reg No.',  form.businessRegNumber],
-                    ['Hotel Logo',        form.hotelLogo ? form.hotelLogo.name : 'Not uploaded'],
-                  ].map(([k, v]) => (
-                    <div className="form-group" key={k}>
-                      <label className="form-label" style={{ color: '#9ca3af', fontWeight: 500 }}>{k}</label>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1f36', padding: '10px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e4e8f0' }}>{v || '—'}</div>
-                    </div>
-                  ))}
-                  <div className="form-group full">
-                    <label className="form-label" style={{ color: '#9ca3af', fontWeight: 500 }}>Hotel Description</label>
-                    <div style={{ fontSize: 14, color: '#1a1f36', padding: '10px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e4e8f0', lineHeight: 1.6 }}>{form.hotelDesc || '—'}</div>
-                  </div>
-                </div>
-
-                {/* Logo preview in review */}
-                {form.hotelLogo && (
-                  <div style={{ marginBottom: 24 }}>
-                    <div className="reg-section-title">Hotel Logo Preview</div>
-                    <img src={form.hotelLogo.url} alt="Hotel Logo" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 12, border: '2px solid #e4e8f0' }} />
-                  </div>
-                )}
-
-                {/* Terms */}
-                <div className="form-group">
-                  <div className="terms-group">
-                    <input type="checkbox" name="agreeTerms" checked={form.agreeTerms} onChange={handleChange} />
-                    <span className="terms-text">
-                      I agree to the <a href="/terms">Terms &amp; Conditions</a> and <a href="/privacy">Privacy Policy</a>. I confirm that all the information provided is accurate and complete.
-                    </span>
-                  </div>
-                  {errors.agreeTerms && <span className="field-error">{errors.agreeTerms}</span>}
-                </div>
-              </div>
-
-              <div className="register-card-footer">
-                <button className="btn-back" onClick={handleBack}>← Back</button>
-                <span className="footer-step-info">Step 3 of 3</span>
-                <button className="btn-submit" onClick={handleSubmit}>
-                  ✓ Submit Registration
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* ── Bottom sign in link ── */}
-          {!submitted && (
-            <div className="register-signin-link">
-              Already have an account? <Link to="/login">Sign In</Link>
+              <strong>{form.email.trim()}</strong>
             </div>
           )}
-
         </div>
       </div>
     </div>
