@@ -1,282 +1,219 @@
-// backend/controllers/authController.js
 const { createClerkClient } = require("@clerk/backend");
-const crypto = require('crypto');
-const pool = require('../config/db').promisePool;
+const db = require("../config/db").promisePool;
+
 const clerkClient = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY,
 });
 
-// ============================================================
-//  NOTE ON AUTH ARCHITECTURE
-// ============================================================
-// All sign-in / sign-up / session / token-refresh logic is now handled
-// entirely by Clerk on the frontend (signIn.create(), signUp.create(), etc.)
-// and verified on the backend by the @clerk/express middleware
-// (req.auth.userId). The old JWT access/refresh token system has been
-// removed — there is no login(), refreshToken(), or manual bcrypt password
-// check left in this file. MySQL only stores the app-specific profile
-// (users / admins tables) keyed off Clerk's `clerk_id`.
-// ============================================================
+function normalizeOptionalPhone(phone) {
+  if (phone === undefined || phone === null || phone === "") {
+    return null;
+  }
 
-// ---- Super Admin registration (creates Clerk user + `admins` row) ----
-// This is a one-time bootstrap action — only allowed if no super_admin
-// exists yet. It creates the user in Clerk first (source of truth for
-// credentials), then mirrors the profile into MySQL.
+  return String(phone).trim();
+}
+
+/**
+ * Creates the Super Admin profile in MySQL.
+ *
+ * Clerk already handles:
+ * - Account creation
+ * - Password storage
+ * - Email verification
+ * - Login sessions
+ *
+ * This controller stores only the HMS profile.
+ */
 exports.registerSuperAdmin = async (req, res) => {
-  const { full_name, email, password, confirmPassword } = req.body;
+  const clerkUserId = req.clerkAuth?.userId;
+  const fullName = String(req.body.full_name || "").trim();
+  const phone = normalizeOptionalPhone(req.body.phone);
 
-  if (!full_name || !email || !password || !confirmPassword) {
-    return res.status(400).json({ success: false, message: 'All fields are required.' });
-  }
-  if (password !== confirmPassword) {
-    return res.status(400).json({ success: false, message: 'Passwords do not match.' });
-  }
-
-  const connection = await db.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    const [existingAdmin] = await connection.query('SELECT admin_id FROM admins WHERE email = ?', [email]);
-    if (existingAdmin.length > 0) {
-      await connection.rollback();
-      return res.status(409).json({ success: false, message: 'Email already registered.' });
-    }
-
-    const [superAdmins] = await connection.query("SELECT admin_id FROM admins WHERE role = 'super_admin'");
-    if (superAdmins.length > 0) {
-      await connection.rollback();
-      return res.status(403).json({ success: false, message: 'Super admin already exists.' });
-    }
-
-    // Create the user in Clerk first — Clerk owns credentials now.
-    let clerkUser;
-    try {
-      clerkUser = await clerkClient.users.createUser({
-        emailAddress: [email],
-        password,
-        firstName: full_name,
-      });
-
-      // Mark the email verified so this account doesn't hit
-      // needs_second_factor / unverified-email issues on first login.
-      const emailAddressId = clerkUser.emailAddresses[0]?.id;
-      if (emailAddressId) {
-        await clerkClient.emailAddresses.updateEmailAddress(emailAddressId, {
-          verified: true,
-        });
-      }
-    } catch (clerkErr) {
-      await connection.rollback();
-      console.error('Clerk super admin creation error:', clerkErr);
-      return res.status(400).json({
-        success: false,
-        message: clerkErr.errors?.[0]?.longMessage || 'Failed to create Clerk user.',
-      });
-    }
-
-    const [userResult] = await connection.query(
-      "INSERT INTO users (clerk_id, full_name, email, password, role, status) VALUES (?, ?, ?, NULL, 'super_admin', 'active')",
-      [clerkUser.id, full_name, email]
-    );
-    const userId = userResult.insertId;
-
-await connection.query(
-`
-INSERT INTO admins
-(
-    user_id,
-    email,
-    password,
-    role,
-    clerk_id
-)
-VALUES
-(?,?,?,?,?)
-`,
-[
-    userId,
-    email,
-    null,
-    "super_admin",
-    clerkUser.id,
-]);
-
-    await connection.commit();
-    return res.status(201).json({
-      success: true,
-      message: 'Super admin registered successfully.',
-      clerkId: clerkUser.id,
+  if (!clerkUserId) {
+    return res.status(401).json({
+      success: false,
+      message: "Authentication required.",
     });
-  } catch (err) {
-    await connection.rollback();
-    if (err.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ success: false, message: 'Email already registered.' });
-    }
-    console.error('Super admin registration error:', err);
-    return res.status(500).json({ success: false, message: 'Server error.' });
-  } finally {
-    connection.release();
-  }
-};
-
-// ---- Super Admin creates a Hotel ----
-exports.createHotel = async (req, res) => {
-  const {
-    hotel_name, hotel_type, hotel_desc, star_rating,
-    year_established, gst_number, pan_number, business_reg_number,
-  } = req.body;
-
-  if (!hotel_name) {
-    return res.status(400).json({ success: false, message: 'Hotel name is required.' });
   }
 
-  try {
-    const [result] = await db.query(
-      `INSERT INTO hotels
-        (hotel_name, hotel_type, hotel_desc, star_rating, year_established,
-         gst_number, pan_number, business_reg_number, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-      [hotel_name, hotel_type, hotel_desc, star_rating, year_established,
-       gst_number, pan_number, business_reg_number]
-    );
-
-    return res.status(201).json({
-      success: true,
-      hotel_id: result.insertId,
-      message: 'Hotel created successfully.',
-    });
-  } catch (err) {
-    console.error('createHotel error:', err);
-    return res.status(500).json({ success: false, message: 'Server error.' });
-  }
-};
-
-// ---- Super Admin creates an Admin (Clerk-backed, temp password, must_change_password) ----
-exports.registerAdmin = async (req, res) => {
-  const { full_name, email, phone, hotel_id } = req.body;
-
-  if (!full_name || !email || !hotel_id) {
+  if (!fullName) {
     return res.status(400).json({
       success: false,
-      message: "Full name, email and hotel ID are required.",
+      message: "Full name is required.",
     });
   }
+
+  if (fullName.length > 150) {
+    return res.status(400).json({
+      success: false,
+      message: "Full name must not exceed 150 characters.",
+    });
+  }
+
+  if (phone && phone.length > 30) {
+    return res.status(400).json({
+      success: false,
+      message: "Phone number must not exceed 30 characters.",
+    });
+  }
+
+  let clerkUser;
+
+  try {
+    clerkUser = await clerkClient.users.getUser(clerkUserId);
+  } catch (error) {
+    console.error("Unable to read Clerk user:", error);
+
+    return res.status(502).json({
+      success: false,
+      message: "Unable to verify the Clerk user.",
+    });
+  }
+
+  const primaryEmail = clerkUser.emailAddresses.find(
+    (emailAddress) =>
+      emailAddress.id === clerkUser.primaryEmailAddressId
+  );
+
+  if (!primaryEmail?.emailAddress) {
+    return res.status(400).json({
+      success: false,
+      message: "A primary email address is required.",
+    });
+  }
+
+  if (primaryEmail.verification?.status !== "verified") {
+    return res.status(403).json({
+      success: false,
+      message: "Verify your email address before registration.",
+    });
+  }
+
+  const email = primaryEmail.emailAddress.trim().toLowerCase();
 
   const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();
 
-    // Check if admin already exists in MySQL
-    const [existing] = await connection.query(
-      "SELECT user_id FROM users WHERE email = ?",
-      [email]
+    /*
+     * Check whether this Clerk account or email is already present
+     * in the Super Admin table.
+     */
+    const [existingSuperAdmins] = await connection.query(
+      `
+        SELECT
+          superadmin_id,
+          clerk_id,
+          full_name,
+          email,
+          phone,
+          role,
+          status
+        FROM superadmins
+        WHERE clerk_id = ? OR email = ?
+        FOR UPDATE
+      `,
+      [clerkUserId, email]
     );
 
-    if (existing.length > 0) {
+    const existingSuperAdmin = existingSuperAdmins[0];
+
+    /*
+     * Return the existing profile for repeated registration requests.
+     */
+    if (existingSuperAdmin) {
+      if (existingSuperAdmin.clerk_id !== clerkUserId) {
+        await connection.rollback();
+
+        return res.status(409).json({
+          success: false,
+          message: "This email is already linked to another account.",
+        });
+      }
+
+      await connection.commit();
+
+      return res.status(200).json({
+        success: true,
+        message: "Super Admin account is already registered.",
+        user: {
+          superadminId: existingSuperAdmin.superadmin_id,
+          clerkId: existingSuperAdmin.clerk_id,
+          fullName: existingSuperAdmin.full_name,
+          email: existingSuperAdmin.email,
+          phone: existingSuperAdmin.phone,
+          role: existingSuperAdmin.role,
+          status: existingSuperAdmin.status,
+        },
+      });
+    }
+
+    /*
+     * A Clerk user or email cannot be both an Admin
+     * and a Super Admin.
+     */
+    const [existingAdmins] = await connection.query(
+      `
+        SELECT admin_id
+        FROM admins
+        WHERE clerk_id = ? OR email = ?
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [clerkUserId, email]
+    );
+
+    if (existingAdmins.length > 0) {
       await connection.rollback();
+
       return res.status(409).json({
         success: false,
-        message: "Email already exists.",
+        message: "This Clerk account is already registered as an Admin.",
       });
     }
 
-    // Temporary password
-    const tempPassword = crypto.randomBytes(8).toString("hex");
-
-    // Create user in Clerk
-    const clerkUser = await clerkClient.users.createUser({
-      emailAddress: [email],
-      password: tempPassword,
-      firstName: full_name,
-    });
-
-    // Mark email verified — backend-provisioned users otherwise hit
-    // needs_second_factor / unverified email issues on first login.
-    const emailAddressId = clerkUser.emailAddresses[0]?.id;
-    if (emailAddressId) {
-      await clerkClient.emailAddresses.updateEmailAddress(emailAddressId, {
-        verified: true,
-      });
-    }
-
-    // Get logged-in super admin
-    const [creator] = await connection.query(
-      "SELECT user_id FROM users WHERE clerk_id = ?",
-      [req.auth.userId]
-    );
-
-    if (!creator.length) {
-      await connection.rollback();
-
-      return res.status(404).json({
-        success: false,
-        message: "Super admin not found.",
-      });
-    }
-
-    const createdBy = creator[0].user_id;
-
-    // Save in users table
-    const [userResult] = await connection.query(
-      `INSERT INTO users
-      (clerk_id, full_name, email, phone, password, role, status)
-      VALUES (?, ?, ?, ?, NULL, 'admin', 'active')`,
-      [
-        clerkUser.id,
-        full_name,
-        email,
-        phone || null,
-      ]
-    );
-
-    // Save in admins table
-    await connection.query(
-      `INSERT INTO admins
-      (user_id, email, role, hotel_id, created_by, must_change_password)
-      VALUES (?, ?, 'admin', ?, ?, true)`,
-      [
-        userResult.insertId,
-        email,
-        hotel_id,
-        createdBy,
-      ]
+    const [result] = await connection.query(
+      `
+        INSERT INTO superadmins
+          (clerk_id, full_name, email, phone)
+        VALUES (?, ?, ?, ?)
+      `,
+      [clerkUserId, fullName, email, phone]
     );
 
     await connection.commit();
 
     return res.status(201).json({
       success: true,
-      message: "Admin created successfully.",
-      temporaryPassword: tempPassword,
-      clerkId: clerkUser.id,
+      message: "Super Admin registered successfully.",
+      user: {
+        superadminId: result.insertId,
+        clerkId: clerkUserId,
+        fullName,
+        email,
+        phone,
+        role: "super_admin",
+        status: "active",
+      },
     });
-
-  } catch (err) {
-
+  } catch (error) {
     await connection.rollback();
 
-    console.error("Register Admin Error:", err);
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        message: "This Clerk account or email is already registered.",
+      });
+    }
+
+    console.error("registerSuperAdmin error:", error);
 
     return res.status(500).json({
       success: false,
-      message: err.errors?.[0]?.longMessage || err.message,
+      message: "Unable to register the Super Admin.",
     });
-
   } finally {
-
     connection.release();
-
-  }
-};
-exports.clearMustChangePassword = async (req, res) => {
-  try {
-    await db.query(
-      `UPDATE admins SET must_change_password = false WHERE user_id = ?`,
-      [req.dbUser.userId]
-    );
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error.' });
   }
 };

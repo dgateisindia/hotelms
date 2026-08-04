@@ -1,13 +1,43 @@
-/* ============================================================
-   HOTELIER - Global Stylesheet
-   All page styles live here. Import this in index.js or App.js.
-   ============================================================ */
-
 /* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; font-family: 'Inter', sans-serif; }
 
 /* ── Design Tokens ── */
+:root {
+  --color-primary: #10245f;
+  --color-primary-hover: #0b1b4a;
+
+  --color-success: #15803d;
+  --color-success-bg: #f0fdf4;
+
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fef2f2;
+
+  --color-warning: #a16207;
+  --color-text: #111827;
+  --color-text-muted: #6b7280;
+  --color-border: #dbe2ea;
+  --color-background: #f5f7fb;
+  --color-surface: #ffffff;
+
+  --font-family-primary: "Poppins", sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  --input-height: 44px;
+  --button-height: 44px;
+
+  --shadow-card: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
 :root {
   /* Brand Colors */
   --color-navy:        #0d1b4b;

@@ -1,37 +1,50 @@
-const express = require('express');
-const router = express.Router();
+const express = require("express");
+
+const { registerSuperAdmin } = require("../controllers/authController");
 
 const {
-  registerSuperAdmin,
-  registerAdmin,
-  createHotel,
-  clearMustChangePassword,
-} = require('../controllers/authController');
-const { requireAuth } = require('@clerk/express');
-const { attachDbUser, requireRole } = require('../middleware/roleMiddleware');
+  requireClerkSession,
+  attachDbUser,
+} = require("../middleware/roleMiddleware");
 
-router.post('/register-super-admin', registerSuperAdmin);
+const router = express.Router();
 
+/*
+ * Clerk account creation and email verification happen on the frontend.
+ *
+ * This endpoint creates only the authenticated Super Admin profile
+ * inside MySQL.
+ *
+ * Passwords are never sent to or stored by this endpoint.
+ */
 router.post(
-  '/create-hotel',
-  requireAuth(),
-  attachDbUser(),
-  requireRole('super_admin'),   
-  createHotel
+  "/register-super-admin",
+  requireClerkSession,
+  registerSuperAdmin
 );
 
-router.post(
-  '/register-admin',
-  requireAuth(),
+/*
+ * Verifies:
+ * 1. Clerk session
+ * 2. HMS database account
+ * 3. Account active status
+ *
+ * Endpoint:
+ * GET /api/auth/me
+ */
+router.get(
+  "/me",
+  requireClerkSession,
   attachDbUser(),
-  requireRole('super_admin'),  
-  registerAdmin
+  (req, res) => {
+    return res.status(200).json({
+      success: true,
+      session: {
+        sessionId: req.clerkAuth.sessionId,
+      },
+      user: req.dbUser,
+    });
+  }
 );
-
-router.get('/me', requireAuth(), attachDbUser(), (req, res) => {
-  res.json({ success: true, user: req.dbUser });
-});
-
-router.post('/clear-must-change-password', requireAuth(), attachDbUser(), clearMustChangePassword);
 
 module.exports = router;
