@@ -1,7 +1,21 @@
-import React, { useEffect, useRef, useState } from "react";
-import { useAuth, useSignUp } from "@clerk/clerk-react";
-import { Link } from "react-router-dom";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
+import {
+  useAuth,
+  useSignUp,
+} from "@clerk/clerk-react";
+
+import {
+  Link,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
+
+import apiClient from "../../services/apiClient";
 import "../../styles/RegisterPage.css";
 
 import {
@@ -13,9 +27,6 @@ import {
   IconUser,
   HotelierCrown,
 } from "../../utils/icons/RegisterIcons";
-
-const API_BASE_URL =
-  process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
 const INITIAL_FORM = {
   fullName: "",
@@ -35,12 +46,40 @@ function getClerkError(error, fallbackMessage) {
   );
 }
 
-function RegisterPage() {
-  const { isLoaded, signUp, setActive } = useSignUp();
-  const { isSignedIn, getToken } = useAuth();
+function isProfileErrorRetryable(error) {
+  if (!error) {
+    return true;
+  }
+
+  /*
+   * These errors normally require a new login or the correct
+   * Clerk account. Repeating the same request will not fix them.
+   */
+  if ([401, 403, 409].includes(error.status)) {
+    return false;
+  }
+
+  return true;
+}
+
+function RegisterPage({ mode = "selfRegister" }) {
+  const navigate = useNavigate();
+
+  const {
+    isLoaded,
+    signUp,
+    setActive,
+  } = useSignUp();
+
+  const {
+    isSignedIn,
+    getToken,
+    signOut,
+  } = useAuth();
 
   const [form, setForm] = useState(INITIAL_FORM);
-  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationCode, setVerificationCode] =
+    useState("");
 
   const [phase, setPhase] = useState("register");
   const [error, setError] = useState("");
@@ -49,20 +88,49 @@ function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
 
-  const [profilePending, setProfilePending] = useState(false);
-  const [profileRetry, setProfileRetry] = useState(0);
-
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] =
+  const [profilePending, setProfilePending] =
     useState(false);
 
+  const [profileRetry, setProfileRetry] = useState(0);
+
+  const [profileErrorRetryable, setProfileErrorRetryable] =
+    useState(true);
+
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] = useState(false);
+
   const profileRequestStarted = useRef(false);
+  const dashboardRedirectTimer = useRef(null);
 
   /*
-   * After Clerk email verification:
-   * 1. Clerk session becomes active
-   * 2. A Clerk token is generated
-   * 3. The authenticated Super Admin profile is stored in MySQL
+   * The current development stage supports only Super Admin
+   * self-registration. Admin creation will be implemented later
+   * through a dedicated Super Admin workflow.
+   */
+  const unsupportedMode = mode !== "selfRegister";
+
+  useEffect(() => {
+    return () => {
+      if (dashboardRedirectTimer.current) {
+        window.clearTimeout(
+          dashboardRedirectTimer.current
+        );
+      }
+    };
+  }, []);
+
+  /*
+   * After Clerk verification:
+   *
+   * 1. Get the Clerk session token.
+   * 2. Create or verify the Super Admin MySQL profile.
+   * 3. Verify the role through /api/auth/me.
+   * 4. Redirect to the Super Admin dashboard.
    */
   useEffect(() => {
     if (
@@ -79,54 +147,94 @@ function RegisterPage() {
       try {
         setPhase("saving");
         setError("");
+        setMessage("");
+        setProfileErrorRetryable(true);
 
         const token = await getToken();
 
         if (!token) {
-          throw new Error(
-            "Clerk session token could not be generated."
+          const sessionError = new Error(
+            "Your Clerk session could not be verified. Please sign in again."
           );
+
+          sessionError.status = 401;
+          throw sessionError;
         }
 
-        const response = await fetch(
-          `${API_BASE_URL}/auth/register-super-admin`,
+        const registrationResponse = await apiClient.post(
+          "/auth/register-super-admin",
           {
-            method: "POST",
-            credentials: "include",
+            full_name: form.fullName.trim(),
+            phone: form.phone.trim() || null,
+          },
+          {
             headers: {
-              "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({
-              full_name: form.fullName.trim(),
-              phone: form.phone.trim() || null,
-            }),
           }
         );
 
-        const data = await response.json().catch(() => ({}));
+        /*
+         * Do not redirect based only on profile creation.
+         * Confirm that the backend recognizes this account as an
+         * active Super Admin.
+         */
+        const accountResponse = await apiClient.get(
+          "/auth/me",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
-        if (!response.ok) {
-          throw new Error(
-            data.message ||
-              "Super Admin profile could not be created."
+        const authenticatedUser =
+          accountResponse.data?.user;
+
+        if (
+          !authenticatedUser ||
+          authenticatedUser.role !== "super_admin"
+        ) {
+          const roleError = new Error(
+            "Your account was created, but the Super Admin role could not be verified."
           );
+
+          roleError.status = 403;
+          throw roleError;
         }
 
         setMessage(
-          data.message || "Super Admin registered successfully."
+          registrationResponse.data?.message ||
+            "Super Admin registered successfully."
         );
+
         setPhase("success");
+
+        dashboardRedirectTimer.current =
+          window.setTimeout(() => {
+            navigate("/superadmin-dashboard", {
+              replace: true,
+            });
+          }, 1000);
       } catch (requestError) {
         console.error(
-          "Super Admin profile registration error:",
-          requestError
+          `[SUPER_ADMIN_REGISTRATION] ${
+            requestError?.code ||
+            "PROFILE_CREATION_FAILED"
+          }: ${
+            requestError?.message ||
+            "Unknown registration error"
+          }`
         );
 
         profileRequestStarted.current = false;
 
+        setProfileErrorRetryable(
+          isProfileErrorRetryable(requestError)
+        );
+
         setError(
-          requestError.message ||
+          requestError?.message ||
             "Your Clerk account was created, but the HMS profile could not be saved."
         );
 
@@ -142,14 +250,23 @@ function RegisterPage() {
     getToken,
     form.fullName,
     form.phone,
+    navigate,
   ]);
 
   const handleChange = (event) => {
-    const { name, value, type, checked } = event.target;
+    const {
+      name,
+      value,
+      type,
+      checked,
+    } = event.target;
 
     setForm((currentForm) => ({
       ...currentForm,
-      [name]: type === "checkbox" ? checked : value,
+      [name]:
+        type === "checkbox"
+          ? checked
+          : value,
     }));
 
     setError("");
@@ -201,7 +318,8 @@ function RegisterPage() {
   const handleRegistration = async (event) => {
     event.preventDefault();
 
-    const validationError = validateRegistrationForm();
+    const validationError =
+      validateRegistrationForm();
 
     if (validationError) {
       setError(validationError);
@@ -209,7 +327,10 @@ function RegisterPage() {
     }
 
     if (!isLoaded || !signUp) {
-      setError("Clerk is still loading. Please try again.");
+      setError(
+        "Clerk authentication is still loading. Please wait and try again."
+      );
+
       return;
     }
 
@@ -219,7 +340,9 @@ function RegisterPage() {
 
     try {
       await signUp.create({
-        emailAddress: form.email.trim().toLowerCase(),
+        emailAddress:
+          form.email.trim().toLowerCase(),
+
         password: form.password,
       });
 
@@ -228,20 +351,26 @@ function RegisterPage() {
       });
 
       setMessage(
-        `Verification code has been sent to ${form.email.trim()}.`
+        `A verification code was sent to ${form.email.trim()}.`
       );
 
       setPhase("verify");
     } catch (registrationError) {
       console.error(
-        "Clerk Super Admin registration error:",
-        registrationError
+        `[CLERK_SIGN_UP] ${
+          registrationError?.errors?.[0]?.code ||
+          "SIGN_UP_FAILED"
+        }: ${
+          registrationError?.errors?.[0]?.message ||
+          registrationError?.message ||
+          "Unknown Clerk signup error"
+        }`
       );
 
       setError(
         getClerkError(
           registrationError,
-          "Unable to create the Clerk account."
+          "The Clerk account could not be created. Please check your information and try again."
         )
       );
     } finally {
@@ -255,12 +384,18 @@ function RegisterPage() {
     const code = verificationCode.trim();
 
     if (!code) {
-      setError("Verification code is required.");
+      setError(
+        "Enter the verification code sent to your email."
+      );
+
       return;
     }
 
     if (!isLoaded || !signUp) {
-      setError("Clerk is still loading. Please try again.");
+      setError(
+        "Clerk authentication is still loading. Please wait and try again."
+      );
+
       return;
     }
 
@@ -279,31 +414,35 @@ function RegisterPage() {
         !verificationResult.createdSessionId
       ) {
         setError(
-          "Email verification is incomplete. Please try again."
+          "Email verification is incomplete. Check the verification code and try again."
         );
+
         return;
       }
 
       await setActive({
-        session: verificationResult.createdSessionId,
+        session:
+          verificationResult.createdSessionId,
       });
 
-      /*
-       * The useEffect above will create the MySQL profile
-       * after Clerk reports that the session is active.
-       */
       setProfilePending(true);
       setPhase("saving");
     } catch (verificationError) {
       console.error(
-        "Email verification error:",
-        verificationError
+        `[CLERK_EMAIL_VERIFICATION] ${
+          verificationError?.errors?.[0]?.code ||
+          "EMAIL_VERIFICATION_FAILED"
+        }: ${
+          verificationError?.errors?.[0]?.message ||
+          verificationError?.message ||
+          "Unknown verification error"
+        }`
       );
 
       setError(
         getClerkError(
           verificationError,
-          "The verification code is invalid or expired."
+          "The verification code is invalid or expired. Request a new code and try again."
         )
       );
     } finally {
@@ -313,7 +452,10 @@ function RegisterPage() {
 
   const handleResendCode = async () => {
     if (!isLoaded || !signUp) {
-      setError("Clerk is still loading. Please try again.");
+      setError(
+        "Clerk authentication is still loading. Please wait and try again."
+      );
+
       return;
     }
 
@@ -327,18 +469,24 @@ function RegisterPage() {
       });
 
       setMessage(
-        `A new verification code has been sent to ${form.email.trim()}.`
+        `A new verification code was sent to ${form.email.trim()}.`
       );
     } catch (resendError) {
       console.error(
-        "Verification code resend error:",
-        resendError
+        `[CLERK_RESEND_CODE] ${
+          resendError?.errors?.[0]?.code ||
+          "RESEND_CODE_FAILED"
+        }: ${
+          resendError?.errors?.[0]?.message ||
+          resendError?.message ||
+          "Unknown resend error"
+        }`
       );
 
       setError(
         getClerkError(
           resendError,
-          "Unable to resend the verification code."
+          "A new verification code could not be sent. Please wait and try again."
         )
       );
     } finally {
@@ -348,16 +496,52 @@ function RegisterPage() {
 
   const handleRetryProfile = () => {
     profileRequestStarted.current = false;
+
     setError("");
+    setMessage("");
     setPhase("saving");
-    setProfileRetry((currentValue) => currentValue + 1);
+
+    setProfileRetry(
+      (currentValue) => currentValue + 1
+    );
+  };
+
+  const handleSignOutAndLogin = async () => {
+    try {
+      await signOut();
+
+      navigate("/login", {
+        replace: true,
+      });
+    } catch (signOutError) {
+      console.error(
+        `[SIGN_OUT] ${
+          signOutError?.message ||
+          "Unable to sign out"
+        }`
+      );
+
+      setError(
+        "The current Clerk session could not be closed. Refresh the page and try again."
+      );
+    }
   };
 
   const handleStartAgain = () => {
     window.location.reload();
   };
 
-  const currentStep = phase === "register" ? 1 : 2;
+  if (unsupportedMode) {
+    return (
+      <Navigate
+        to="/403"
+        replace
+      />
+    );
+  }
+
+  const currentStep =
+    phase === "register" ? 1 : 2;
 
   return (
     <div className="register-page">
@@ -366,13 +550,22 @@ function RegisterPage() {
           <HotelierCrown />
 
           <div className="register-logo-text">
-            <h1>Hotel Management System</h1>
-            <p>Super Admin Registration</p>
+            <h1>
+              Hotel Management System
+            </h1>
+
+            <p>
+              Super Admin Registration
+            </p>
           </div>
         </div>
 
         <div className="register-topbar-link">
-          Already registered? <Link to="/login">Sign In</Link>
+          Already registered?{" "}
+
+          <Link to="/login">
+            Sign In
+          </Link>
         </div>
       </div>
 
@@ -383,7 +576,8 @@ function RegisterPage() {
               {phase === "register" &&
                 "Create Super Admin Account"}
 
-              {phase === "verify" && "Verify Email Address"}
+              {phase === "verify" &&
+                "Verify Email Address"}
 
               {phase === "saving" &&
                 "Creating HMS Profile"}
@@ -406,7 +600,7 @@ function RegisterPage() {
                 "Your Clerk account is verified. The HMS profile is now being created."}
 
               {phase === "profile-error" &&
-                "The Clerk account exists, but the HMS database profile could not be saved."}
+                "The Clerk account exists, but the HMS database profile could not be completed."}
 
               {phase === "success" &&
                 "Your Super Admin account is ready."}
@@ -418,15 +612,21 @@ function RegisterPage() {
                   <div className="step-item">
                     <div
                       className={`step-circle ${
-                        currentStep > 1 ? "done" : "active"
+                        currentStep > 1
+                          ? "done"
+                          : "active"
                       }`}
                     >
-                      {currentStep > 1 ? <IconCheck /> : 1}
+                      {currentStep > 1
+                        ? <IconCheck />
+                        : 1}
                     </div>
 
                     <span
                       className={`step-label ${
-                        currentStep > 1 ? "done" : "active"
+                        currentStep > 1
+                          ? "done"
+                          : "active"
                       }`}
                     >
                       Account
@@ -435,14 +635,18 @@ function RegisterPage() {
 
                   <div
                     className={`step-line ${
-                      currentStep > 1 ? "done" : ""
+                      currentStep > 1
+                        ? "done"
+                        : ""
                     }`}
                   />
 
                   <div className="step-item">
                     <div
                       className={`step-circle ${
-                        currentStep === 2 ? "active" : ""
+                        currentStep === 2
+                          ? "active"
+                          : ""
                       }`}
                     >
                       2
@@ -450,7 +654,9 @@ function RegisterPage() {
 
                     <span
                       className={`step-label ${
-                        currentStep === 2 ? "active" : ""
+                        currentStep === 2
+                          ? "active"
+                          : ""
                       }`}
                     >
                       Verify
@@ -461,19 +667,15 @@ function RegisterPage() {
           </div>
 
           {phase === "register" && (
-            <form onSubmit={handleRegistration} noValidate>
+            <form
+              onSubmit={handleRegistration}
+              noValidate
+            >
               <div className="register-card-body">
                 {error && (
                   <div
-                    style={{
-                      padding: "12px 14px",
-                      marginBottom: "20px",
-                      borderRadius: "9px",
-                      background: "#fef2f2",
-                      border: "1px solid #fecaca",
-                      color: "#b91c1c",
-                      fontSize: "13px",
-                    }}
+                    className="alert alert-error"
+                    role="alert"
                   >
                     {error}
                   </div>
@@ -490,7 +692,10 @@ function RegisterPage() {
                       className="form-label"
                       htmlFor="fullName"
                     >
-                      <span className="req">*</span>
+                      <span className="req">
+                        *
+                      </span>
+
                       Full Name
                     </label>
 
@@ -549,7 +754,10 @@ function RegisterPage() {
                       className="form-label"
                       htmlFor="email"
                     >
-                      <span className="req">*</span>
+                      <span className="req">
+                        *
+                      </span>
+
                       Email Address
                     </label>
 
@@ -576,7 +784,10 @@ function RegisterPage() {
                       className="form-label"
                       htmlFor="password"
                     >
-                      <span className="req">*</span>
+                      <span className="req">
+                        *
+                      </span>
+
                       Password
                     </label>
 
@@ -589,31 +800,35 @@ function RegisterPage() {
                         id="password"
                         name="password"
                         type={
-                          showPassword ? "text" : "password"
+                          showPassword
+                            ? "text"
+                            : "password"
                         }
                         className="form-input"
                         placeholder="Minimum 8 characters"
                         autoComplete="new-password"
                         value={form.password}
                         onChange={handleChange}
-                        style={{ paddingRight: "44px" }}
                       />
 
                       <button
                         type="button"
                         className="input-right-icon"
-                        onClick={() =>
+                        onClick={() => {
                           setShowPassword(
-                            (currentValue) => !currentValue
-                          )
-                        }
+                            (currentValue) =>
+                              !currentValue
+                          );
+                        }}
                         aria-label={
                           showPassword
                             ? "Hide password"
                             : "Show password"
                         }
                       >
-                        <IconEye open={showPassword} />
+                        <IconEye
+                          open={showPassword}
+                        />
                       </button>
                     </div>
                   </div>
@@ -623,7 +838,10 @@ function RegisterPage() {
                       className="form-label"
                       htmlFor="confirmPassword"
                     >
-                      <span className="req">*</span>
+                      <span className="req">
+                        *
+                      </span>
+
                       Confirm Password
                     </label>
 
@@ -645,24 +863,26 @@ function RegisterPage() {
                         autoComplete="new-password"
                         value={form.confirmPassword}
                         onChange={handleChange}
-                        style={{ paddingRight: "44px" }}
                       />
 
                       <button
                         type="button"
                         className="input-right-icon"
-                        onClick={() =>
+                        onClick={() => {
                           setShowConfirmPassword(
-                            (currentValue) => !currentValue
-                          )
-                        }
+                            (currentValue) =>
+                              !currentValue
+                          );
+                        }}
                         aria-label={
                           showConfirmPassword
                             ? "Hide confirm password"
                             : "Show confirm password"
                         }
                       >
-                        <IconEye open={showConfirmPassword} />
+                        <IconEye
+                          open={showConfirmPassword}
+                        />
                       </button>
                     </div>
                   </div>
@@ -681,14 +901,11 @@ function RegisterPage() {
                     className="terms-text"
                     htmlFor="agreeTerms"
                   >
-                    I agree to the Terms and Privacy Policy.
+                    I agree to the Terms and
+                    Privacy Policy.
                   </label>
                 </div>
 
-                {/*
-                  Clerk bot protection mounts its CAPTCHA here
-                  when the Clerk instance requires it.
-                */}
                 <div id="clerk-captcha" />
               </div>
 
@@ -700,7 +917,9 @@ function RegisterPage() {
                 <button
                   type="submit"
                   className="btn-next"
-                  disabled={submitting || !isLoaded}
+                  disabled={
+                    submitting || !isLoaded
+                  }
                 >
                   {submitting
                     ? "Creating Account..."
@@ -711,19 +930,15 @@ function RegisterPage() {
           )}
 
           {phase === "verify" && (
-            <form onSubmit={handleVerifyEmail} noValidate>
+            <form
+              onSubmit={handleVerifyEmail}
+              noValidate
+            >
               <div className="register-card-body">
                 {message && (
                   <div
-                    style={{
-                      padding: "12px 14px",
-                      marginBottom: "20px",
-                      borderRadius: "9px",
-                      background: "#ecfdf5",
-                      border: "1px solid #a7f3d0",
-                      color: "#047857",
-                      fontSize: "13px",
-                    }}
+                    className="alert alert-success"
+                    role="status"
                   >
                     {message}
                   </div>
@@ -731,15 +946,8 @@ function RegisterPage() {
 
                 {error && (
                   <div
-                    style={{
-                      padding: "12px 14px",
-                      marginBottom: "20px",
-                      borderRadius: "9px",
-                      background: "#fef2f2",
-                      border: "1px solid #fecaca",
-                      color: "#b91c1c",
-                      fontSize: "13px",
-                    }}
+                    className="alert alert-error"
+                    role="alert"
                   >
                     {error}
                   </div>
@@ -756,7 +964,10 @@ function RegisterPage() {
                       className="form-label"
                       htmlFor="verificationCode"
                     >
-                      <span className="req">*</span>
+                      <span className="req">
+                        *
+                      </span>
+
                       Verification Code
                     </label>
 
@@ -772,31 +983,26 @@ function RegisterPage() {
                         inputMode="numeric"
                         autoComplete="one-time-code"
                         className="form-input"
-                        placeholder="Enter the email verification code"
+                        placeholder="Enter verification code"
                         value={verificationCode}
                         onChange={(event) => {
                           setVerificationCode(
                             event.target.value
                           );
+
                           setError("");
                         }}
                       />
                     </div>
 
                     <span className="field-hint">
-                      Code sent to {form.email.trim()}.
+                      Code sent to{" "}
+                      {form.email.trim()}.
                     </span>
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    flexWrap: "wrap",
-                  }}
-                >
+                <div className="reg-grid">
                   <button
                     type="button"
                     className="btn-back"
@@ -841,37 +1047,54 @@ function RegisterPage() {
 
           {phase === "saving" && (
             <div className="reg-success">
-              <div className="reg-success-icon">⏳</div>
+              <div className="reg-success-icon">
+                ⏳
+              </div>
 
-              <h3>Creating Super Admin Profile</h3>
+              <h3>
+                Creating Super Admin Profile
+              </h3>
 
               <p>
-                Email verification is complete. Please wait
-                while your HMS profile is saved securely.
+                Email verification is complete.
+                Please wait while your HMS
+                profile and account role are
+                verified.
               </p>
             </div>
           )}
 
           {phase === "profile-error" && (
             <div className="reg-success">
-              <div
-                className="reg-success-icon"
-                style={{ background: "#fef2f2" }}
-              >
+              <div className="reg-success-icon">
                 ⚠
               </div>
 
-              <h3>Profile Could Not Be Saved</h3>
+              <h3>
+                Profile Could Not Be Completed
+              </h3>
 
-              <p>{error}</p>
+              <p>
+                {error}
+              </p>
 
-              <button
-                type="button"
-                className="btn-next"
-                onClick={handleRetryProfile}
-              >
-                Retry Profile Creation
-              </button>
+              {profileErrorRetryable ? (
+                <button
+                  type="button"
+                  className="btn-next"
+                  onClick={handleRetryProfile}
+                >
+                  Retry Profile Creation
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-next"
+                  onClick={handleSignOutAndLogin}
+                >
+                  Sign Out and Go to Login
+                </button>
+              )}
             </div>
           )}
 
@@ -881,17 +1104,20 @@ function RegisterPage() {
                 <IconCheck />
               </div>
 
-              <h3>Super Admin Registered Successfully</h3>
+              <h3>
+                Super Admin Registered Successfully
+              </h3>
 
               <p>
                 {message}
                 <br />
-                Your password and login session are managed
-                securely by Clerk. No password was stored in
-                MySQL.
+                Opening your Super Admin
+                dashboard...
               </p>
 
-              <strong>{form.email.trim()}</strong>
+              <strong>
+                {form.email.trim()}
+              </strong>
             </div>
           )}
         </div>

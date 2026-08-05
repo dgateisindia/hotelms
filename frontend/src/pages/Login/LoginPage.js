@@ -1,471 +1,722 @@
-import React, { useState } from 'react';
-import { useSignIn, useAuth } from "@clerk/clerk-react";
-import { useNavigate, Link } from 'react-router-dom';
-import Swal from 'sweetalert2';
-import hotelBg from '../../assets/images/hotel-bg.jpg';
+import React, { useState } from "react";
+import { useSignIn } from "@clerk/clerk-react";
+import { Link, useNavigate } from "react-router-dom";
 
-import '../../styles/LoginPage.css';
+import AuthLayout from "../../components/auth/AuthLayout/AuthLayout";
+import "../../styles/LoginPage.css";
+
 import {
-  IconBed, IconUsers, IconChart, IconHeadphone,
-  IconEmail, IconLock, IconEye, IconArrow,
-  IconShield, IconBuilding, IconThumb,
-  IconGlobe, IconChevron,
-  GoogleLogo, HotelierCrown,
-} from '../../utils/icons/LoginIcons';
+  IconArrow,
+  IconEmail,
+  IconEye,
+  IconLock,
+} from "../../utils/icons/LoginIcons";
+
+const INITIAL_FORM = {
+  email: "",
+  password: "",
+};
+
+function getClerkErrorMessage(error, fallbackMessage) {
+  const clerkError = error?.errors?.[0];
+  const errorCode = clerkError?.code;
+
+  switch (errorCode) {
+    case "form_identifier_not_found":
+      return "No account was found with this email address.";
+
+    case "form_password_incorrect":
+      return "The entered password is incorrect.";
+
+    case "form_param_format_invalid":
+      return "Enter a valid email address.";
+
+    case "session_exists":
+      return "You are already signed in.";
+
+    case "too_many_requests":
+      return "Too many login attempts were made. Please wait and try again.";
+
+    case "verification_expired":
+      return "The verification code has expired. Request a new code.";
+
+    case "form_code_incorrect":
+      return "The verification code is incorrect.";
+
+    default:
+      return (
+        clerkError?.longMessage ||
+        clerkError?.message ||
+        error?.message ||
+        fallbackMessage
+      );
+  }
+}
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { signIn, setActive } = useSignIn();
-  const { getToken } = useAuth();
 
-  const [formData, setFormData]         = useState({ email: '', password: '', rememberMe: false });
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]               = useState('');
-  const [loading, setLoading]           = useState(false);
+  const {
+    isLoaded,
+    signIn,
+    setActive,
+  } = useSignIn();
 
-  const [step, setStep]                     = useState('credentials');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [verifyLoading, setVerifyLoading]       = useState(false);
-  const [resendLoading, setResendLoading]       = useState(false);
-  const [resendMessage, setResendMessage]       = useState('');
+  const [form, setForm] = useState(INITIAL_FORM);
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+  const [step, setStep] = useState("credentials");
+
+  const [verificationCode, setVerificationCode] =
+    useState("");
+
+  const [secondFactorStrategy, setSecondFactorStrategy] =
+    useState("");
+
+  const [verificationTarget, setVerificationTarget] =
+    useState("");
+
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [submitting, setSubmitting] =
+    useState(false);
+
+  const [verifying, setVerifying] =
+    useState(false);
+
+  const [resending, setResending] =
+    useState(false);
+
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+
+    setForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+
+    setError("");
   };
 
-  const handleChangeCode = (e) => {
-    setVerificationCode(e.target.value);
-  };
+  const validateLoginForm = () => {
+    const email = form.email.trim();
 
-  const prepareEmailCodeFactor = async () => {
-    const supportedSecondFactors = signIn.supportedSecondFactors || [];
-    const emailFactor = supportedSecondFactors.find(
-      (f) => f.strategy === 'email_code'
-    );
-
-    if (emailFactor) {
-      await signIn.prepareSecondFactor({
-        strategy: 'email_code',
-        emailAddressId: emailFactor.emailAddressId,
-      });
-    } else {
-      await signIn.prepareSecondFactor({ strategy: 'email_code' });
+    if (!email) {
+      return "Email address is required.";
     }
+
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      return "Enter a valid email address.";
+    }
+
+    if (!form.password) {
+      return "Password is required.";
+    }
+
+    return "";
   };
 
-  // ── Shared success toast, fired right before navigating to dashboard ──
-  const showLoginSuccessToast = () => {
-    Swal.fire({
-      icon: 'success',
-      title: 'Welcome back!',
-      text: 'You have signed in successfully.',
-      timer: 2000,
-      timerProgressBar: true,
-      showConfirmButton: false,
-      toast: true,
-      position: 'top-end',
+  const completeSignIn = async (sessionId) => {
+    if (!sessionId) {
+      throw new Error(
+        "Clerk did not create a login session. Please try again."
+      );
+    }
+
+    await setActive({
+      session: sessionId,
+    });
+
+    /*
+     * The /login route will render PostLoginRedirect after
+     * Clerk marks the user as signed in.
+     */
+    navigate("/login", {
+      replace: true,
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const prepareSecondFactor = async () => {
+    const supportedFactors =
+      signIn?.supportedSecondFactors || [];
 
-    setLoading(true);
+    const factor =
+      supportedFactors.find(
+        (item) => item.strategy === "email_code"
+      ) ||
+      supportedFactors.find(
+        (item) => item.strategy === "phone_code"
+      ) ||
+      supportedFactors.find(
+        (item) => item.strategy === "totp"
+      ) ||
+      supportedFactors.find(
+        (item) => item.strategy === "backup_code"
+      );
+
+    if (!factor) {
+      throw new Error(
+        "This account requires an additional verification method that is not available on this login screen."
+      );
+    }
+
+    switch (factor.strategy) {
+      case "email_code":
+        await signIn.prepareSecondFactor({
+          strategy: "email_code",
+          emailAddressId: factor.emailAddressId,
+        });
+
+        setVerificationTarget(
+          factor.safeIdentifier ||
+            form.email.trim()
+        );
+        break;
+
+      case "phone_code":
+        await signIn.prepareSecondFactor({
+          strategy: "phone_code",
+          phoneNumberId: factor.phoneNumberId,
+        });
+
+        setVerificationTarget(
+          factor.safeIdentifier ||
+            "your registered phone number"
+        );
+        break;
+
+      case "totp":
+        setVerificationTarget(
+          "your authenticator application"
+        );
+        break;
+
+      case "backup_code":
+        setVerificationTarget(
+          "one of your backup codes"
+        );
+        break;
+
+      default:
+        throw new Error(
+          "The required verification method is not supported."
+        );
+    }
+
+    setSecondFactorStrategy(factor.strategy);
+    setVerificationCode("");
     setError("");
+    setMessage("");
+    setStep("verification");
+  };
+
+  const handleLogin = async (event) => {
+    event.preventDefault();
+
+    const validationError =
+      validateLoginForm();
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    if (!isLoaded || !signIn) {
+      setError(
+        "Clerk authentication is still loading. Please wait and try again."
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    setMessage("");
 
     try {
       const result = await signIn.create({
-        identifier: formData.email,
-        password: formData.password,
+        identifier:
+          form.email.trim().toLowerCase(),
+
+        password: form.password,
       });
 
       switch (result.status) {
-
         case "complete":
-          await setActive({ session: result.createdSessionId });
-
-          const token = await getToken();
-          console.log("TOKEN:", token);
-
-          showLoginSuccessToast();
-          navigate("/login"); // PostLoginRedirect will route based on role
-          break;
+          await completeSignIn(
+            result.createdSessionId
+          );
+          return;
 
         case "needs_second_factor":
         case "needs_client_trust":
-          try {
-            await prepareEmailCodeFactor();
-            setStep('verify');
-          } catch (prepErr) {
-            console.error(prepErr);
-            setError(
-              prepErr.errors?.[0]?.longMessage ||
-              "Couldn't send a verification code. Please try again."
-            );
-          }
-          break;
+          await prepareSecondFactor();
+          return;
+
+        case "needs_new_password":
+          setError(
+            "This account requires a new password. Use Forgot Password to continue."
+          );
+          return;
 
         case "needs_first_factor":
-          setError("Password is incorrect.");
-          break;
+          setError(
+            "The email or password could not be verified."
+          );
+          return;
 
         default:
-          setError("Unable to sign in.");
+          setError(
+            "Login could not be completed. Please try again."
+          );
       }
-
-    } catch (err) {
-      console.error(err);
-
-      // Clerk rejects signIn.create() outright if a session is already
-      // active (e.g. stale SignedOut render right before Clerk's client
-      // synced state, or a session from another tab). Rather than show
-      // the user an error about their own valid session, send them
-      // straight into the same role-based redirect a normal login uses.
-      const alreadySignedIn = err.errors?.some(
-        (e) => e.code === 'session_exists' || /already signed in/i.test(e.longMessage || e.message || '')
-      );
+    } catch (loginError) {
+      const alreadySignedIn =
+        loginError?.errors?.some(
+          (item) =>
+            item.code === "session_exists" ||
+            /already signed in/i.test(
+              item.longMessage ||
+                item.message ||
+                ""
+            )
+        );
 
       if (alreadySignedIn) {
-        navigate("/login"); // SignedIn branch will now render PostLoginRedirect
+        navigate("/login", {
+          replace: true,
+        });
         return;
       }
 
-      setError(err.errors?.length ? err.errors[0].longMessage : "Login failed.");
+      const errorMessage =
+        getClerkErrorMessage(
+          loginError,
+          "Login failed. Check your email and password and try again."
+        );
+
+      setError(errorMessage);
+
+      if (process.env.NODE_ENV === "development") {
+        console.error(
+          `[CLERK_LOGIN] ${
+            loginError?.errors?.[0]?.code ||
+            "LOGIN_FAILED"
+          }: ${errorMessage}`
+        );
+      }
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const handleVerifyCode = async (e) => {
-    e.preventDefault();
+  const handleVerifyCode = async (event) => {
+    event.preventDefault();
 
-    setVerifyLoading(true);
+    const code = verificationCode.trim();
+
+    if (!code) {
+      setError(
+        "Enter the verification code to continue."
+      );
+      return;
+    }
+
+    if (
+      !isLoaded ||
+      !signIn ||
+      !secondFactorStrategy
+    ) {
+      setError(
+        "The verification process is no longer active. Start the login again."
+      );
+      return;
+    }
+
+    setVerifying(true);
     setError("");
+    setMessage("");
 
     try {
-      const result = await signIn.attemptSecondFactor({
-        strategy: 'email_code',
-        code: verificationCode,
-      });
+      const result =
+        await signIn.attemptSecondFactor({
+          strategy: secondFactorStrategy,
+          code,
+        });
 
-      if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
-
-        const token = await getToken();
-        console.log("TOKEN:", token);
-
-        showLoginSuccessToast();
-        navigate("/login"); // PostLoginRedirect will route based on role
-      } else {
-        setError("Verification incomplete. Please try again.");
+      if (result.status !== "complete") {
+        setError(
+          "Verification is incomplete. Check the code and try again."
+        );
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      setError(
-        err.errors?.length ? err.errors[0].longMessage : "Invalid or expired code. Please try again."
+
+      await completeSignIn(
+        result.createdSessionId
       );
+    } catch (verificationError) {
+      const errorMessage =
+        getClerkErrorMessage(
+          verificationError,
+          "The verification code is invalid or expired."
+        );
+
+      setError(errorMessage);
+
+      if (process.env.NODE_ENV === "development") {
+        console.error(
+          `[CLERK_LOGIN_VERIFICATION] ${
+            verificationError?.errors?.[0]
+              ?.code ||
+            "VERIFICATION_FAILED"
+          }: ${errorMessage}`
+        );
+      }
     } finally {
-      setVerifyLoading(false);
+      setVerifying(false);
     }
   };
 
   const handleResendCode = async () => {
-    setResendLoading(true);
-    setResendMessage('');
-    setError('');
+    if (
+      !["email_code", "phone_code"].includes(
+        secondFactorStrategy
+      )
+    ) {
+      setError(
+        "A new code cannot be sent for this verification method."
+      );
+      return;
+    }
+
+    setResending(true);
+    setError("");
+    setMessage("");
 
     try {
-      await prepareEmailCodeFactor();
-      setResendMessage('A new code has been sent to your email.');
-    } catch (err) {
-      console.error(err);
-      setError(
-        err.errors?.[0]?.longMessage || "Couldn't resend the code. Please try again."
+      const factors =
+        signIn?.supportedSecondFactors || [];
+
+      const factor = factors.find(
+        (item) =>
+          item.strategy ===
+          secondFactorStrategy
       );
+
+      if (!factor) {
+        throw new Error(
+          "The verification method is no longer available."
+        );
+      }
+
+      if (
+        secondFactorStrategy === "email_code"
+      ) {
+        await signIn.prepareSecondFactor({
+          strategy: "email_code",
+          emailAddressId:
+            factor.emailAddressId,
+        });
+      }
+
+      if (
+        secondFactorStrategy === "phone_code"
+      ) {
+        await signIn.prepareSecondFactor({
+          strategy: "phone_code",
+          phoneNumberId:
+            factor.phoneNumberId,
+        });
+      }
+
+      setMessage(
+        "A new verification code has been sent."
+      );
+    } catch (resendError) {
+      const errorMessage =
+        getClerkErrorMessage(
+          resendError,
+          "A new verification code could not be sent."
+        );
+
+      setError(errorMessage);
+
+      if (process.env.NODE_ENV === "development") {
+        console.error(
+          `[CLERK_RESEND_LOGIN_CODE] ${
+            resendError?.errors?.[0]?.code ||
+            "RESEND_FAILED"
+          }: ${errorMessage}`
+        );
+      }
     } finally {
-      setResendLoading(false);
+      setResending(false);
     }
   };
 
   const handleStartOver = () => {
-    setStep('credentials');
-    setVerificationCode('');
-    setError('');
-    setResendMessage('');
-  };
-
-  const handleGoogleLogin = () => {
-    alert('Google login coming soon!');
+    setStep("credentials");
+    setVerificationCode("");
+    setSecondFactorStrategy("");
+    setVerificationTarget("");
+    setError("");
+    setMessage("");
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-container">
+    <AuthLayout>
+      {step === "credentials" ? (
+        <>
+          <div className="auth-form-header">
+            <h2>Sign In</h2>
 
-        <div className="auth-panel-left">
-          <div
-            className="auth-panel-bg"
-            style={{ backgroundImage: `url(${hotelBg})` }}
-          />
-          <div className="auth-panel-content">
-            <div className="auth-logo">
-              <HotelierCrown />
-              <div className="auth-logo-text">
-                <h1>Hotel Management System</h1>
-              </div>
-            </div>
-
-            <div className="auth-welcome">
-              <h2>Welcome Back!</h2>
-              <p>Sign in to continue to your account</p>
-            </div>
-
-            <div className="auth-features">
-              <div className="auth-feature">
-                <div className="auth-feature-icon"><IconBed /></div>
-                <div className="auth-feature-text">
-                  <h4>Manage Bookings</h4>
-                  <p>View and manage all your hotel bookings easily</p>
-                </div>
-              </div>
-
-              <div className="auth-feature">
-                <div className="auth-feature-icon"><IconUsers /></div>
-                <div className="auth-feature-text">
-                  <h4>Guest Management</h4>
-                  <p>Manage guest information and stay history</p>
-                </div>
-              </div>
-
-              <div className="auth-feature">
-                <div className="auth-feature-icon"><IconChart /></div>
-                <div className="auth-feature-text">
-                  <h4>Reports &amp; Analytics</h4>
-                  <p>Track performance and generate powerful reports</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="auth-help">
-              <div className="auth-help-icon"><IconHeadphone /></div>
-              <div className="auth-help-text">
-                <h5>Need Help?</h5>
-                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, margin: '2px 0' }}>
-                  Our support team is always here to help you.
-                </p>
-                <a href="/support">Contact Support →</a>
-              </div>
-            </div>
+            <p>
+              Enter your registered email
+              address and password
+            </p>
           </div>
-        </div>
 
-        <div className="auth-panel-right">
-
-          {step === 'credentials' ? (
-            <>
-              <div className="auth-form-header">
-                <h2>Sign In</h2>
-                <p>Enter your credentials to access your account</p>
-              </div>
-
-              {error && (
-                <div className="alert alert-error" style={{ marginBottom: 16 }}>
-                  <span>⚠</span> {error}
-                </div>
-              )}
-
-              <form className="auth-form" onSubmit={handleSubmit} noValidate>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="email">Email Address</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><IconEmail /></span>
-                    <input
-                      id="email"
-                      name="email"
-                      type="email"
-                      className="form-input"
-                      placeholder="Enter your email address"
-                      value={formData.email}
-                      onChange={handleChange}
-                      autoComplete="email"
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="password">Password</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><IconLock /></span>
-                    <input
-                      id="password"
-                      name="password"
-                      type={showPassword ? 'text' : 'password'}
-                      className="form-input"
-                      placeholder="Enter your password"
-                      value={formData.password}
-                      onChange={handleChange}
-                      autoComplete="current-password"
-                      style={{ paddingRight: 44 }}
-                    />
-                    <button
-                      type="button"
-                      className="input-right-icon"
-                      onClick={() => setShowPassword(p => !p)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      <IconEye open={showPassword} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="auth-form-row">
-                  <label className="checkbox-group">
-                    <input
-                      type="checkbox"
-                      name="rememberMe"
-                      checked={formData.rememberMe}
-                      onChange={handleChange}
-                    />
-                    <span className="checkbox-label">Remember me</span>
-                  </label>
-                  <Link to="/forgot-password" className="auth-forgot-link">Forgot Password?</Link>
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={loading}
-                >
-                  {loading ? 'Signing in…' : 'Sign In'}
-                  {!loading && <IconArrow />}
-                </button>
-
-                <div className="auth-divider">
-                  <span className="auth-divider-line" />
-                  <span className="auth-divider-text">or continue with</span>
-                  <span className="auth-divider-line" />
-                </div>
-
-                <div className="auth-social-buttons">
-                  <button type="button" className="btn-social" onClick={handleGoogleLogin}>
-                    <GoogleLogo />
-                    Sign in with Google
-                  </button>
-                </div>
-
-              </form>
-            </>
-          ) : (
-            <>
-              <div className="auth-form-header">
-                <h2>Verify Your Identity</h2>
-                <p>
-                  We've sent a verification code to <strong>{formData.email}</strong>.
-                  Enter it below to continue.
-                </p>
-              </div>
-
-              {error && (
-                <div className="alert alert-error" style={{ marginBottom: 16 }}>
-                  <span>⚠</span> {error}
-                </div>
-              )}
-
-              {resendMessage && (
-                <div className="alert alert-success" style={{ marginBottom: 16 }}>
-                  <span>✓</span> {resendMessage}
-                </div>
-              )}
-
-              <form className="auth-form" onSubmit={handleVerifyCode} noValidate>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="verificationCode">Verification Code</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon"><IconLock /></span>
-                    <input
-                      id="verificationCode"
-                      name="verificationCode"
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      className="form-input"
-                      placeholder="Enter the 6-digit code"
-                      value={verificationCode}
-                      onChange={handleChangeCode}
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={verifyLoading || !verificationCode}
-                >
-                  {verifyLoading ? 'Verifying…' : 'Verify & Sign In'}
-                  {!verifyLoading && <IconArrow />}
-                </button>
-
-                <div className="auth-form-row" style={{ marginTop: 16 }}>
-                  <button
-                    type="button"
-                    className="auth-forgot-link"
-                    onClick={handleResendCode}
-                    disabled={resendLoading}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
-                    {resendLoading ? 'Sending…' : 'Resend code'}
-                  </button>
-                  <button
-                    type="button"
-                    className="auth-forgot-link"
-                    onClick={handleStartOver}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
-                    Start over
-                  </button>
-                </div>
-
-              </form>
-            </>
+          {error && (
+            <div
+              className="alert alert-error"
+              role="alert"
+            >
+              {error}
+            </div>
           )}
-        </div>
-      </div>
 
-      <div className="auth-footer">
-        <div className="auth-footer-item">
-          <div className="auth-footer-icon"><IconShield /></div>
-          <div className="auth-footer-text">
-            <h6>Secure &amp; Safe</h6>
-            <p>Your data is 100% secure</p>
-          </div>
-        </div>
-        <div className="auth-footer-item">
-          <div className="auth-footer-icon"><IconHeadphone /></div>
-          <div className="auth-footer-text">
-            <h6>24/7 Support</h6>
-            <p>We are here to help</p>
-          </div>
-        </div>
-        <div className="auth-footer-item">
-          <div className="auth-footer-icon"><IconBuilding /></div>
-          <div className="auth-footer-text">
-            <h6>Trusted by Hotels</h6>
-            <p>500+ Hotels Worldwide</p>
-          </div>
-        </div>
-        <div className="auth-footer-item">
-          <div className="auth-footer-icon"><IconThumb /></div>
-          <div className="auth-footer-text">
-            <h6>Easy to Use</h6>
-            <p>Simple and intuitive interface</p>
-          </div>
-        </div>
-      </div>
+          <form
+            className="auth-form"
+            onSubmit={handleLogin}
+            noValidate
+          >
+            <div className="form-group">
+              <label
+                className="form-label"
+                htmlFor="email"
+              >
+                Email Address
+              </label>
 
-    </div>
+              <div className="input-wrapper">
+                <span className="input-icon">
+                  <IconEmail />
+                </span>
+
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  className="form-input"
+                  placeholder="Enter email address"
+                  autoComplete="email"
+                  value={form.email}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label
+                className="form-label"
+                htmlFor="password"
+              >
+                Password
+              </label>
+
+              <div className="input-wrapper">
+                <span className="input-icon">
+                  <IconLock />
+                </span>
+
+                <input
+                  id="password"
+                  name="password"
+                  type={
+                    showPassword
+                      ? "text"
+                      : "password"
+                  }
+                  className="form-input"
+                  placeholder="Enter password"
+                  autoComplete="current-password"
+                  value={form.password}
+                  onChange={handleChange}
+                />
+
+                <button
+                  type="button"
+                  className="input-right-icon"
+                  onClick={() => {
+                    setShowPassword(
+                      (currentValue) =>
+                        !currentValue
+                    );
+                  }}
+                  aria-label={
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                >
+                  <IconEye
+                    open={showPassword}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="auth-form-row">
+              <span />
+
+              <Link
+                to="/forgot-password"
+                className="auth-forgot-link"
+              >
+                Forgot Password?
+              </Link>
+            </div>
+
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={
+                submitting || !isLoaded
+              }
+            >
+              {submitting
+                ? "Signing In..."
+                : "Sign In"}
+
+              {!submitting && <IconArrow />}
+            </button>
+
+            <div className="auth-signup-link">
+              New business owner?{" "}
+
+              <Link to="/register">
+                Create Super Admin Account
+              </Link>
+            </div>
+          </form>
+        </>
+      ) : (
+        <>
+          <div className="auth-form-header">
+            <h2>Verify Your Identity</h2>
+
+            <p>
+              Enter the verification code from{" "}
+              {verificationTarget}.
+            </p>
+          </div>
+
+          {error && (
+            <div
+              className="alert alert-error"
+              role="alert"
+            >
+              {error}
+            </div>
+          )}
+
+          {message && (
+            <div
+              className="alert alert-success"
+              role="status"
+            >
+              {message}
+            </div>
+          )}
+
+          <form
+            className="auth-form"
+            onSubmit={handleVerifyCode}
+            noValidate
+          >
+            <div className="form-group">
+              <label
+                className="form-label"
+                htmlFor="verificationCode"
+              >
+                Verification Code
+              </label>
+
+              <div className="input-wrapper">
+                <span className="input-icon">
+                  <IconLock />
+                </span>
+
+                <input
+                  id="verificationCode"
+                  name="verificationCode"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  className="form-input"
+                  placeholder="Enter verification code"
+                  value={verificationCode}
+                  onChange={(event) => {
+                    setVerificationCode(
+                      event.target.value
+                    );
+
+                    setError("");
+                  }}
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={
+                verifying ||
+                !verificationCode.trim()
+              }
+            >
+              {verifying
+                ? "Verifying..."
+                : "Verify & Sign In"}
+
+              {!verifying && <IconArrow />}
+            </button>
+
+            <div className="auth-form-row">
+              {[
+                "email_code",
+                "phone_code",
+              ].includes(
+                secondFactorStrategy
+              ) ? (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={handleResendCode}
+                  disabled={resending}
+                >
+                  {resending
+                    ? "Sending..."
+                    : "Resend Code"}
+                </button>
+              ) : (
+                <span />
+              )}
+
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={handleStartOver}
+              >
+                Start Again
+              </button>
+            </div>
+          </form>
+        </>
+      )}
+    </AuthLayout>
   );
 }
 

@@ -1,45 +1,31 @@
 const express = require("express");
-const router = express.Router();
-
-const { requireAuth } = require("@clerk/express");
-const { attachDbUser, requireRole } = require("../middleware/roleMiddleware");
 
 const {
-  createStaffUser,
-  getStaffUsers,
-} = require("../controllers/userController");
+  requireClerkSession,
+  attachDbUser,
+} = require("../middleware/roleMiddleware");
 
-// Create Admin (Only Super Admin)
-router.post(
-  "/create-admin",
-  requireAuth(),
-  attachDbUser(),
-  requireRole("super_admin"),
-  createStaffUser
-);
+const router = express.Router();
 
-// Get All Admins
-/*router.get(
-  "/staff",
-  requireAuth(),
-  attachDbUser(),
-  requireRole("super_admin"),
-  getStaffUsers
-);*/
-
-// Current Logged-in User
+/*
+ * Temporary compatibility endpoint.
+ *
+ * The main authenticated-user endpoint is:
+ * GET /api/auth/me
+ *
+ * This route remains temporarily available so any older frontend
+ * page still using /api/users/me does not break immediately.
+ */
 router.get(
   "/me",
-  requireAuth(),
+  requireClerkSession,
   attachDbUser(),
-  async (req, res) => {
-    res.json({
+  (req, res) => {
+    return res.status(200).json({
       success: true,
       user: req.dbUser,
     });
   }
 );
-
-console.log("✅ userRoutes loaded");
 
 module.exports = router;
