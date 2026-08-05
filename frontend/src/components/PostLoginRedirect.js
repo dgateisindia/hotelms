@@ -1,38 +1,101 @@
-// src/components/PostLoginRedirect.jsx
-import { useEffect, useState } from "react";
-import { useAuth } from "@clerk/clerk-react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useUserRole } from "../hooks/useUserRole";
+
+const ROLE_ROUTES = Object.freeze({
+  super_admin: "/superadmin-dashboard",
+  admin: "/admin-dashboard",
+
+  receptionist: "/dashboard",
+  accountant: "/dashboard",
+  housekeeping: "/dashboard",
+});
+
 function PostLoginRedirect() {
-  const { getToken, isSignedIn } = useAuth();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+
+  const {
+    role,
+    loading,
+    error,
+    refreshRole,
+  } = useUserRole();
 
   useEffect(() => {
-    if (!isSignedIn) return;
+    if (loading || error || !role) {
+      return;
+    }
 
-    (async () => {
-      const token = await getToken();
-      const res = await fetch("http://localhost:5000/api/users/me", {
-        headers: { Authorization: `Bearer ${token}` },
+    const destination = ROLE_ROUTES[role];
+
+    if (!destination) {
+      navigate("/403", {
+        replace: true,
       });
-      const data = await res.json();
 
-      if (!data.success) {
-        navigate("/login");
-        return;
-      }
+      return;
+    }
 
-      const role = data.user.role;
-      if (role === "super_admin") navigate("/superadmin-dashboard");
-      else if (role === "admin") navigate("/admin-dashboard");
-      else navigate("/dashboard"); // staff roles etc.
+    navigate(destination, {
+      replace: true,
+    });
+  }, [
+    role,
+    loading,
+    error,
+    navigate,
+  ]);
 
-      setLoading(false);
-    })();
-  }, [isSignedIn]);
+  if (loading) {
+    return (
+      <main className="auth-page">
+        <section className="auth-panel-right">
+          <div className="auth-form-header">
+            <h2>Verifying Account</h2>
 
-  return loading ? <div>Loading...</div> : null;
+            <p>
+              Please wait while your session and account role are
+              being verified.
+            </p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="auth-page">
+        <section className="auth-panel-right">
+          <div className="auth-form-header">
+            <h2>Account Verification Failed</h2>
+
+            <p>
+              Your account could not be verified.
+            </p>
+          </div>
+
+          <div
+            className="alert alert-error"
+            role="alert"
+          >
+            {error}
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={refreshRole}
+          >
+            Retry Account Verification
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  return null;
 }
 
 export default PostLoginRedirect;
