@@ -11,37 +11,97 @@ const {
   getAdminsStatus,
 } = require("../controllers/dashboardController");
 
+const {
+  getHotels,
+  getHotelByDisplayId,
+  createHotel,
+} = require("../controllers/hotelController");
+
 const router = express.Router();
 
-/*
- * Every route in this file requires:
- *
- * 1. A valid Clerk session
- * 2. A linked and active HMS account
- * 3. The super_admin role
- */
+/* ============================================================
+   SUPER ADMIN SECURITY
+
+   Every route below requires:
+
+   1. Valid Clerk session
+   2. Active HMS database account
+   3. super_admin role
+============================================================ */
+
 router.use(
   requireClerkSession,
   attachDbUser(),
   requireRole("super_admin")
 );
 
-/*
- * Compatibility endpoint:
+/* ============================================================
+   DASHBOARD
+============================================================ */
+
+/**
  * GET /api/superadmin/stats
  *
- * Uses the same secure and owner-scoped controller as:
- * GET /api/dashboard/super-admin-stats
+ * Returns portfolio-level dashboard statistics for hotels
+ * owned by the authenticated Super Admin.
  */
-router.get("/stats", getSuperAdminStats);
+router.get(
+  "/stats",
+  getSuperAdminStats
+);
 
-/*
- * Compatibility endpoint:
+/**
  * GET /api/superadmin/admins
  *
- * Returns only Admins belonging to hotels created by the
- * authenticated Super Admin.
+ * Returns Admin accounts belonging only to hotels owned by
+ * the authenticated Super Admin.
  */
-router.get("/admins", getAdminsStatus);
+router.get(
+  "/admins",
+  getAdminsStatus
+);
+
+/* ============================================================
+   HOTEL MANAGEMENT
+============================================================ */
+
+/**
+ * GET /api/superadmin/hotels
+ *
+ * Returns all hotels owned by the authenticated Super Admin,
+ * including hotel-card summary information.
+ */
+router.get(
+  "/hotels",
+  getHotels
+);
+
+/**
+ * POST /api/superadmin/hotels
+ *
+ * Creates:
+ * - Hotel record
+ * - Hotel-level QR record
+ *
+ * Both are created inside one database transaction.
+ */
+router.post(
+  "/hotels",
+  createHotel
+);
+
+/**
+ * GET /api/superadmin/hotels/:hotelDisplayId
+ *
+ * Example:
+ * GET /api/superadmin/hotels/HT-0001
+ *
+ * The controller verifies that the requested hotel belongs
+ * to the authenticated Super Admin.
+ */
+router.get(
+  "/hotels/:hotelDisplayId",
+  getHotelByDisplayId
+);
 
 module.exports = router;

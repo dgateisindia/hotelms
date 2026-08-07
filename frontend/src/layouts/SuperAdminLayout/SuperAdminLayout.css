@@ -1,0 +1,302 @@
+/* ============================================================
+   SUPER ADMIN LAYOUT
+
+   Permanent structure:
+   - Desktop sidebar
+   - Responsive mobile sidebar
+   - Sticky topbar
+   - Main right-side content
+============================================================ */
+
+.super-admin-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns:
+    var(--sidebar-width)
+    minmax(0, 1fr);
+  background: var(--color-background);
+
+  /*
+   * Sidebar width and workspace position must animate
+   * together. Otherwise the fixed sidebar overlaps the
+   * topbar while collapsing.
+   */
+  transition:
+    grid-template-columns
+    var(--transition-slow);
+}
+
+.super-admin-layout--collapsed {
+  grid-template-columns:
+    var(--sidebar-collapsed-width)
+    minmax(0, 1fr);
+}
+
+/* ============================================================
+   SIDEBAR AREA
+============================================================ */
+
+.super-admin-layout__sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: var(--z-sidebar);
+  width: var(--sidebar-width);
+  height: 100vh;
+  overflow: hidden;
+  background: var(--color-navy);
+  border-right:
+    1px solid rgba(255, 255, 255, 0.08);
+
+  /*
+   * Same transition duration as the parent grid.
+   */
+  transition:
+    width var(--transition-slow),
+    transform var(--transition-slow);
+
+  /*
+   * Prevent flickering while width is animated.
+   */
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+.super-admin-layout--collapsed
+  .super-admin-layout__sidebar {
+  width: var(--sidebar-collapsed-width);
+}
+
+/* ============================================================
+   RIGHT-SIDE WORKSPACE
+============================================================ */
+
+.super-admin-layout__workspace {
+  grid-column: 2;
+  min-width: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+
+  /*
+   * Keeps the workspace stable while its grid column
+   * moves during sidebar collapse.
+   */
+  position: relative;
+}
+
+/* ============================================================
+   TOPBAR AREA
+============================================================ */
+
+.super-admin-layout__topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-topbar);
+  width: 100%;
+  height: var(--topbar-height);
+  flex-shrink: 0;
+  background:
+    rgba(255, 255, 255, 0.96);
+  border-bottom:
+    1px solid var(--color-border);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
+}
+
+/* ============================================================
+   MAIN CONTENT
+============================================================ */
+
+.super-admin-layout__main {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-background);
+}
+
+.super-admin-layout__content {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--page-padding);
+}
+
+/* ============================================================
+   MOBILE OVERLAY
+============================================================ */
+
+.super-admin-layout__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-sidebar) - 1);
+  display: none;
+  padding: 0;
+  border: 0;
+  background:
+    rgba(15, 23, 42, 0.55);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--transition),
+    visibility var(--transition);
+}
+
+/* ============================================================
+   SKIP LINK
+============================================================ */
+
+.super-admin-layout__skip-link {
+  position: fixed;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: calc(var(--z-toast) + 1);
+  padding:
+    var(--space-2)
+    var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-gold);
+  color: var(--color-navy);
+  font-weight: var(--font-weight-bold);
+  transform: translateY(-160%);
+  transition:
+    transform var(--transition);
+}
+
+.super-admin-layout__skip-link:focus {
+  transform: translateY(0);
+}
+
+/* ============================================================
+   LOADING CONTENT PLACEHOLDER
+============================================================ */
+
+.super-admin-layout__loading {
+  min-height:
+    calc(
+      100vh -
+      var(--topbar-height) -
+      (var(--page-padding) * 2)
+    );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.super-admin-layout__loading-card {
+  width: min(420px, 100%);
+  padding: var(--space-8);
+  border:
+    1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.super-admin-layout__loading-title {
+  color: var(--color-text);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.super-admin-layout__loading-description {
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+/* ============================================================
+   TABLET AND MOBILE
+============================================================ */
+
+@media (max-width: 1024px) {
+  .super-admin-layout,
+  .super-admin-layout--collapsed {
+    grid-template-columns:
+      minmax(0, 1fr);
+
+    /*
+     * Mobile uses transform-based drawer animation,
+     * so grid animation is unnecessary.
+     */
+    transition: none;
+  }
+
+  .super-admin-layout__workspace {
+    grid-column: 1;
+  }
+
+  .super-admin-layout__sidebar,
+  .super-admin-layout--collapsed
+    .super-admin-layout__sidebar {
+    width:
+      min(
+        var(--sidebar-width),
+        calc(100vw - 56px)
+      );
+    transform:
+      translateX(-100%)
+      translateZ(0);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .super-admin-layout--mobile-open
+    .super-admin-layout__sidebar {
+    transform:
+      translateX(0)
+      translateZ(0);
+  }
+
+  .super-admin-layout__overlay {
+    display: block;
+  }
+
+  .super-admin-layout--mobile-open
+    .super-admin-layout__overlay {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+@media (max-width: 768px) {
+  .super-admin-layout__content {
+    padding: var(--page-padding);
+  }
+}
+
+@media (max-width: 480px) {
+  .super-admin-layout__sidebar,
+  .super-admin-layout--collapsed
+    .super-admin-layout__sidebar {
+    width: calc(100vw - 32px);
+  }
+}
+
+/* ============================================================
+   PRINT
+============================================================ */
+
+@media print {
+  .super-admin-layout,
+  .super-admin-layout--collapsed {
+    display: block;
+    background: var(--color-white);
+    transition: none;
+  }
+
+  .super-admin-layout__sidebar,
+  .super-admin-layout__topbar,
+  .super-admin-layout__overlay,
+  .super-admin-layout__skip-link {
+    display: none !important;
+  }
+
+  .super-admin-layout__workspace,
+  .super-admin-layout__main {
+    display: block;
+    min-height: auto;
+  }
+
+  .super-admin-layout__content {
+    max-width: none;
+    padding: 0;
+  }
+}

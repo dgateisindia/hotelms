@@ -1,201 +1,805 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useClerk } from '@clerk/clerk-react';
-import Swal from 'sweetalert2';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell
-} from 'recharts';
-import dashboardService from '../services/dashboardService';
-import './SuperAdminDashboard.css';
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+import SuperAdminLayout from "../layouts/SuperAdminLayout/SuperAdminLayout";
 
-const SuperAdminDashboard = () => {
-  const navigate = useNavigate();
-  const { signOut } = useClerk();
-  const [stats, setStats] = useState(null);
-  const [admins, setAdmins] = useState([]);
-  const [loading, setLoading] = useState(true);
+import SuperAdminSidebar from "../components/navigation/SuperAdminSidebar/SuperAdminSidebar";
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [statsRes, adminsRes] = await Promise.all([
-          dashboardService.getSuperAdminStats(),
-          dashboardService.getAdminsStatus()
-        ]);
-        setStats(statsRes.stats);
-        setAdmins(adminsRes.admins);
-      } catch (err) {
-        console.error('Dashboard fetch error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+import SuperAdminTopbar from "../components/navigation/SuperAdminTopbar/SuperAdminTopbar";
 
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // refresh every 30s for live status
-    return () => clearInterval(interval);
-  }, []);
+import dashboardService from "../services/dashboardService";
 
-  const handleLogoutClick = async () => {
-    const result = await Swal.fire({
-      icon: 'warning',
-      title: 'Log out?',
-      text: 'You will need to sign in again to access the dashboard.',
-      showCancelButton: true,
-      confirmButtonText: 'Log out',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#DC2626',
-      cancelButtonColor: '#6B7280',
-      reverseButtons: true,
-    });
+import "./SuperAdminDashboard.css";
 
-    if (result.isConfirmed) {
-      await signOut();
-      navigate('/login');
-    }
-  };
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
-  if (loading) return <div className="dashboard-loading">Loading dashboard...</div>;
-  if (!stats) return <div className="dashboard-loading">Could not load dashboard data.</div>;
-
-  const revenueChartData = stats.monthlyRevenue.map((r) => ({
-    month: MONTH_NAMES[r.month - 1],
-    revenue: r.total
-  }));
-
-  const occupancyTotal = stats.occupiedRooms + stats.availableRooms;
-  const occupancyPercent = occupancyTotal ? Math.round((stats.occupiedRooms / occupancyTotal) * 100) : 0;
-
-  const occupancyData = [
-    { name: 'Occupied', value: stats.occupiedRooms },
-    { name: 'Available', value: stats.availableRooms }
-  ];
-  const OCCUPANCY_COLORS = ['#3B82F6', '#E5E7EB'];
-
-  return (
-    <div className="sa-dashboard">
-      <div className="sa-header-row">
-        <h1 className="sa-title">Dashboard</h1>
-        <div className="sa-header-actions">
-          <button className="sa-create-admin-btn" onClick={() => navigate('/create-admin')}>
-            + Create Admin
-          </button>
-          <button className="sa-logout-btn" onClick={handleLogoutClick}>
-            Logout
-          </button>
-        </div>
-      </div>
-
-      {/* Stat Cards */}
-      <div className="sa-stats-grid">
-        <StatCard icon="📅" label="Total Bookings" value={stats.totalBookings} accent="blue" />
-        <StatCard icon="🛏️" label="Occupied Rooms" value={stats.occupiedRooms} accent="green" />
-        <StatCard icon="🏠" label="Available Rooms" value={stats.availableRooms} accent="purple" />
-        <StatCard icon="🧾" label="Today's Revenue" value={`₹ ${Number(stats.todaysRevenue).toLocaleString('en-IN')}`} accent="orange" />
-      </div>
-
-      {/* Charts row */}
-      <div className="sa-charts-grid">
-        <div className="sa-card sa-chart-card">
-          <h3>Monthly Revenue</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={revenueChartData}>
-              <CartesianGrid stroke="#F1F3F5" vertical={false} />
-              <XAxis dataKey="month" axisLine={false} tickLine={false} stroke="#9CA3AF" />
-              <YAxis axisLine={false} tickLine={false} stroke="#9CA3AF" tickFormatter={(v) => `${v / 1000}k`} />
-              <Tooltip formatter={(value) => [`₹${value.toLocaleString('en-IN')}`, 'Revenue']} />
-              <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={3} dot={{ r: 5, fill: '#3B82F6' }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="sa-card sa-occupancy-card">
-          <h3>Room Occupancy</h3>
-          <div className="sa-donut-wrap">
-            <ResponsiveContainer width={200} height={200}>
-              <PieChart>
-                <Pie
-                  data={occupancyData}
-                  dataKey="value"
-                  innerRadius={65}
-                  outerRadius={90}
-                  startAngle={90}
-                  endAngle={-270}
-                >
-                  {occupancyData.map((entry, index) => (
-                    <Cell key={entry.name} fill={OCCUPANCY_COLORS[index]} stroke="none" />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="sa-donut-center">
-              <span className="sa-donut-percent">{occupancyPercent}%</span>
-              <span className="sa-donut-label">Occupied</span>
-            </div>
-          </div>
-          <div className="sa-occupancy-legend">
-            <div className="sa-legend-row">
-              <span className="sa-dot sa-dot-blue" /> Occupied <strong>{stats.occupiedRooms}</strong>
-            </div>
-            <div className="sa-legend-row">
-              <span className="sa-dot sa-dot-gray" /> Available <strong>{stats.availableRooms}</strong>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Admins table */}
-      <div className="sa-card sa-admins-card">
-        <div className="sa-admins-header">
-          <h3>Admin Accounts</h3>
-        </div>
-        <table className="sa-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Last Login</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {admins.length === 0 && (
-              <tr>
-                <td colSpan="5" className="sa-empty-row">No admin accounts found</td>
-              </tr>
-            )}
-            {admins.map((admin) => (
-              <tr key={admin.id}>
-                <td>{admin.name}</td>
-                <td>{admin.email}</td>
-                <td className="sa-role-cell">{admin.role}</td>
-                <td>{admin.last_login ? new Date(admin.last_login).toLocaleString('en-IN') : 'Never'}</td>
-                <td>
-                  <span className={`sa-status-badge ${admin.status === 'active' ? 'sa-status-active' : 'sa-status-inactive'}`}>
-                    {admin.status === 'active' ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+const EMPTY_STATS = {
+  totalBookings: 0,
+  occupiedRooms: 0,
+  availableRooms: 0,
+  todaysRevenue: 0,
+  monthlyRevenue: [],
 };
 
-const StatCard = ({ icon, label, value, accent }) => (
-  <div className="sa-card sa-stat-card">
-    <div className={`sa-stat-icon sa-icon-${accent}`}>{icon}</div>
-    <div className="sa-stat-text">
-      <span className="sa-stat-label">{label}</span>
-      <span className="sa-stat-value">{value}</span>
-    </div>
-  </div>
-);
+function normalizeNumber(value) {
+  const parsedValue = Number(value);
+
+  return Number.isFinite(parsedValue)
+    ? parsedValue
+    : 0;
+}
+
+function normalizeDashboardStats(data) {
+  const stats = data || {};
+
+  return {
+    totalBookings: normalizeNumber(
+      stats.totalBookings
+    ),
+
+    occupiedRooms: normalizeNumber(
+      stats.occupiedRooms
+    ),
+
+    availableRooms: normalizeNumber(
+      stats.availableRooms
+    ),
+
+    todaysRevenue: normalizeNumber(
+      stats.todaysRevenue
+    ),
+
+    monthlyRevenue: Array.isArray(
+      stats.monthlyRevenue
+    )
+      ? stats.monthlyRevenue
+      : [],
+  };
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(normalizeNumber(value));
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "Never";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unavailable";
+  }
+
+  return date.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatStatus(status) {
+  const normalizedStatus = String(
+    status || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedStatus) {
+    return "Unknown";
+  }
+
+  return normalizedStatus
+    .split("_")
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() +
+        word.slice(1)
+    )
+    .join(" ");
+}
+
+function SuperAdminDashboard() {
+  const [stats, setStats] =
+    useState(EMPTY_STATS);
+
+  const [admins, setAdmins] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [warning, setWarning] =
+    useState("");
+
+  const loadDashboardData = useCallback(
+    async ({
+      initialLoad = false,
+    } = {}) => {
+      if (initialLoad) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+
+      setError("");
+      setWarning("");
+
+      try {
+        const [
+          statsResult,
+          adminsResult,
+        ] = await Promise.allSettled([
+          dashboardService.getSuperAdminStats(),
+          dashboardService.getAdminsStatus(),
+        ]);
+
+        if (
+          statsResult.status ===
+          "fulfilled"
+        ) {
+          setStats(
+            normalizeDashboardStats(
+              statsResult.value?.stats
+            )
+          );
+        } else {
+          setError(
+            statsResult.reason?.message ||
+              "Portfolio statistics could not be loaded."
+          );
+        }
+
+        if (
+          adminsResult.status ===
+          "fulfilled"
+        ) {
+          setAdmins(
+            Array.isArray(
+              adminsResult.value?.admins
+            )
+              ? adminsResult.value.admins
+              : []
+          );
+        } else {
+          setAdmins([]);
+
+          setWarning(
+            adminsResult.reason?.message ||
+              "Admin account information could not be loaded."
+          );
+        }
+
+        if (
+          statsResult.status ===
+            "rejected" &&
+          adminsResult.status ===
+            "rejected"
+        ) {
+          throw new Error(
+            "The Super Admin dashboard could not be loaded. Check the backend connection and retry."
+          );
+        }
+      } catch (dashboardError) {
+        setError(
+          dashboardError?.message ||
+            "Dashboard data could not be loaded."
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    loadDashboardData({
+      initialLoad: true,
+    });
+  }, [loadDashboardData]);
+
+  const revenueChartData =
+    useMemo(() => {
+      return stats.monthlyRevenue.map(
+        (record) => {
+          const monthNumber =
+            normalizeNumber(
+              record.month
+            );
+
+          const year =
+            normalizeNumber(
+              record.year
+            );
+
+          const monthName =
+            MONTH_NAMES[
+              monthNumber - 1
+            ] || "Unknown";
+
+          return {
+            label: year
+              ? `${monthName} ${year}`
+              : monthName,
+
+            revenue:
+              normalizeNumber(
+                record.total
+              ),
+          };
+        }
+      );
+    }, [stats.monthlyRevenue]);
+
+  const occupancyTotal =
+    stats.occupiedRooms +
+    stats.availableRooms;
+
+  const occupancyPercent =
+    occupancyTotal > 0
+      ? Math.round(
+          (stats.occupiedRooms /
+            occupancyTotal) *
+            100
+        )
+      : 0;
+
+  const occupancyData =
+    occupancyTotal > 0
+      ? [
+          {
+            name: "Occupied",
+            value:
+              stats.occupiedRooms,
+          },
+          {
+            name: "Available",
+            value:
+              stats.availableRooms,
+          },
+        ]
+      : [
+          {
+            name: "No room data",
+            value: 1,
+          },
+        ];
+
+  const occupancyColors =
+    occupancyTotal > 0
+      ? [
+          "var(--color-info-accent)",
+          "var(--color-border)",
+        ]
+      : [
+          "var(--color-border)",
+        ];
+
+  const activeAdminCount =
+    admins.filter(
+      (admin) =>
+        String(admin.status)
+          .toLowerCase() ===
+        "active"
+    ).length;
+
+  if (loading) {
+    return (
+      <SuperAdminLayout
+        sidebar={
+          <SuperAdminSidebar />
+        }
+        topbar={
+          <SuperAdminTopbar
+            title="Portfolio Overview"
+            breadcrumbs={[
+              {
+                label: "Portfolio",
+              },
+              {
+                label: "Overview",
+              },
+            ]}
+          />
+        }
+      >
+        <div className="super-admin-layout__loading">
+          <div className="super-admin-layout__loading-card">
+            <h2 className="super-admin-layout__loading-title">
+              Loading Portfolio
+            </h2>
+
+            <p className="super-admin-layout__loading-description">
+              Your hotels, Admin accounts
+              and business statistics are
+              being loaded.
+            </p>
+          </div>
+        </div>
+      </SuperAdminLayout>
+    );
+  }
+
+  return (
+    <SuperAdminLayout
+      sidebar={
+        <SuperAdminSidebar
+          selectedHotel={null}
+          hotelCount={0}
+          adminCount={admins.length}
+          pendingRequests={0}
+        />
+      }
+      topbar={
+        <SuperAdminTopbar
+          title="Portfolio Overview"
+          breadcrumbs={[
+            {
+              label: "Portfolio",
+            },
+            {
+              label: "Overview",
+            },
+          ]}
+          selectedHotel={null}
+          pendingRequests={0}
+          onRefresh={() =>
+            loadDashboardData({
+              initialLoad: false,
+            })
+          }
+          isRefreshing={refreshing}
+        />
+      }
+    >
+      <div className="sa-dashboard">
+        {error && (
+          <div
+            className="alert alert-error"
+            role="alert"
+          >
+            <div>
+              <strong>
+                Dashboard data could not
+                be loaded.
+              </strong>
+
+              <div>{error}</div>
+            </div>
+          </div>
+        )}
+
+        {warning && (
+          <div
+            className="alert alert-warning"
+            role="alert"
+          >
+            {warning}
+          </div>
+        )}
+
+        <div className="sa-dashboard-intro">
+          <div>
+            <h2>
+              Business Portfolio
+            </h2>
+
+            <p>
+              View combined operational
+              performance across all hotels
+              owned by this Super Admin
+              account.
+            </p>
+          </div>
+        </div>
+
+        <div className="sa-stats-grid">
+          <StatCard
+            icon="📅"
+            label="Total Bookings"
+            value={
+              stats.totalBookings
+            }
+            accent="blue"
+          />
+
+          <StatCard
+            icon="🛏️"
+            label="Occupied Rooms"
+            value={
+              stats.occupiedRooms
+            }
+            accent="green"
+          />
+
+          <StatCard
+            icon="🏠"
+            label="Available Rooms"
+            value={
+              stats.availableRooms
+            }
+            accent="purple"
+          />
+
+          <StatCard
+            icon="🧾"
+            label="Today's Revenue"
+            value={formatCurrency(
+              stats.todaysRevenue
+            )}
+            accent="orange"
+          />
+        </div>
+
+        <div className="sa-charts-grid">
+          <section className="sa-card sa-chart-card">
+            <div className="sa-section-header">
+              <div>
+                <h3>
+                  Portfolio Revenue
+                </h3>
+
+                <p>
+                  Successful payments across
+                  all owned hotels.
+                </p>
+              </div>
+            </div>
+
+            {revenueChartData.length >
+            0 ? (
+              <ResponsiveContainer
+                width="100%"
+                height={300}
+              >
+                <LineChart
+                  data={
+                    revenueChartData
+                  }
+                >
+                  <CartesianGrid
+                    stroke="var(--color-divider)"
+                    vertical={false}
+                  />
+
+                  <XAxis
+                    dataKey="label"
+                    axisLine={false}
+                    tickLine={false}
+                    stroke="var(--color-text-muted)"
+                  />
+
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    stroke="var(--color-text-muted)"
+                    tickFormatter={(
+                      value
+                    ) =>
+                      `₹${Math.round(
+                        value / 1000
+                      )}k`
+                    }
+                  />
+
+                  <Tooltip
+                    formatter={(
+                      value
+                    ) => [
+                      formatCurrency(
+                        value
+                      ),
+                      "Revenue",
+                    ]}
+                  />
+
+                  <Line
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="var(--color-info-accent)"
+                    strokeWidth={3}
+                    dot={{
+                      r: 4,
+                      fill:
+                        "var(--color-info-accent)",
+                    }}
+                    activeDot={{
+                      r: 6,
+                    }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="state-container">
+                <h4 className="state-title">
+                  No revenue data yet
+                </h4>
+
+                <p className="state-description">
+                  Revenue trends will appear
+                  after successful hotel
+                  payments are recorded.
+                </p>
+              </div>
+            )}
+          </section>
+
+          <section className="sa-card sa-occupancy-card">
+            <div className="sa-section-header">
+              <div>
+                <h3>
+                  Portfolio Occupancy
+                </h3>
+
+                <p>
+                  Current occupied and
+                  available rooms.
+                </p>
+              </div>
+            </div>
+
+            <div className="sa-donut-wrap">
+              <ResponsiveContainer
+                width={200}
+                height={200}
+              >
+                <PieChart>
+                  <Pie
+                    data={occupancyData}
+                    dataKey="value"
+                    innerRadius={65}
+                    outerRadius={90}
+                    startAngle={90}
+                    endAngle={-270}
+                  >
+                    {occupancyData.map(
+                      (
+                        entry,
+                        index
+                      ) => (
+                        <Cell
+                          key={
+                            entry.name
+                          }
+                          fill={
+                            occupancyColors[
+                              index
+                            ]
+                          }
+                          stroke="none"
+                        />
+                      )
+                    )}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+
+              <div className="sa-donut-center">
+                <span className="sa-donut-percent">
+                  {occupancyPercent}%
+                </span>
+
+                <span className="sa-donut-label">
+                  Occupied
+                </span>
+              </div>
+            </div>
+
+            <div className="sa-occupancy-legend">
+              <div className="sa-legend-row">
+                <span>
+                  <span className="sa-dot sa-dot-blue" />
+                  Occupied
+                </span>
+
+                <strong>
+                  {stats.occupiedRooms}
+                </strong>
+              </div>
+
+              <div className="sa-legend-row">
+                <span>
+                  <span className="sa-dot sa-dot-gray" />
+                  Available
+                </span>
+
+                <strong>
+                  {stats.availableRooms}
+                </strong>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section className="sa-card sa-admins-card">
+          <div className="sa-admins-header">
+            <div>
+              <h3>
+                Admin Accounts
+              </h3>
+
+              <p>
+                {activeAdminCount} active
+                out of {admins.length} Admin
+                accounts.
+              </p>
+            </div>
+          </div>
+
+          <div className="table-responsive">
+            <table className="sa-table">
+              <thead>
+                <tr>
+                  <th>Admin ID</th>
+                  <th>Name</th>
+                  <th>Hotel</th>
+                  <th>Email</th>
+                  <th>Last Login</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {admins.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan="6"
+                      className="sa-empty-row"
+                    >
+                      No Admin accounts found.
+                      Admins will be created
+                      inside a selected hotel's
+                      Team section.
+                    </td>
+                  </tr>
+                )}
+
+                {admins.map(
+                  (admin) => {
+                    const isActive =
+                      String(
+                        admin.status
+                      ).toLowerCase() ===
+                      "active";
+
+                    return (
+                      <tr
+                        key={admin.id}
+                      >
+                        <td>
+                          {admin.display_id ||
+                            `ADM-${String(
+                              admin.id
+                            ).padStart(
+                              4,
+                              "0"
+                            )}`}
+                        </td>
+
+                        <td>
+                          {admin.name ||
+                            "Unnamed Admin"}
+                        </td>
+
+                        <td>
+                          <div>
+                            <strong>
+                              {admin.hotel_name ||
+                                "Hotel unavailable"}
+                            </strong>
+
+                            <div className="text-muted">
+                              {admin.hotel_display_id ||
+                                "HT unavailable"}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td>
+                          {admin.email ||
+                            "Email unavailable"}
+                        </td>
+
+                        <td>
+                          {formatDateTime(
+                            admin.last_login
+                          )}
+                        </td>
+
+                        <td>
+                          <span
+                            className={[
+                              "sa-status-badge",
+                              isActive
+                                ? "sa-status-active"
+                                : "sa-status-inactive",
+                            ].join(" ")}
+                          >
+                            {formatStatus(
+                              admin.status
+                            )}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  }
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </SuperAdminLayout>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  accent,
+}) {
+  return (
+    <article className="sa-card sa-stat-card">
+      <div
+        className={`sa-stat-icon sa-icon-${accent}`}
+        aria-hidden="true"
+      >
+        {icon}
+      </div>
+
+      <div className="sa-stat-text">
+        <span className="sa-stat-label">
+          {label}
+        </span>
+
+        <strong className="sa-stat-value">
+          {value}
+        </strong>
+      </div>
+    </article>
+  );
+}
 
 export default SuperAdminDashboard;

@@ -1,0 +1,694 @@
+/* ============================================================
+   SUPER ADMIN SIDEBAR
+
+   Navigation groups:
+   - Portfolio
+   - Selected Hotel
+   - Account
+
+   Desktop:
+   - Expanded sidebar
+   - Collapsed icon sidebar
+
+   Mobile:
+   - Slide-in navigation drawer
+============================================================ */
+
+.super-admin-sidebar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      180deg,
+      var(--color-navy) 0%,
+      #111c42 100%
+    );
+  color: var(--color-white);
+}
+
+/* ============================================================
+   HEADER / BRAND
+============================================================ */
+
+.super-admin-sidebar__header {
+  min-height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  padding: 0 var(--space-4);
+  border-bottom:
+    1px solid rgba(255, 255, 255, 0.08);
+}
+
+.super-admin-sidebar__brand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+.super-admin-sidebar__brand-mark {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border:
+    1px solid rgba(201, 162, 39, 0.65);
+  border-radius: var(--radius-md);
+  background:
+    rgba(201, 162, 39, 0.1);
+  color: var(--color-gold);
+}
+
+.super-admin-sidebar__brand-mark svg {
+  width: 23px;
+  height: 23px;
+}
+
+.super-admin-sidebar__brand-content {
+  min-width: 0;
+  display: block;
+  flex: 1;
+}
+
+.super-admin-sidebar__brand-title,
+.super-admin-sidebar__brand-subtitle {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.super-admin-sidebar__brand-title {
+  color: var(--color-white);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+.super-admin-sidebar__brand-subtitle {
+  margin-top: 3px;
+  color:
+    rgba(255, 255, 255, 0.52);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+}
+
+.super-admin-sidebar__mobile-close {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color:
+    rgba(255, 255, 255, 0.72);
+}
+
+.super-admin-sidebar__mobile-close:hover {
+  background:
+    rgba(255, 255, 255, 0.08);
+  color: var(--color-white);
+}
+
+.super-admin-sidebar__mobile-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ============================================================
+   SCROLLABLE NAVIGATION
+============================================================ */
+
+.super-admin-sidebar__navigation {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding:
+    var(--space-5)
+    var(--space-3);
+  scrollbar-width: thin;
+  scrollbar-color:
+    rgba(255, 255, 255, 0.18)
+    transparent;
+}
+
+.super-admin-sidebar__navigation::-webkit-scrollbar {
+  width: 5px;
+}
+
+.super-admin-sidebar__navigation::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.super-admin-sidebar__navigation::-webkit-scrollbar-thumb {
+  border-radius: var(--radius-pill);
+  background:
+    rgba(255, 255, 255, 0.18);
+}
+
+/* ============================================================
+   NAVIGATION SECTIONS
+============================================================ */
+
+.super-admin-sidebar__section {
+  margin-bottom: var(--space-6);
+}
+
+.super-admin-sidebar__section:last-child {
+  margin-bottom: 0;
+}
+
+.super-admin-sidebar__section-title {
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-3);
+  color:
+    rgba(255, 255, 255, 0.38);
+  font-size: 0.6875rem;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.1em;
+  line-height: var(--line-height-normal);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.super-admin-sidebar__nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* ============================================================
+   NAVIGATION LINKS
+============================================================ */
+
+.super-admin-sidebar__nav-link {
+  position: relative;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding:
+    var(--space-2)
+    var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color:
+    rgba(255, 255, 255, 0.72);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    color var(--transition);
+}
+
+.super-admin-sidebar__nav-link:hover {
+  background:
+    rgba(255, 255, 255, 0.07);
+  color: var(--color-white);
+}
+
+.super-admin-sidebar__nav-link--active {
+  border-color:
+    rgba(201, 162, 39, 0.25);
+  background:
+    rgba(201, 162, 39, 0.13);
+  color: var(--color-white);
+}
+
+.super-admin-sidebar__nav-link--active::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: -13px;
+  width: 3px;
+  border-radius:
+    0
+    var(--radius-pill)
+    var(--radius-pill)
+    0;
+  background: var(--color-gold);
+}
+
+.super-admin-sidebar__nav-icon {
+  width: 21px;
+  height: 21px;
+  min-width: 21px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color:
+    rgba(255, 255, 255, 0.6);
+}
+
+.super-admin-sidebar__nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.super-admin-sidebar__nav-link:hover
+  .super-admin-sidebar__nav-icon,
+.super-admin-sidebar__nav-link--active
+  .super-admin-sidebar__nav-icon {
+  color: var(--color-gold);
+}
+
+.super-admin-sidebar__nav-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.super-admin-sidebar__nav-badge {
+  min-width: 24px;
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background:
+    rgba(255, 255, 255, 0.1);
+  color:
+    rgba(255, 255, 255, 0.82);
+  font-size: 0.6875rem;
+  font-weight: var(--font-weight-bold);
+}
+
+.super-admin-sidebar__nav-link--active
+  .super-admin-sidebar__nav-badge {
+  background:
+    rgba(201, 162, 39, 0.18);
+  color: var(--color-gold-light);
+}
+
+/* ============================================================
+   SELECTED HOTEL CONTEXT
+============================================================ */
+
+.super-admin-sidebar__hotel-context {
+  margin:
+    0
+    var(--space-1)
+    var(--space-4);
+  padding: var(--space-3);
+  border:
+    1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  background:
+    rgba(255, 255, 255, 0.05);
+}
+
+.super-admin-sidebar__hotel-context-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.super-admin-sidebar__hotel-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background:
+    rgba(201, 162, 39, 0.12);
+  color: var(--color-gold);
+}
+
+.super-admin-sidebar__hotel-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.super-admin-sidebar__hotel-details {
+  min-width: 0;
+  flex: 1;
+}
+
+.super-admin-sidebar__hotel-label,
+.super-admin-sidebar__hotel-name,
+.super-admin-sidebar__hotel-id {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.super-admin-sidebar__hotel-label {
+  color:
+    rgba(255, 255, 255, 0.45);
+  font-size: 0.6875rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.05em;
+  line-height: var(--line-height-normal);
+  text-transform: uppercase;
+}
+
+.super-admin-sidebar__hotel-name {
+  margin-top: 2px;
+  color: var(--color-white);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.super-admin-sidebar__hotel-id {
+  margin-top: 2px;
+  color: var(--color-gold);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.super-admin-sidebar__hotel-status {
+  margin-top: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color:
+    rgba(255, 255, 255, 0.64);
+  font-size: var(--font-size-xs);
+}
+
+.super-admin-sidebar__hotel-status-dot {
+  width: 7px;
+  height: 7px;
+  min-width: 7px;
+  border-radius: 50%;
+  background: var(--color-success-accent);
+  box-shadow:
+    0 0 0 3px
+    rgba(16, 185, 129, 0.12);
+}
+
+.super-admin-sidebar__hotel-empty {
+  margin:
+    0
+    var(--space-1)
+    var(--space-4);
+  padding: var(--space-4);
+  border:
+    1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.super-admin-sidebar__hotel-empty-title {
+  color:
+    rgba(255, 255, 255, 0.78);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.super-admin-sidebar__hotel-empty-text {
+  margin-top: var(--space-1);
+  color:
+    rgba(255, 255, 255, 0.43);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+/* ============================================================
+   FOOTER / ACCOUNT
+============================================================ */
+
+.super-admin-sidebar__footer {
+  flex-shrink: 0;
+  padding: var(--space-3);
+  border-top:
+    1px solid rgba(255, 255, 255, 0.08);
+  background:
+    rgba(0, 0, 0, 0.08);
+}
+
+.super-admin-sidebar__user-card {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+.super-admin-sidebar__user-avatar {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border:
+    1px solid rgba(201, 162, 39, 0.35);
+  border-radius: 50%;
+  background:
+    rgba(201, 162, 39, 0.12);
+  color: var(--color-gold);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+.super-admin-sidebar__user-avatar:hover {
+  border-color: var(--color-gold);
+  background:
+    rgba(201, 162, 39, 0.18);
+}
+
+.super-admin-sidebar__user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.super-admin-sidebar__user-details {
+  min-width: 0;
+  flex: 1;
+}
+
+.super-admin-sidebar__user-name,
+.super-admin-sidebar__user-role {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.super-admin-sidebar__user-name {
+  color: var(--color-white);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.super-admin-sidebar__user-role {
+  margin-top: 2px;
+  color:
+    rgba(255, 255, 255, 0.44);
+  font-size: var(--font-size-xs);
+}
+
+/*
+ * Sidebar collapse/expand is controlled only through the
+ * topbar menu button. The old footer button remains hidden
+ * until it is removed from the JSX file.
+ */
+.super-admin-sidebar__collapse-button {
+  display: none;
+}
+
+/* ============================================================
+   COLLAPSED DESKTOP STATE
+============================================================ */
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__header {
+  justify-content: center;
+  padding-right: var(--space-3);
+  padding-left: var(--space-3);
+}
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__brand {
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__brand-content,
+.super-admin-layout--collapsed
+  .super-admin-sidebar__section-title,
+.super-admin-layout--collapsed
+  .super-admin-sidebar__nav-label,
+.super-admin-layout--collapsed
+  .super-admin-sidebar__nav-badge,
+.super-admin-layout--collapsed
+  .super-admin-sidebar__hotel-details,
+.super-admin-layout--collapsed
+  .super-admin-sidebar__hotel-status,
+.super-admin-layout--collapsed
+  .super-admin-sidebar__hotel-empty,
+.super-admin-layout--collapsed
+  .super-admin-sidebar__user-details {
+  display: none;
+}
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__navigation {
+  padding-right: var(--space-3);
+  padding-left: var(--space-3);
+}
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__section {
+  margin-bottom: var(--space-4);
+}
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__nav-link {
+  justify-content: center;
+  padding-right: var(--space-2);
+  padding-left: var(--space-2);
+}
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__hotel-context {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+}
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__hotel-context-header {
+  gap: 0;
+}
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__footer {
+  padding:
+    var(--space-3)
+    var(--space-2);
+}
+
+.super-admin-layout--collapsed
+  .super-admin-sidebar__user-card {
+  justify-content: center;
+  gap: 0;
+  padding: var(--space-1);
+}
+
+/* ============================================================
+   MOBILE
+============================================================ */
+
+@media (max-width: 1024px) {
+  .super-admin-sidebar__mobile-close {
+    display: flex;
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__brand-content,
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__section-title,
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__nav-label,
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__nav-badge,
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__hotel-details,
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__hotel-status,
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__user-details {
+    display: block;
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__hotel-empty {
+    display: block;
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__header {
+    justify-content: space-between;
+    padding-right: var(--space-4);
+    padding-left: var(--space-4);
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__brand {
+    justify-content: flex-start;
+    flex: 1;
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__navigation {
+    padding-right: var(--space-3);
+    padding-left: var(--space-3);
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__nav-link {
+    justify-content: flex-start;
+    padding-right: var(--space-3);
+    padding-left: var(--space-3);
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__hotel-context {
+    display: block;
+    padding: var(--space-3);
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__hotel-context-header {
+    gap: var(--space-3);
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__footer {
+    padding: var(--space-3);
+  }
+
+  .super-admin-layout--collapsed
+    .super-admin-sidebar__user-card {
+    justify-content: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-2);
+  }
+}
+
+/* ============================================================
+   SMALL MOBILE
+============================================================ */
+
+@media (max-width: 480px) {
+  .super-admin-sidebar__header {
+    padding-right: var(--space-3);
+    padding-left: var(--space-3);
+  }
+
+  .super-admin-sidebar__brand-title {
+    font-size: var(--font-size-base);
+  }
+}
