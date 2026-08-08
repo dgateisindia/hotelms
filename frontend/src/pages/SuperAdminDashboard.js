@@ -5,324 +5,512 @@ import React, {
   useState,
 } from "react";
 
-import {
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-
 import SuperAdminLayout from "../layouts/SuperAdminLayout/SuperAdminLayout";
 
 import SuperAdminSidebar from "../components/navigation/SuperAdminSidebar/SuperAdminSidebar";
 
 import SuperAdminTopbar from "../components/navigation/SuperAdminTopbar/SuperAdminTopbar";
 
-import dashboardService from "../services/dashboardService";
+import HotelCard from "../components/hotels/HotelCard/HotelCard";
+
+import CreateHotelModal from "../components/hotels/CreateHotelModal/CreateHotelModal";
+
+import hotelService from "../services/hotelService";
 
 import "./SuperAdminDashboard.css";
 
-const MONTH_NAMES = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+/* ============================================================
+   ICONS
+============================================================ */
 
-const EMPTY_STATS = {
-  totalBookings: 0,
-  occupiedRooms: 0,
-  availableRooms: 0,
-  todaysRevenue: 0,
-  monthlyRevenue: [],
-};
-
-function normalizeNumber(value) {
-  const parsedValue = Number(value);
-
-  return Number.isFinite(parsedValue)
-    ? parsedValue
-    : 0;
+function IconBase({
+  children,
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width="20"
+      height="20"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
 }
 
-function normalizeDashboardStats(data) {
-  const stats = data || {};
-
-  return {
-    totalBookings: normalizeNumber(
-      stats.totalBookings
-    ),
-
-    occupiedRooms: normalizeNumber(
-      stats.occupiedRooms
-    ),
-
-    availableRooms: normalizeNumber(
-      stats.availableRooms
-    ),
-
-    todaysRevenue: normalizeNumber(
-      stats.todaysRevenue
-    ),
-
-    monthlyRevenue: Array.isArray(
-      stats.monthlyRevenue
-    )
-      ? stats.monthlyRevenue
-      : [],
-  };
+function HotelIcon() {
+  return (
+    <IconBase>
+      <path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16" />
+      <path d="M3 21h18" />
+      <path d="M9 7h1" />
+      <path d="M14 7h1" />
+      <path d="M9 11h1" />
+      <path d="M14 11h1" />
+      <path d="M10 21v-4h4v4" />
+    </IconBase>
+  );
 }
 
-function formatCurrency(value) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(normalizeNumber(value));
+function BookingIcon() {
+  return (
+    <IconBase>
+      <rect
+        x="4"
+        y="5"
+        width="16"
+        height="15"
+        rx="2"
+      />
+
+      <path d="M8 3v4" />
+      <path d="M16 3v4" />
+      <path d="M4 9h16" />
+      <path d="M8 13h3" />
+      <path d="M8 16h5" />
+    </IconBase>
+  );
 }
 
-function formatDateTime(value) {
-  if (!value) {
-    return "Never";
+function RevenueIcon() {
+  return (
+    <IconBase>
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+      />
+
+      <path d="M8 8h8" />
+      <path d="M8 11h8" />
+      <path d="M9 8c4 0 5 1.5 5 3s-1 3-5 3" />
+      <path d="m9 14 5 5" />
+    </IconBase>
+  );
+}
+
+function OccupancyIcon() {
+  return (
+    <IconBase>
+      <path d="M4 19V9" />
+      <path d="M20 19V7" />
+      <path d="M4 14h16" />
+      <path d="M7 14v-3h5a3 3 0 0 1 3 3" />
+      <path d="M4 19h16" />
+    </IconBase>
+  );
+}
+
+function RequestIcon() {
+  return (
+    <IconBase>
+      <path d="M12 3 2.8 19h18.4L12 3z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </IconBase>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <IconBase>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </IconBase>
+  );
+}
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function normalizeNumber(
+  value
+) {
+  const parsedValue =
+    Number(value);
+
+  if (
+    !Number.isFinite(
+      parsedValue
+    ) ||
+    parsedValue < 0
+  ) {
+    return 0;
   }
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Unavailable";
-  }
-
-  return date.toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return parsedValue;
 }
 
-function formatStatus(status) {
-  const normalizedStatus = String(
-    status || ""
-  )
-    .trim()
-    .toLowerCase();
-
-  if (!normalizedStatus) {
-    return "Unknown";
-  }
-
-  return normalizedStatus
-    .split("_")
-    .map(
-      (word) =>
-        word.charAt(0).toUpperCase() +
-        word.slice(1)
-    )
-    .join(" ");
+function formatCurrency(
+  value
+) {
+  return new Intl.NumberFormat(
+    "en-IN",
+    {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }
+  ).format(
+    normalizeNumber(value)
+  );
 }
+
+function getApiErrorMessage(
+  error
+) {
+  return (
+    error?.response?.data
+      ?.message ||
+    error?.response?.data
+      ?.error ||
+    error?.message ||
+    "Your hotel portfolio could not be loaded."
+  );
+}
+
+/* ============================================================
+   MAIN COMPONENT
+============================================================ */
 
 function SuperAdminDashboard() {
-  const [stats, setStats] =
-    useState(EMPTY_STATS);
+  const [
+    hotels,
+    setHotels,
+  ] = useState([]);
 
-  const [admins, setAdmins] =
-    useState([]);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
 
-  const [refreshing, setRefreshing] =
-    useState(false);
+  const [
+    error,
+    setError,
+  ] = useState("");
 
-  const [error, setError] =
-    useState("");
+  const [
+    notice,
+    setNotice,
+  ] = useState("");
 
-  const [warning, setWarning] =
-    useState("");
+  const [
+    isCreateHotelOpen,
+    setIsCreateHotelOpen,
+  ] = useState(false);
 
-  const loadDashboardData = useCallback(
-    async ({
-      initialLoad = false,
-    } = {}) => {
-      if (initialLoad) {
-        setLoading(true);
-      } else {
-        setRefreshing(true);
-      }
+  /* ==========================================================
+     LOAD HOTEL PORTFOLIO
+  ========================================================== */
 
-      setError("");
-      setWarning("");
-
-      try {
-        const [
-          statsResult,
-          adminsResult,
-        ] = await Promise.allSettled([
-          dashboardService.getSuperAdminStats(),
-          dashboardService.getAdminsStatus(),
-        ]);
-
-        if (
-          statsResult.status ===
-          "fulfilled"
-        ) {
-          setStats(
-            normalizeDashboardStats(
-              statsResult.value?.stats
-            )
-          );
+  const loadPortfolio =
+    useCallback(
+      async ({
+        initialLoad = false,
+      } = {}) => {
+        if (initialLoad) {
+          setLoading(true);
         } else {
-          setError(
-            statsResult.reason?.message ||
-              "Portfolio statistics could not be loaded."
-          );
+          setRefreshing(true);
         }
 
-        if (
-          adminsResult.status ===
-          "fulfilled"
-        ) {
-          setAdmins(
+        setError("");
+
+        try {
+          const result =
+            await hotelService.getHotels();
+
+          if (
+            result?.success !== true
+          ) {
+            throw new Error(
+              "The hotel portfolio could not be loaded."
+            );
+          }
+
+          setHotels(
             Array.isArray(
-              adminsResult.value?.admins
+              result.hotels
             )
-              ? adminsResult.value.admins
+              ? result.hotels
               : []
           );
-        } else {
-          setAdmins([]);
-
-          setWarning(
-            adminsResult.reason?.message ||
-              "Admin account information could not be loaded."
-          );
-        }
-
-        if (
-          statsResult.status ===
-            "rejected" &&
-          adminsResult.status ===
-            "rejected"
+        } catch (
+          portfolioError
         ) {
-          throw new Error(
-            "The Super Admin dashboard could not be loaded. Check the backend connection and retry."
+          console.error(
+            "[SUPER_ADMIN_DASHBOARD:HOTELS]",
+            portfolioError
           );
+
+          setError(
+            getApiErrorMessage(
+              portfolioError
+            )
+          );
+        } finally {
+          setLoading(false);
+          setRefreshing(false);
         }
-      } catch (dashboardError) {
-        setError(
-          dashboardError?.message ||
-            "Dashboard data could not be loaded."
-        );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    []
-  );
+      },
+      []
+    );
 
   useEffect(() => {
-    loadDashboardData({
+    void loadPortfolio({
       initialLoad: true,
     });
-  }, [loadDashboardData]);
+  }, [loadPortfolio]);
 
-  const revenueChartData =
+  /* ==========================================================
+     PORTFOLIO METRICS
+  ========================================================== */
+
+  const portfolio =
     useMemo(() => {
-      return stats.monthlyRevenue.map(
-        (record) => {
-          const monthNumber =
+      return hotels.reduce(
+        (
+          summary,
+          hotel
+        ) => {
+          const status =
+            String(
+              hotel?.status ||
+                ""
+            )
+              .trim()
+              .toLowerCase();
+
+          const rooms =
+            hotel?.rooms || {};
+
+          const today =
+            hotel?.today || {};
+
+          summary.totalHotels += 1;
+
+          if (
+            status ===
+            "active"
+          ) {
+            summary.activeHotels += 1;
+          }
+
+          if (
+            status ===
+            "pending"
+          ) {
+            summary.pendingHotels += 1;
+          }
+
+          if (
+            status ===
+            "inactive"
+          ) {
+            summary.inactiveHotels += 1;
+          }
+
+          if (
+            status ===
+            "rejected"
+          ) {
+            summary.rejectedHotels += 1;
+          }
+
+          summary.adminCount +=
             normalizeNumber(
-              record.month
+              hotel?.admins?.count
             );
 
-          const year =
+          summary.totalRooms +=
             normalizeNumber(
-              record.year
+              rooms.total
             );
 
-          const monthName =
-            MONTH_NAMES[
-              monthNumber - 1
-            ] || "Unknown";
+          summary.occupiedRooms +=
+            normalizeNumber(
+              rooms.occupied
+            );
 
-          return {
-            label: year
-              ? `${monthName} ${year}`
-              : monthName,
+          summary.availableRooms +=
+            normalizeNumber(
+              rooms.available
+            );
 
-            revenue:
-              normalizeNumber(
-                record.total
-              ),
-          };
+          summary.todayBookings +=
+            normalizeNumber(
+              today.bookings
+            );
+
+          summary.todayRevenue +=
+            normalizeNumber(
+              today.revenue
+            );
+
+          summary.pendingRequests +=
+            normalizeNumber(
+              hotel?.pendingRequests
+            );
+
+          return summary;
+        },
+        {
+          totalHotels: 0,
+          activeHotels: 0,
+          pendingHotels: 0,
+          inactiveHotels: 0,
+          rejectedHotels: 0,
+
+          adminCount: 0,
+
+          totalRooms: 0,
+          occupiedRooms: 0,
+          availableRooms: 0,
+
+          todayBookings: 0,
+          todayRevenue: 0,
+
+          pendingRequests: 0,
         }
       );
-    }, [stats.monthlyRevenue]);
+    }, [hotels]);
 
-  const occupancyTotal =
-    stats.occupiedRooms +
-    stats.availableRooms;
-
-  const occupancyPercent =
-    occupancyTotal > 0
+  const occupancyRate =
+    portfolio.totalRooms > 0
       ? Math.round(
-          (stats.occupiedRooms /
-            occupancyTotal) *
+          (
+            portfolio.occupiedRooms /
+            portfolio.totalRooms
+          ) *
             100
         )
-      : 0;
+      : null;
 
-  const occupancyData =
-    occupancyTotal > 0
-      ? [
-          {
-            name: "Occupied",
-            value:
-              stats.occupiedRooms,
-          },
-          {
-            name: "Available",
-            value:
-              stats.availableRooms,
-          },
-        ]
-      : [
-          {
-            name: "No room data",
-            value: 1,
-          },
-        ];
+  const hasHotels =
+    portfolio.totalHotels > 0;
 
-  const occupancyColors =
-    occupancyTotal > 0
-      ? [
-          "var(--color-info-accent)",
-          "var(--color-border)",
-        ]
-      : [
-          "var(--color-border)",
-        ];
+  /* ==========================================================
+     HOTEL CREATED
+  ========================================================== */
 
-  const activeAdminCount =
-    admins.filter(
-      (admin) =>
-        String(admin.status)
-          .toLowerCase() ===
-        "active"
-    ).length;
+  const handleHotelCreated =
+    useCallback(
+      (
+        createdHotel,
+        message
+      ) => {
+        if (
+          !createdHotel ||
+          typeof createdHotel !==
+            "object"
+        ) {
+          return;
+        }
+
+        setHotels(
+          (currentHotels) => {
+            const createdDisplayId =
+              String(
+                createdHotel.displayId ||
+                  ""
+              )
+                .trim()
+                .toUpperCase();
+
+            const alreadyExists =
+              currentHotels.some(
+                (hotel) =>
+                  String(
+                    hotel?.displayId ||
+                      ""
+                  )
+                    .trim()
+                    .toUpperCase() ===
+                  createdDisplayId
+              );
+
+            if (
+              alreadyExists
+            ) {
+              return currentHotels;
+            }
+
+            return [
+              createdHotel,
+              ...currentHotels,
+            ];
+          }
+        );
+
+        setError("");
+
+        setNotice(
+          message ||
+            `${createdHotel.name || "Hotel"} was added to your portfolio.`
+        );
+      },
+      []
+    );
+
+  /* ==========================================================
+     LAYOUT PROPS
+  ========================================================== */
+
+  const sidebar = (
+    <SuperAdminSidebar
+      selectedHotel={null}
+      hotelCount={
+        portfolio.totalHotels
+      }
+      adminCount={
+        portfolio.adminCount
+      }
+      pendingRequests={
+        portfolio.pendingRequests
+      }
+    />
+  );
+
+  const topbar = (
+    <SuperAdminTopbar
+      title="Portfolio Overview"
+      breadcrumbs={[
+        {
+          label: "Portfolio",
+        },
+        {
+          label: "Overview",
+        },
+      ]}
+      selectedHotel={null}
+      pendingRequests={
+        portfolio.pendingRequests
+      }
+      onRefresh={() => {
+        void loadPortfolio({
+          initialLoad: false,
+        });
+      }}
+      isRefreshing={
+        refreshing
+      }
+    />
+  );
+
+  /* ==========================================================
+     INITIAL LOADING
+  ========================================================== */
 
   if (loading) {
     return (
@@ -351,9 +539,8 @@ function SuperAdminDashboard() {
             </h2>
 
             <p className="super-admin-layout__loading-description">
-              Your hotels, Admin accounts
-              and business statistics are
-              being loaded.
+              Your hotel portfolio is
+              being loaded securely.
             </p>
           </div>
         </div>
@@ -361,423 +548,374 @@ function SuperAdminDashboard() {
     );
   }
 
+  /* ==========================================================
+     INITIAL API FAILURE
+
+     Important:
+     Do not show "Create First Hotel" when the API failed,
+     because that could falsely imply that no hotels exist.
+  ========================================================== */
+
+  if (
+    error &&
+    hotels.length === 0
+  ) {
+    return (
+      <SuperAdminLayout
+        sidebar={sidebar}
+        topbar={topbar}
+      >
+        <div className="sa-dashboard">
+          <section className="sa-card sa-dashboard-error-state">
+            <div className="sa-dashboard-error-state__icon">
+              <RequestIcon />
+            </div>
+
+            <h2>
+              Portfolio could not be loaded
+            </h2>
+
+            <p>
+              {error}
+            </p>
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={
+                refreshing
+              }
+              onClick={() => {
+                void loadPortfolio({
+                  initialLoad: false,
+                });
+              }}
+            >
+              {refreshing
+                ? "Retrying..."
+                : "Retry"}
+            </button>
+          </section>
+        </div>
+      </SuperAdminLayout>
+    );
+  }
+
+  /* ==========================================================
+     MAIN DASHBOARD
+  ========================================================== */
+
   return (
     <SuperAdminLayout
-      sidebar={
-        <SuperAdminSidebar
-          selectedHotel={null}
-          hotelCount={0}
-          adminCount={admins.length}
-          pendingRequests={0}
-        />
-      }
-      topbar={
-        <SuperAdminTopbar
-          title="Portfolio Overview"
-          breadcrumbs={[
-            {
-              label: "Portfolio",
-            },
-            {
-              label: "Overview",
-            },
-          ]}
-          selectedHotel={null}
-          pendingRequests={0}
-          onRefresh={() =>
-            loadDashboardData({
-              initialLoad: false,
-            })
-          }
-          isRefreshing={refreshing}
-        />
-      }
+      sidebar={sidebar}
+      topbar={topbar}
     >
       <div className="sa-dashboard">
+
+        {/* ====================================================
+            ALERTS
+        ==================================================== */}
+
         {error && (
           <div
             className="alert alert-error"
             role="alert"
           >
-            <div>
-              <strong>
-                Dashboard data could not
-                be loaded.
-              </strong>
+            <strong>
+              Portfolio refresh failed.
+            </strong>
 
-              <div>{error}</div>
-            </div>
+            <span>
+              {error}
+            </span>
           </div>
         )}
 
-        {warning && (
+        {notice && (
           <div
-            className="alert alert-warning"
-            role="alert"
+            className="alert alert-success"
+            role="status"
           >
-            {warning}
+            {notice}
           </div>
         )}
 
-        <div className="sa-dashboard-intro">
-          <div>
-            <h2>
-              Business Portfolio
-            </h2>
+        {/* ====================================================
+            ZERO-HOTEL ONBOARDING
+        ==================================================== */}
 
-            <p>
-              View combined operational
-              performance across all hotels
-              owned by this Super Admin
-              account.
-            </p>
-          </div>
-        </div>
-
-        <div className="sa-stats-grid">
-          <StatCard
-            icon="📅"
-            label="Total Bookings"
-            value={
-              stats.totalBookings
-            }
-            accent="blue"
-          />
-
-          <StatCard
-            icon="🛏️"
-            label="Occupied Rooms"
-            value={
-              stats.occupiedRooms
-            }
-            accent="green"
-          />
-
-          <StatCard
-            icon="🏠"
-            label="Available Rooms"
-            value={
-              stats.availableRooms
-            }
-            accent="purple"
-          />
-
-          <StatCard
-            icon="🧾"
-            label="Today's Revenue"
-            value={formatCurrency(
-              stats.todaysRevenue
-            )}
-            accent="orange"
-          />
-        </div>
-
-        <div className="sa-charts-grid">
-          <section className="sa-card sa-chart-card">
-            <div className="sa-section-header">
+        {!hasHotels ? (
+          <>
+            <div className="sa-dashboard-intro">
               <div>
-                <h3>
-                  Portfolio Revenue
-                </h3>
+                <h2>
+                  Business Portfolio
+                </h2>
 
                 <p>
-                  Successful payments across
-                  all owned hotels.
+                  Start by adding your
+                  first hotel to this
+                  Super Admin account.
                 </p>
               </div>
             </div>
 
-            {revenueChartData.length >
-            0 ? (
-              <ResponsiveContainer
-                width="100%"
-                height={300}
-              >
-                <LineChart
-                  data={
-                    revenueChartData
-                  }
-                >
-                  <CartesianGrid
-                    stroke="var(--color-divider)"
-                    vertical={false}
-                  />
-
-                  <XAxis
-                    dataKey="label"
-                    axisLine={false}
-                    tickLine={false}
-                    stroke="var(--color-text-muted)"
-                  />
-
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    stroke="var(--color-text-muted)"
-                    tickFormatter={(
-                      value
-                    ) =>
-                      `₹${Math.round(
-                        value / 1000
-                      )}k`
-                    }
-                  />
-
-                  <Tooltip
-                    formatter={(
-                      value
-                    ) => [
-                      formatCurrency(
-                        value
-                      ),
-                      "Revenue",
-                    ]}
-                  />
-
-                  <Line
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="var(--color-info-accent)"
-                    strokeWidth={3}
-                    dot={{
-                      r: 4,
-                      fill:
-                        "var(--color-info-accent)",
-                    }}
-                    activeDot={{
-                      r: 6,
-                    }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="state-container">
-                <h4 className="state-title">
-                  No revenue data yet
-                </h4>
-
-                <p className="state-description">
-                  Revenue trends will appear
-                  after successful hotel
-                  payments are recorded.
-                </p>
+            <section className="sa-card sa-onboarding-card">
+              <div className="sa-onboarding-card__icon">
+                <HotelIcon />
               </div>
-            )}
-          </section>
 
-          <section className="sa-card sa-occupancy-card">
-            <div className="sa-section-header">
-              <div>
-                <h3>
-                  Portfolio Occupancy
-                </h3>
+              <div className="sa-onboarding-card__content">
+                <span className="sa-onboarding-card__eyebrow">
+                  GET STARTED
+                </span>
+
+                <h2>
+                  Set up your first hotel
+                </h2>
 
                 <p>
-                  Current occupied and
-                  available rooms.
+                  Create a hotel first.
+                  After that you can add
+                  multiple Hotel Admins,
+                  configure rooms and
+                  start hotel operations.
                 </p>
-              </div>
-            </div>
 
-            <div className="sa-donut-wrap">
-              <ResponsiveContainer
-                width={200}
-                height={200}
-              >
-                <PieChart>
-                  <Pie
-                    data={occupancyData}
-                    dataKey="value"
-                    innerRadius={65}
-                    outerRadius={90}
-                    startAngle={90}
-                    endAngle={-270}
-                  >
-                    {occupancyData.map(
-                      (
-                        entry,
-                        index
-                      ) => (
-                        <Cell
-                          key={
-                            entry.name
-                          }
-                          fill={
-                            occupancyColors[
-                              index
-                            ]
-                          }
-                          stroke="none"
-                        />
-                      )
-                    )}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
+                <div className="sa-onboarding-card__steps">
+                  <span>
+                    1. Create Hotel
+                  </span>
 
-              <div className="sa-donut-center">
-                <span className="sa-donut-percent">
-                  {occupancyPercent}%
-                </span>
+                  <span>
+                    2. Add Admins
+                  </span>
 
-                <span className="sa-donut-label">
-                  Occupied
-                </span>
-              </div>
-            </div>
+                  <span>
+                    3. Configure Rooms
+                  </span>
 
-            <div className="sa-occupancy-legend">
-              <div className="sa-legend-row">
-                <span>
-                  <span className="sa-dot sa-dot-blue" />
-                  Occupied
-                </span>
+                  <span>
+                    4. Start Bookings
+                  </span>
+                </div>
 
-                <strong>
-                  {stats.occupiedRooms}
-                </strong>
-              </div>
-
-              <div className="sa-legend-row">
-                <span>
-                  <span className="sa-dot sa-dot-gray" />
-                  Available
-                </span>
-
-                <strong>
-                  {stats.availableRooms}
-                </strong>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <section className="sa-card sa-admins-card">
-          <div className="sa-admins-header">
-            <div>
-              <h3>
-                Admin Accounts
-              </h3>
-
-              <p>
-                {activeAdminCount} active
-                out of {admins.length} Admin
-                accounts.
-              </p>
-            </div>
-          </div>
-
-          <div className="table-responsive">
-            <table className="sa-table">
-              <thead>
-                <tr>
-                  <th>Admin ID</th>
-                  <th>Name</th>
-                  <th>Hotel</th>
-                  <th>Email</th>
-                  <th>Last Login</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {admins.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan="6"
-                      className="sa-empty-row"
-                    >
-                      No Admin accounts found.
-                      Admins will be created
-                      inside a selected hotel's
-                      Team section.
-                    </td>
-                  </tr>
-                )}
-
-                {admins.map(
-                  (admin) => {
-                    const isActive =
-                      String(
-                        admin.status
-                      ).toLowerCase() ===
-                      "active";
-
-                    return (
-                      <tr
-                        key={admin.id}
-                      >
-                        <td>
-                          {admin.display_id ||
-                            `ADM-${String(
-                              admin.id
-                            ).padStart(
-                              4,
-                              "0"
-                            )}`}
-                        </td>
-
-                        <td>
-                          {admin.name ||
-                            "Unnamed Admin"}
-                        </td>
-
-                        <td>
-                          <div>
-                            <strong>
-                              {admin.hotel_name ||
-                                "Hotel unavailable"}
-                            </strong>
-
-                            <div className="text-muted">
-                              {admin.hotel_display_id ||
-                                "HT unavailable"}
-                            </div>
-                          </div>
-                        </td>
-
-                        <td>
-                          {admin.email ||
-                            "Email unavailable"}
-                        </td>
-
-                        <td>
-                          {formatDateTime(
-                            admin.last_login
-                          )}
-                        </td>
-
-                        <td>
-                          <span
-                            className={[
-                              "sa-status-badge",
-                              isActive
-                                ? "sa-status-active"
-                                : "sa-status-inactive",
-                            ].join(" ")}
-                          >
-                            {formatStatus(
-                              admin.status
-                            )}
-                          </span>
-                        </td>
-                      </tr>
+                <button
+                  type="button"
+                  className="btn btn-primary sa-create-hotel-button"
+                  onClick={() => {
+                    setNotice("");
+                    setIsCreateHotelOpen(
+                      true
                     );
+                  }}
+                >
+                  <PlusIcon />
+                  Create First Hotel
+                </button>
+              </div>
+            </section>
+          </>
+        ) : (
+          <>
+            {/* =================================================
+                INTRO
+            ================================================= */}
+
+            <div className="sa-dashboard-intro sa-dashboard-intro--with-action">
+              <div>
+                <h2>
+                  Business Portfolio
+                </h2>
+
+                <p>
+                  Manage and monitor all
+                  hotels owned by this
+                  Super Admin account.
+                </p>
+
+                <div className="sa-dashboard-intro__meta">
+                  {
+                    portfolio.activeHotels
+                  }{" "}
+                  active of{" "}
+                  {
+                    portfolio.totalHotels
+                  }{" "}
+                  {
+                    portfolio.totalHotels ===
+                    1
+                      ? "hotel"
+                      : "hotels"
                   }
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-primary sa-create-hotel-button"
+                onClick={() => {
+                  setNotice("");
+                  setIsCreateHotelOpen(
+                    true
+                  );
+                }}
+              >
+                <PlusIcon />
+                Add Hotel
+              </button>
+            </div>
+
+            {/* =================================================
+                PORTFOLIO KPI CARDS
+            ================================================= */}
+
+            <div className="sa-stats-grid sa-stats-grid--portfolio">
+              <StatCard
+                icon={<HotelIcon />}
+                label="Total Hotels"
+                value={
+                  portfolio.totalHotels
+                }
+                hint={`${portfolio.activeHotels} active`}
+                accent="blue"
+              />
+
+              <StatCard
+                icon={<BookingIcon />}
+                label="Today's Bookings"
+                value={
+                  portfolio.todayBookings
+                }
+                hint="Across all hotels"
+                accent="green"
+              />
+
+              <StatCard
+                icon={<RevenueIcon />}
+                label="Today's Revenue"
+                value={formatCurrency(
+                  portfolio.todayRevenue
                 )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                hint="Successful payments"
+                accent="purple"
+              />
+
+              <StatCard
+                icon={<OccupancyIcon />}
+                label="Occupancy"
+                value={
+                  occupancyRate ===
+                  null
+                    ? "—"
+                    : `${occupancyRate}%`
+                }
+                hint={
+                  portfolio.totalRooms ===
+                  0
+                    ? "No rooms configured"
+                    : `${portfolio.occupiedRooms} of ${portfolio.totalRooms} rooms`
+                }
+                accent="orange"
+              />
+
+              <StatCard
+                icon={<RequestIcon />}
+                label="Pending Requests"
+                value={
+                  portfolio.pendingRequests
+                }
+                hint={
+                  portfolio.pendingRequests ===
+                  0
+                    ? "No pending actions"
+                    : "Requires Admin attention"
+                }
+                accent="orange"
+              />
+            </div>
+
+            {/* =================================================
+                HOTEL PORTFOLIO
+            ================================================= */}
+
+            <section className="sa-hotels-section">
+              <div className="sa-section-header sa-hotels-section__header">
+                <div>
+                  <h3>
+                    Your Hotels
+                  </h3>
+
+                  <p>
+                    Open a property to
+                    manage its Admins,
+                    rooms, operations,
+                    finance and QR
+                    settings.
+                  </p>
+                </div>
+
+                <span className="sa-hotels-section__count">
+                  {
+                    portfolio.totalHotels
+                  }{" "}
+                  {
+                    portfolio.totalHotels ===
+                    1
+                      ? "Property"
+                      : "Properties"
+                  }
+                </span>
+              </div>
+
+              <div className="sa-hotels-grid">
+                {hotels.map(
+                  (hotel) => (
+                    <HotelCard
+                      key={
+                        hotel.displayId ||
+                        hotel.name
+                      }
+                      hotel={hotel}
+                    />
+                  )
+                )}
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* ====================================================
+            CREATE HOTEL MODAL
+        ==================================================== */}
+
+        <CreateHotelModal
+          isOpen={
+            isCreateHotelOpen
+          }
+          onClose={() => {
+            setIsCreateHotelOpen(
+              false
+            );
+          }}
+          onCreated={
+            handleHotelCreated
+          }
+        />
       </div>
     </SuperAdminLayout>
   );
 }
 
+/* ============================================================
+   STAT CARD
+============================================================ */
+
 function StatCard({
   icon,
   label,
   value,
+  hint,
   accent,
 }) {
   return (
@@ -797,6 +935,12 @@ function StatCard({
         <strong className="sa-stat-value">
           {value}
         </strong>
+
+        {hint && (
+          <span className="sa-stat-hint">
+            {hint}
+          </span>
+        )}
       </div>
     </article>
   );

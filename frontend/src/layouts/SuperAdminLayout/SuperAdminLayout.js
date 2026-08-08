@@ -2,67 +2,113 @@ import React, {
   cloneElement,
   isValidElement,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
-import { useLocation } from "react-router-dom";
+import {
+  useLocation,
+} from "react-router-dom";
+
+import PageBreadcrumbs from "../../components/navigation/PageBreadcrumbs/PageBreadcrumbs";
 
 import "./SuperAdminLayout.css";
 
+
 const MOBILE_BREAKPOINT = 1024;
+
+
+/* ============================================================
+   SUPER ADMIN LAYOUT
+============================================================ */
 
 function SuperAdminLayout({
   sidebar,
   topbar,
+  breadcrumbs,
   children,
   defaultCollapsed = false,
 }) {
-  const location = useLocation();
+  const location =
+    useLocation();
 
-  const [isCollapsed, setIsCollapsed] =
-    useState(defaultCollapsed);
 
-  const [isMobileOpen, setIsMobileOpen] =
-    useState(false);
+  const [
+    isCollapsed,
+    setIsCollapsed,
+  ] = useState(
+    defaultCollapsed
+  );
+
+
+  const [
+    isMobileOpen,
+    setIsMobileOpen,
+  ] = useState(false);
+
+
+  /* ==========================================================
+     VIEWPORT
+  ========================================================== */
 
   const isMobileViewport = () =>
-    window.innerWidth <= MOBILE_BREAKPOINT;
+    window.innerWidth <=
+    MOBILE_BREAKPOINT;
+
+
+  /* ==========================================================
+     MOBILE SIDEBAR
+  ========================================================== */
 
   const closeMobileSidebar = () => {
     setIsMobileOpen(false);
   };
 
+
   const openMobileSidebar = () => {
     setIsMobileOpen(true);
   };
 
+
   const toggleSidebar = () => {
-    if (isMobileViewport()) {
+    if (
+      isMobileViewport()
+    ) {
       setIsMobileOpen(
-        (currentValue) => !currentValue
+        (currentValue) =>
+          !currentValue
       );
 
       return;
     }
 
+
     setIsCollapsed(
-      (currentValue) => !currentValue
+      (currentValue) =>
+        !currentValue
     );
   };
 
-  /*
-   * Close the mobile sidebar whenever the route changes.
-   * This prevents the drawer from covering the newly opened page.
-   */
+
+  /* ==========================================================
+     CLOSE MOBILE SIDEBAR AFTER ROUTE CHANGE
+  ========================================================== */
+
   useEffect(() => {
     setIsMobileOpen(false);
-  }, [location.pathname]);
+  }, [
+    location.pathname,
+  ]);
 
-  /*
-   * Close the mobile drawer through the Escape key.
-   */
+
+  /* ==========================================================
+     ESCAPE KEY
+  ========================================================== */
+
   useEffect(() => {
-    const handleEscapeKey = (event) => {
+    const handleEscapeKey = (
+      event
+    ) => {
       if (
         event.key === "Escape" &&
         isMobileOpen
@@ -71,10 +117,12 @@ function SuperAdminLayout({
       }
     };
 
+
     document.addEventListener(
       "keydown",
       handleEscapeKey
     );
+
 
     return () => {
       document.removeEventListener(
@@ -82,42 +130,57 @@ function SuperAdminLayout({
         handleEscapeKey
       );
     };
-  }, [isMobileOpen]);
+  }, [
+    isMobileOpen,
+  ]);
 
-  /*
-   * Prevent background scrolling while the mobile
-   * navigation drawer is open.
-   */
+
+  /* ==========================================================
+     BODY SCROLL LOCK
+  ========================================================== */
+
   useEffect(() => {
     const previousOverflow =
-      document.body.style.overflow;
+      document.body.style
+        .overflow;
+
 
     if (isMobileOpen) {
-      document.body.style.overflow =
+      document.body.style
+        .overflow =
         "hidden";
     }
 
+
     return () => {
-      document.body.style.overflow =
+      document.body.style
+        .overflow =
         previousOverflow;
     };
-  }, [isMobileOpen]);
+  }, [
+    isMobileOpen,
+  ]);
 
-  /*
-   * Reset mobile drawer state when the browser
-   * returns to the desktop layout.
-   */
+
+  /* ==========================================================
+     DESKTOP RESIZE RESET
+  ========================================================== */
+
   useEffect(() => {
     const handleResize = () => {
-      if (!isMobileViewport()) {
+      if (
+        !isMobileViewport()
+      ) {
         setIsMobileOpen(false);
       }
     };
+
 
     window.addEventListener(
       "resize",
       handleResize
     );
+
 
     return () => {
       window.removeEventListener(
@@ -127,11 +190,18 @@ function SuperAdminLayout({
     };
   }, []);
 
+
+  /* ==========================================================
+     LAYOUT CLASS
+  ========================================================== */
+
   const layoutClassName = [
     "super-admin-layout",
+
     isCollapsed
       ? "super-admin-layout--collapsed"
       : "",
+
     isMobileOpen
       ? "super-admin-layout--mobile-open"
       : "",
@@ -139,49 +209,130 @@ function SuperAdminLayout({
     .filter(Boolean)
     .join(" ");
 
-  /*
-   * Sidebar receives layout controls automatically.
-   * The actual sidebar component will be created next.
-   */
+
+  /* ==========================================================
+     BREADCRUMBS
+
+     Preferred:
+     <SuperAdminLayout breadcrumbs={[...]} />
+
+     Compatibility:
+     Existing pages currently send breadcrumbs into
+     SuperAdminTopbar. During migration we automatically read
+     those breadcrumbs here and move them below the topbar.
+  ========================================================== */
+
+  const resolvedBreadcrumbs =
+    useMemo(() => {
+      if (
+        Array.isArray(
+          breadcrumbs
+        )
+      ) {
+        return breadcrumbs;
+      }
+
+
+      if (
+        isValidElement(
+          topbar
+        ) &&
+        Array.isArray(
+          topbar.props
+            ?.breadcrumbs
+        )
+      ) {
+        return topbar.props
+          .breadcrumbs;
+      }
+
+
+      return [];
+    }, [
+      breadcrumbs,
+      topbar,
+    ]);
+
+
+  /* ==========================================================
+     SIDEBAR
+  ========================================================== */
+
   const renderedSidebar =
     isValidElement(sidebar)
-      ? cloneElement(sidebar, {
-          isCollapsed,
-          isMobileOpen,
-          onToggleCollapse:
-            toggleSidebar,
-          onCloseMobile:
-            closeMobileSidebar,
-        })
+      ? cloneElement(
+          sidebar,
+          {
+            isCollapsed,
+
+            isMobileOpen,
+
+            onToggleCollapse:
+              toggleSidebar,
+
+            onCloseMobile:
+              closeMobileSidebar,
+          }
+        )
       : sidebar;
 
-  /*
-   * Topbar receives the sidebar toggle action.
-   * On mobile it opens the drawer; on desktop it
-   * collapses or expands the sidebar.
-   */
+
+  /* ==========================================================
+     TOPBAR
+
+     Breadcrumbs are intentionally removed from the Topbar.
+
+     They are rendered below the Topbar through PageBreadcrumbs.
+  ========================================================== */
+
   const renderedTopbar =
     isValidElement(topbar)
-      ? cloneElement(topbar, {
-          isSidebarCollapsed:
-            isCollapsed,
-          isMobileSidebarOpen:
-            isMobileOpen,
-          onToggleSidebar:
-            toggleSidebar,
-          onOpenMobileSidebar:
-            openMobileSidebar,
-        })
+      ? cloneElement(
+          topbar,
+          {
+            isSidebarCollapsed:
+              isCollapsed,
+
+            isMobileSidebarOpen:
+              isMobileOpen,
+
+            onToggleSidebar:
+              toggleSidebar,
+
+            onOpenMobileSidebar:
+              openMobileSidebar,
+
+            breadcrumbs: [],
+          }
+        )
       : topbar;
 
+
+  /* ==========================================================
+     RENDER
+  ========================================================== */
+
   return (
-    <div className={layoutClassName}>
+    <div
+      className={
+        layoutClassName
+      }
+    >
+      {/* ======================================================
+          ACCESSIBILITY
+      ====================================================== */}
+
       <a
         href="#super-admin-main-content"
         className="super-admin-layout__skip-link"
       >
         Skip to main content
       </a>
+
+
+      {/* ======================================================
+          SIDEBAR
+      ====================================================== */}
 
       <aside
         className="super-admin-layout__sidebar"
@@ -190,18 +341,39 @@ function SuperAdminLayout({
         {renderedSidebar}
       </aside>
 
+
+      {/* ======================================================
+          MOBILE OVERLAY
+      ====================================================== */}
+
       <button
         type="button"
         className="super-admin-layout__overlay"
-        onClick={closeMobileSidebar}
+        onClick={
+          closeMobileSidebar
+        }
         aria-label="Close navigation menu"
-        aria-hidden={!isMobileOpen}
+        aria-hidden={
+          !isMobileOpen
+        }
         tabIndex={
-          isMobileOpen ? 0 : -1
+          isMobileOpen
+            ? 0
+            : -1
         }
       />
 
+
+      {/* ======================================================
+          RIGHT WORKSPACE
+      ====================================================== */}
+
       <div className="super-admin-layout__workspace">
+
+        {/* ====================================================
+            TOPBAR
+        ==================================================== */}
+
         <header
           className="super-admin-layout__topbar"
           aria-label="Dashboard header"
@@ -209,18 +381,47 @@ function SuperAdminLayout({
           {renderedTopbar}
         </header>
 
+
+        {/* ====================================================
+            MAIN CONTENT
+        ==================================================== */}
+
         <main
           id="super-admin-main-content"
           className="super-admin-layout__main"
           tabIndex="-1"
         >
           <div className="super-admin-layout__content">
+
+            {/* ================================================
+                GLOBAL PAGE PATH
+            ================================================ */}
+
+            {resolvedBreadcrumbs.length >
+              0 && (
+              <div className="super-admin-layout__breadcrumbs">
+                <PageBreadcrumbs
+                  items={
+                    resolvedBreadcrumbs
+                  }
+                />
+              </div>
+            )}
+
+
+            {/* ================================================
+                PAGE CONTENT
+            ================================================ */}
+
             {children}
+
           </div>
         </main>
+
       </div>
     </div>
   );
 }
+
 
 export default SuperAdminLayout;

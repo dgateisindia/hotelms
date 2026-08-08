@@ -1,0 +1,108 @@
+/* ============================================================
+   PAGE BREADCRUMBS
+
+   Global dashboard navigation path.
+   Displayed below the topbar and above page content.
+
+   Design system:
+   src/styles/global.css
+============================================================ */
+
+.page-breadcrumbs {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+
+  gap: var(--space-2);
+
+  margin-bottom: var(--space-5);
+
+  color: var(--color-text-muted);
+
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+
+/* ============================================================
+   ITEM
+============================================================ */
+
+.page-breadcrumbs__item {
+  display: inline-flex;
+  align-items: center;
+
+  gap: var(--space-2);
+
+  min-width: 0;
+}
+
+
+/* ============================================================
+   LINK
+============================================================ */
+
+.page-breadcrumbs__link {
+  color: var(--color-text-muted);
+
+  font-weight: var(--font-weight-medium);
+
+  text-decoration: none;
+
+  transition:
+    color var(--transition);
+}
+
+.page-breadcrumbs__link:hover {
+  color: var(--color-primary);
+}
+
+.page-breadcrumbs__link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+
+  border-radius: var(--radius-sm);
+}
+
+
+/* ============================================================
+   CURRENT PAGE
+============================================================ */
+
+.page-breadcrumbs__current {
+  color: var(--color-text);
+
+  font-weight: var(--font-weight-semibold);
+}
+
+
+/* ============================================================
+   SEPARATOR
+============================================================ */
+
+.page-breadcrumbs__separator {
+  color: var(--color-placeholder);
+
+  user-select: none;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 768px) {
+  .page-breadcrumbs {
+    gap: var(--space-1);
+
+    margin-bottom: var(--space-4);
+
+    font-size: var(--font-size-xs);
+  }
+
+  .page-breadcrumbs__item {
+    gap: var(--space-1);
+  }
+}

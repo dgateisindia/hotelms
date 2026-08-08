@@ -1,4 +1,6 @@
-import React, { useEffect } from "react";
+import React, {
+  useEffect,
+} from "react";
 
 import {
   SignedIn,
@@ -13,21 +15,66 @@ import {
   Routes,
 } from "react-router-dom";
 
+
+/* ============================================================
+   AUTH PAGES
+============================================================ */
+
 import LoginPage from "./pages/Login/LoginPage";
+
 import RegisterPage from "./pages/RegisterPage/RegisterPage";
+
 import ForgotPassword from "./pages/ForgotPassword/ForgotPassword";
 
+
+/* ============================================================
+   ADMIN PAGES
+============================================================ */
+
 import Dashboard from "./pages/Dashboard/Dashboard";
-import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+
 import QRCodePage from "./pages/QRCodePage";
+
 import CustomerRequestPage from "./pages/CustomerRequestPage";
 
+
+/* ============================================================
+   SUPER ADMIN PAGES
+============================================================ */
+
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+
+import HotelOverview from "./pages/HotelOverview/HotelOverview";
+
+
+/* ============================================================
+   SUPER ADMIN LAYOUTS
+============================================================ */
+
+import SelectedHotelLayout from "./layouts/SelectedHotelLayout/SelectedHotelLayout";
+
+
+/* ============================================================
+   AUTH / ROUTE HELPERS
+============================================================ */
+
 import PostLoginRedirect from "./components/PostLoginRedirect";
+
 import RequireSuperAdmin from "./routes/RequireSuperAdmin";
+
+
+/* ============================================================
+   API
+============================================================ */
 
 import {
   setupApiClientAuth,
 } from "./services/apiClient";
+
+
+/* ============================================================
+   ERROR PAGES
+============================================================ */
 
 import {
   Error400,
@@ -38,12 +85,13 @@ import {
   Error503,
 } from "./pages/Error/ErrorPages";
 
-/**
- * Connects Clerk session tokens with the centralized Axios client.
- *
- * After this is mounted, authenticated API calls automatically
- * receive the Clerk Bearer token.
- */
+
+/* ============================================================
+   API CLIENT AUTH BRIDGE
+
+   Connect Clerk session token with centralized Axios client.
+============================================================ */
+
 function ApiClientAuthBridge() {
   const {
     isLoaded,
@@ -55,7 +103,9 @@ function ApiClientAuthBridge() {
       return;
     }
 
-    setupApiClientAuth(getToken);
+    setupApiClientAuth(
+      getToken
+    );
   }, [
     isLoaded,
     getToken,
@@ -64,13 +114,16 @@ function ApiClientAuthBridge() {
   return null;
 }
 
-/**
- * Temporary protected layout for operational dashboard pages.
- *
- * Backend role middleware still performs the final authorization
- * and hotel data isolation.
- */
-function ProtectedDashboard({ page }) {
+
+/* ============================================================
+   ADMIN PROTECTED ROUTE
+
+   Backend performs final role and hotel authorization.
+============================================================ */
+
+function ProtectedDashboard({
+  page,
+}) {
   return (
     <>
       <SignedIn>
@@ -87,6 +140,39 @@ function ProtectedDashboard({ page }) {
   );
 }
 
+
+/* ============================================================
+   SUPER ADMIN PROTECTED ROUTE
+
+   Reused by every Super Admin page.
+============================================================ */
+
+function ProtectedSuperAdmin({
+  children,
+}) {
+  return (
+    <>
+      <SignedIn>
+        <RequireSuperAdmin>
+          {children}
+        </RequireSuperAdmin>
+      </SignedIn>
+
+      <SignedOut>
+        <Navigate
+          to="/login"
+          replace
+        />
+      </SignedOut>
+    </>
+  );
+}
+
+
+/* ============================================================
+   APPLICATION
+============================================================ */
+
 function App() {
   return (
     <>
@@ -94,6 +180,11 @@ function App() {
 
       <Router>
         <Routes>
+
+          {/* ==================================================
+              AUTH
+          ================================================== */}
+
           <Route
             path="/login"
             element={
@@ -109,17 +200,21 @@ function App() {
             }
           />
 
+
           {/*
-           * Registration must remain mounted after Clerk creates
-           * the session because RegisterPage still has to create
-           * and verify the MySQL Super Admin profile.
+           * Registration remains mounted after Clerk creates
+           * the session because RegisterPage still needs to
+           * create and verify the MySQL Super Admin profile.
            */}
           <Route
             path="/register"
             element={
-              <RegisterPage mode="selfRegister" />
+              <RegisterPage
+                mode="selfRegister"
+              />
             }
           />
+
 
           <Route
             path="/forgot-password"
@@ -136,109 +231,213 @@ function App() {
             }
           />
 
+
+          {/* ==================================================
+              SUPER ADMIN PORTFOLIO
+          ================================================== */}
+
           <Route
             path="/superadmin-dashboard"
             element={
-              <>
-                <SignedIn>
-                  <RequireSuperAdmin>
-                    <SuperAdminDashboard />
-                  </RequireSuperAdmin>
-                </SignedIn>
-
-                <SignedOut>
-                  <Navigate
-                    to="/login"
-                    replace
-                  />
-                </SignedOut>
-              </>
+              <ProtectedSuperAdmin>
+                <SuperAdminDashboard />
+              </ProtectedSuperAdmin>
             }
           />
+
+
+          {/*
+           * Hotels list page has not been built yet.
+           *
+           * Until that page exists, the Hotels sidebar item
+           * safely returns to Portfolio Overview instead of
+           * sending the user to a 404 page.
+           */}
+          <Route
+            path="/superadmin/hotels"
+            element={
+              <ProtectedSuperAdmin>
+                <Navigate
+                  to="/superadmin-dashboard"
+                  replace
+                />
+              </ProtectedSuperAdmin>
+            }
+          />
+
+
+          {/* ==================================================
+              SELECTED HOTEL WORKSPACE
+
+              SelectedHotelLayout:
+              - reads HT-xxxx from URL
+              - loads hotel from backend
+              - backend verifies Super Admin ownership
+              - provides selectedHotel through Outlet context
+          ================================================== */}
+
+          <Route
+            path="/superadmin/hotels/:hotelDisplayId"
+            element={
+              <ProtectedSuperAdmin>
+                <SelectedHotelLayout />
+              </ProtectedSuperAdmin>
+            }
+          >
+
+            {/*
+             * /superadmin/hotels/HT-0001
+             * automatically becomes:
+             * /superadmin/hotels/HT-0001/overview
+             */}
+            <Route
+              index
+              element={
+                <Navigate
+                  to="overview"
+                  replace
+                />
+              }
+            />
+
+
+            <Route
+              path="overview"
+              element={
+                <HotelOverview />
+              }
+            />
+
+          </Route>
+
+
+          {/* ==================================================
+              HOTEL ADMIN DASHBOARD
+          ================================================== */}
 
           <Route
             path="/admin-dashboard"
             element={
-              <ProtectedDashboard page="dashboard" />
+              <ProtectedDashboard
+                page="dashboard"
+              />
             }
           />
+
 
           <Route
             path="/dashboard"
             element={
-              <ProtectedDashboard page="dashboard" />
+              <ProtectedDashboard
+                page="dashboard"
+              />
             }
           />
+
 
           <Route
             path="/bookings"
             element={
-              <ProtectedDashboard page="bookings" />
+              <ProtectedDashboard
+                page="bookings"
+              />
             }
           />
+
 
           <Route
             path="/rooms"
             element={
-              <ProtectedDashboard page="rooms" />
+              <ProtectedDashboard
+                page="rooms"
+              />
             }
           />
+
 
           <Route
             path="/customers"
             element={
-              <ProtectedDashboard page="customers" />
+              <ProtectedDashboard
+                page="customers"
+              />
             }
           />
+
 
           <Route
             path="/billing"
             element={
-              <ProtectedDashboard page="billing" />
+              <ProtectedDashboard
+                page="billing"
+              />
             }
           />
+
 
           <Route
             path="/staff"
             element={
-              <ProtectedDashboard page="staff" />
+              <ProtectedDashboard
+                page="staff"
+              />
             }
           />
+
 
           <Route
             path="/attendance"
             element={
-              <ProtectedDashboard page="attendance" />
+              <ProtectedDashboard
+                page="attendance"
+              />
             }
           />
+
 
           <Route
             path="/payroll"
             element={
-              <ProtectedDashboard page="payroll" />
+              <ProtectedDashboard
+                page="payroll"
+              />
             }
           />
+
 
           <Route
             path="/reports"
             element={
-              <ProtectedDashboard page="reports" />
+              <ProtectedDashboard
+                page="reports"
+              />
             }
           />
+
 
           <Route
             path="/notifications"
             element={
-              <ProtectedDashboard page="notifications" />
+              <ProtectedDashboard
+                page="notifications"
+              />
             }
           />
+
 
           <Route
             path="/settings"
             element={
-              <ProtectedDashboard page="settings" />
+              <ProtectedDashboard
+                page="settings"
+              />
             }
           />
+
+
+          {/* ==================================================
+              HOTEL ADMIN QR PAGE
+          ================================================== */}
 
           <Route
             path="/qrcode"
@@ -258,14 +457,24 @@ function App() {
             }
           />
 
-          {/*
-           * Public QR customer request page.
-           * Authentication is intentionally not required here.
-           */}
+
+          {/* ==================================================
+              PUBLIC QR CUSTOMER REQUEST
+
+              Authentication intentionally not required.
+          ================================================== */}
+
           <Route
             path="/customer-request"
-            element={<CustomerRequestPage />}
+            element={
+              <CustomerRequestPage />
+            }
           />
+
+
+          {/* ==================================================
+              ERROR ROUTES
+          ================================================== */}
 
           <Route
             path="/400"
@@ -297,6 +506,11 @@ function App() {
             element={<Error503 />}
           />
 
+
+          {/* ==================================================
+              ROOT / FALLBACK
+          ================================================== */}
+
           <Route
             path="/"
             element={
@@ -307,14 +521,19 @@ function App() {
             }
           />
 
+
           <Route
             path="*"
-            element={<Error404 />}
+            element={
+              <Error404 />
+            }
           />
+
         </Routes>
       </Router>
     </>
   );
 }
+
 
 export default App;
