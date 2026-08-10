@@ -46,6 +46,8 @@ import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 
 import HotelOverview from "./pages/HotelOverview/HotelOverview";
 
+import HotelTeam from "./pages/HotelTeam/HotelTeam";
+
 
 /* ============================================================
    SUPER ADMIN LAYOUTS
@@ -305,6 +307,14 @@ function App() {
               path="overview"
               element={
                 <HotelOverview />
+              }
+            />
+
+
+            <Route
+              path="team"
+              element={
+                <HotelTeam />
               }
             />
 

@@ -17,7 +17,13 @@ const {
   createHotel,
 } = require("../controllers/hotelController");
 
+const {
+  getHotelAdmins,
+  createHotelAdmin,
+} = require("../controllers/superAdminAdminController");
+
 const router = express.Router();
+
 
 /* ============================================================
    SUPER ADMIN SECURITY
@@ -35,6 +41,7 @@ router.use(
   requireRole("super_admin")
 );
 
+
 /* ============================================================
    DASHBOARD
 ============================================================ */
@@ -50,8 +57,11 @@ router.get(
   getSuperAdminStats
 );
 
+
 /**
  * GET /api/superadmin/admins
+ *
+ * Portfolio-level Admin list.
  *
  * Returns Admin accounts belonging only to hotels owned by
  * the authenticated Super Admin.
@@ -60,6 +70,7 @@ router.get(
   "/admins",
   getAdminsStatus
 );
+
 
 /* ============================================================
    HOTEL MANAGEMENT
@@ -76,6 +87,7 @@ router.get(
   getHotels
 );
 
+
 /**
  * POST /api/superadmin/hotels
  *
@@ -90,6 +102,49 @@ router.post(
   createHotel
 );
 
+
+/* ============================================================
+   SELECTED HOTEL - ADMIN MANAGEMENT
+============================================================ */
+
+/**
+ * GET /api/superadmin/hotels/:hotelDisplayId/admins
+ *
+ * Example:
+ * GET /api/superadmin/hotels/HT-0001/admins
+ *
+ * Returns Admin accounts assigned only to the selected hotel.
+ *
+ * The controller verifies:
+ * - authenticated Super Admin
+ * - hotel ownership
+ * - hotel/admin isolation
+ */
+router.get(
+  "/hotels/:hotelDisplayId/admins",
+  getHotelAdmins
+);
+
+/**
+ * POST /api/superadmin/hotels/:hotelDisplayId/admins
+ *
+ * Creates a Hotel Admin for the selected hotel.
+ *
+ * Security:
+ * - authenticated Super Admin only
+ * - hotel ownership verified by controller
+ * - password handled only by Clerk
+ * - MySQL stores only HMS Admin profile
+ */
+router.post(
+  "/hotels/:hotelDisplayId/admins",
+  createHotelAdmin
+);
+
+/* ============================================================
+   SELECTED HOTEL DETAILS
+============================================================ */
+
 /**
  * GET /api/superadmin/hotels/:hotelDisplayId
  *
@@ -103,5 +158,6 @@ router.get(
   "/hotels/:hotelDisplayId",
   getHotelByDisplayId
 );
+
 
 module.exports = router;
