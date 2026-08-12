@@ -1,7 +1,11 @@
 const express = require("express");
+
 const router = express.Router();
 
-console.log("BOOKING ROUTES LOADED");
+
+/* ============================================================
+   CONTROLLERS
+============================================================ */
 
 const {
   getBookingStats,
@@ -11,35 +15,79 @@ const {
   updateBooking,
   cancelBooking,
   deleteBooking,
-} = require("../controllers/bookingController");
-console.log({
-  getBookingStats,
-  getBookings,
-  getBooking,
-  addBooking,
-  updateBooking,
-  cancelBooking,
-  deleteBooking,
-});
-// Statistics
-router.get("/stats", getBookingStats);
+} = require(
+  "../controllers/bookingController"
+);
 
-// Get all bookings
-router.get("/", getBookings);
 
-// Get single booking
-router.get("/:id", getBooking);
+/* ============================================================
+   BOOKING STATISTICS
+============================================================ */
 
-// Add booking
-router.post("/", addBooking);
+router.get(
+  "/stats",
+  getBookingStats
+);
 
-// Update booking
-router.put("/:id", updateBooking);
 
-// Cancel booking
-router.put("/:id/cancel", cancelBooking);
+/* ============================================================
+   BOOKING LIST
+============================================================ */
 
-// Delete booking
-router.delete("/:id", deleteBooking);
+router.get(
+  "/",
+  getBookings
+);
+
+
+/* ============================================================
+   SINGLE BOOKING
+============================================================ */
+
+router.get(
+  "/:id",
+  getBooking
+);
+
+
+/* ============================================================
+   CREATE BOOKING
+============================================================ */
+
+router.post(
+  "/",
+  addBooking
+);
+
+
+/* ============================================================
+   UPDATE BOOKING
+============================================================ */
+
+router.put(
+  "/:id",
+  updateBooking
+);
+
+
+/* ============================================================
+   CANCEL BOOKING
+============================================================ */
+
+router.put(
+  "/:id/cancel",
+  cancelBooking
+);
+
+
+/* ============================================================
+   DELETE BOOKING
+============================================================ */
+
+router.delete(
+  "/:id",
+  deleteBooking
+);
+
 
 module.exports = router;

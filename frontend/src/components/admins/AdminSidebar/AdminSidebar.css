@@ -1,0 +1,835 @@
+/* ============================================================
+   ADMIN SIDEBAR
+
+   Hotel Admin Portal
+   Matches Super Admin visual system.
+
+   Design system:
+   src/styles/global.css
+============================================================ */
+
+
+/* ============================================================
+   ROOT
+============================================================ */
+
+.admin-sidebar {
+  width: 100%;
+  height: 100%;
+
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden;
+
+  background:
+    var(--color-navy);
+
+  color:
+    var(--color-white);
+}
+
+
+/* ============================================================
+   BRAND
+============================================================ */
+
+.admin-sidebar__brand {
+  min-height:
+    var(--topbar-height);
+
+  display: flex;
+  align-items: center;
+
+  gap:
+    var(--space-3);
+
+  padding:
+    0
+    var(--space-4);
+
+  border-bottom:
+    1px solid
+    rgba(255, 255, 255, 0.08);
+}
+
+
+.admin-sidebar__brand-icon {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border:
+    1px solid
+    var(--color-gold);
+
+  border-radius:
+    var(--radius-md);
+
+  color:
+    var(--color-gold);
+
+  background:
+    rgba(255, 255, 255, 0.04);
+}
+
+
+.admin-sidebar__brand-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+
+.admin-sidebar__brand-copy {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  line-height:
+    var(--line-height-tight);
+
+  transition:
+    opacity var(--transition),
+    width var(--transition);
+}
+
+
+.admin-sidebar__brand-title {
+  overflow: hidden;
+
+  color:
+    var(--color-white);
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-bold);
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.admin-sidebar__brand-subtitle {
+  margin-top:
+    var(--space-1);
+
+  color:
+    rgba(255, 255, 255, 0.65);
+
+  font-size:
+    var(--font-size-xs);
+
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   HOTEL IDENTITY
+============================================================ */
+
+.admin-sidebar__hotel {
+  margin:
+    var(--space-4)
+    var(--space-3)
+    0;
+
+  padding:
+    var(--space-3);
+
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.12);
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    rgba(255, 255, 255, 0.06);
+}
+
+
+.admin-sidebar__hotel-label {
+  display: block;
+
+  margin-bottom:
+    var(--space-2);
+
+  color:
+    rgba(255, 255, 255, 0.55);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-semibold);
+
+  text-transform: uppercase;
+
+  letter-spacing:
+    0.06em;
+}
+
+
+.admin-sidebar__hotel-main {
+  display: flex;
+  align-items: flex-start;
+
+  gap:
+    var(--space-3);
+}
+
+
+.admin-sidebar__hotel-icon {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    rgba(201, 162, 39, 0.14);
+
+  color:
+    var(--color-gold);
+}
+
+
+.admin-sidebar__hotel-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+
+.admin-sidebar__hotel-copy {
+  min-width: 0;
+
+  flex: 1;
+}
+
+
+.admin-sidebar__hotel-name {
+  display: block;
+
+  overflow: hidden;
+
+  color:
+    var(--color-white);
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-semibold);
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.admin-sidebar__hotel-id {
+  display: block;
+
+  margin-top:
+    var(--space-1);
+
+  color:
+    var(--color-gold);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-bold);
+}
+
+
+.admin-sidebar__hotel-status {
+  display: flex;
+  align-items: center;
+
+  gap:
+    var(--space-2);
+
+  margin-top:
+    var(--space-3);
+
+  color:
+    rgba(255, 255, 255, 0.68);
+
+  font-size:
+    var(--font-size-xs);
+}
+
+
+.admin-sidebar__hotel-status-dot {
+  width: 7px;
+  height: 7px;
+
+  flex-shrink: 0;
+
+  border-radius:
+    var(--radius-pill);
+
+  background:
+    var(--color-success);
+}
+
+
+/* ============================================================
+   NAVIGATION WRAPPER
+============================================================ */
+
+.admin-sidebar__nav {
+  flex: 1;
+
+  min-height: 0;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  overscroll-behavior:
+    contain;
+
+  padding:
+    var(--space-4)
+    var(--space-3);
+
+  scrollbar-width:
+    thin;
+
+  scrollbar-color:
+    rgba(255, 255, 255, 0.18)
+    transparent;
+}
+
+
+/* Chrome / Edge / Safari */
+
+.admin-sidebar__nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+
+.admin-sidebar__nav::-webkit-scrollbar-track {
+  background:
+    transparent;
+}
+
+
+.admin-sidebar__nav::-webkit-scrollbar-thumb {
+  border:
+    1px solid
+    transparent;
+
+  border-radius:
+    var(--radius-pill);
+
+  background:
+    rgba(255, 255, 255, 0.18);
+
+  background-clip:
+    padding-box;
+}
+
+
+.admin-sidebar__nav::-webkit-scrollbar-thumb:hover {
+  background:
+    rgba(255, 255, 255, 0.32);
+
+  background-clip:
+    padding-box;
+}
+
+
+
+/* ============================================================
+   NAVIGATION SECTION
+============================================================ */
+
+.admin-sidebar__section {
+  margin-bottom:
+    var(--space-5);
+}
+
+
+.admin-sidebar__section:last-child {
+  margin-bottom: 0;
+}
+
+
+.admin-sidebar__section-title {
+  display: block;
+
+  margin:
+    0
+    var(--space-2)
+    var(--space-2);
+
+  color:
+    rgba(255, 255, 255, 0.46);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-bold);
+
+  letter-spacing:
+    0.08em;
+
+  text-transform: uppercase;
+
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   NAV ITEM
+============================================================ */
+
+.admin-sidebar__item {
+  width: 100%;
+  min-height: 42px;
+
+  display: flex;
+  align-items: center;
+
+  gap:
+    var(--space-3);
+
+  position: relative;
+
+  margin-bottom:
+    var(--space-1);
+
+  padding:
+    var(--space-2)
+    var(--space-3);
+
+  border:
+    1px solid transparent;
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    transparent;
+
+  color:
+    rgba(255, 255, 255, 0.78);
+
+  font-family: inherit;
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-medium);
+
+  text-align: left;
+
+  text-decoration: none;
+
+  cursor: pointer;
+
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition);
+}
+
+
+.admin-sidebar__item:hover {
+  background:
+    rgba(255, 255, 255, 0.07);
+
+  color:
+    var(--color-white);
+}
+
+
+.admin-sidebar__item--active {
+  border-color:
+    rgba(201, 162, 39, 0.28);
+
+  background:
+    rgba(201, 162, 39, 0.12);
+
+  color:
+    var(--color-white);
+}
+
+
+.admin-sidebar__item--active::before {
+  content: "";
+
+  position: absolute;
+
+  top: 8px;
+  bottom: 8px;
+  left: -13px;
+
+  width: 3px;
+
+  border-radius:
+    0
+    var(--radius-pill)
+    var(--radius-pill)
+    0;
+
+  background:
+    var(--color-gold);
+}
+
+
+.admin-sidebar__item-icon {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  color:
+    rgba(255, 255, 255, 0.66);
+}
+
+
+.admin-sidebar__item-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+
+.admin-sidebar__item--active
+.admin-sidebar__item-icon {
+  color:
+    var(--color-gold);
+}
+
+
+.admin-sidebar__item-label {
+  min-width: 0;
+
+  flex: 1;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   BADGE
+============================================================ */
+
+.admin-sidebar__badge {
+  min-width: 22px;
+  height: 22px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding:
+    0
+    var(--space-2);
+
+  border-radius:
+    var(--radius-pill);
+
+  background:
+    var(--color-danger);
+
+  color:
+    var(--color-white);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-bold);
+}
+
+
+/* ============================================================
+   FOOTER / ACCOUNT
+============================================================ */
+
+.admin-sidebar__footer {
+  flex-shrink: 0;
+
+  padding:
+    var(--space-3);
+
+  border-top:
+    1px solid
+    rgba(255, 255, 255, 0.08);
+}
+
+
+.admin-sidebar__profile {
+  display: flex;
+  align-items: center;
+
+  gap:
+    var(--space-3);
+
+  padding:
+    var(--space-2);
+}
+
+
+.admin-sidebar__avatar {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  overflow: hidden;
+
+  border:
+    2px solid
+    rgba(255, 255, 255, 0.16);
+
+  border-radius:
+    var(--radius-pill);
+
+  background:
+    var(--color-surface);
+
+  color:
+    var(--color-navy);
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-bold);
+}
+
+
+.admin-sidebar__avatar img {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+}
+
+
+.admin-sidebar__profile-copy {
+  min-width: 0;
+
+  flex: 1;
+}
+
+
+.admin-sidebar__profile-name {
+  display: block;
+
+  overflow: hidden;
+
+  color:
+    var(--color-white);
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-semibold);
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.admin-sidebar__profile-role {
+  display: block;
+
+  margin-top:
+    var(--space-1);
+
+  color:
+    rgba(255, 255, 255, 0.56);
+
+  font-size:
+    var(--font-size-xs);
+}
+
+
+/* ============================================================
+   COLLAPSED
+============================================================ */
+
+.admin-layout--collapsed
+.admin-sidebar__brand {
+  justify-content: center;
+
+  padding-right:
+    var(--space-2);
+
+  padding-left:
+    var(--space-2);
+}
+
+
+.admin-layout--collapsed
+.admin-sidebar__brand-copy,
+.admin-layout--collapsed
+.admin-sidebar__hotel,
+.admin-layout--collapsed
+.admin-sidebar__section-title,
+.admin-layout--collapsed
+.admin-sidebar__item-label,
+.admin-layout--collapsed
+.admin-sidebar__badge,
+.admin-layout--collapsed
+.admin-sidebar__profile-copy {
+  display: none;
+}
+
+
+.admin-layout--collapsed
+.admin-sidebar__nav {
+  padding-right:
+    var(--space-2);
+
+  padding-left:
+    var(--space-2);
+}
+
+
+.admin-layout--collapsed
+.admin-sidebar__item {
+  justify-content: center;
+
+  padding-right:
+    var(--space-2);
+
+  padding-left:
+    var(--space-2);
+}
+
+
+.admin-layout--collapsed
+.admin-sidebar__item-icon {
+  margin: 0;
+}
+
+
+.admin-layout--collapsed
+.admin-sidebar__item--active::before {
+  left: -9px;
+}
+
+
+.admin-layout--collapsed
+.admin-sidebar__footer {
+  padding-right:
+    var(--space-2);
+
+  padding-left:
+    var(--space-2);
+}
+
+
+.admin-layout--collapsed
+.admin-sidebar__profile {
+  justify-content: center;
+
+  padding-right: 0;
+  padding-left: 0;
+}
+
+
+/* ============================================================
+   FOCUS
+============================================================ */
+
+.admin-sidebar__item:focus-visible {
+  outline:
+    2px solid
+    var(--color-gold);
+
+  outline-offset:
+    2px;
+}
+
+
+/* ============================================================
+   MOBILE
+============================================================ */
+
+@media (max-width: 1024px) {
+
+  .admin-sidebar__brand-copy {
+    display: flex;
+  }
+
+  .admin-sidebar__hotel,
+  .admin-sidebar__section-title,
+  .admin-sidebar__item-label,
+  .admin-sidebar__profile-copy {
+    display: block;
+  }
+
+  .admin-sidebar__badge {
+    display: inline-flex;
+  }
+
+
+  .admin-sidebar__brand {
+    justify-content: flex-start;
+
+    padding:
+      0
+      var(--space-4);
+  }
+
+
+  .admin-sidebar__nav {
+    padding:
+      var(--space-4)
+      var(--space-3);
+  }
+
+
+  .admin-sidebar__item {
+    justify-content: flex-start;
+
+    padding:
+      var(--space-2)
+      var(--space-3);
+  }
+
+
+  .admin-sidebar__footer {
+    padding:
+      var(--space-3);
+  }
+
+
+  .admin-sidebar__profile {
+    justify-content: flex-start;
+
+    padding:
+      var(--space-2);
+  }
+}

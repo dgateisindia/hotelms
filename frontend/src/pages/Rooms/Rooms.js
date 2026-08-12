@@ -240,6 +240,7 @@ function validateRoomForm(form) {
 
 function RoomFormModal({
   title,
+  submitLabel,
   form,
   onChange,
   onSave,
@@ -475,7 +476,7 @@ function RoomFormModal({
             >
               {isSaving
                 ? "Saving..."
-                : "Save Room"}
+                : submitLabel}
             </button>
           </div>
         </form>
@@ -831,6 +832,29 @@ function Rooms() {
       filtered,
       page,
     ]);
+
+  const hasActiveFilters =
+    useMemo(
+      () =>
+        Boolean(search.trim()) ||
+        filterFloor !== "all" ||
+        filterType !== "all" ||
+        filterStatus !== "all",
+      [
+        search,
+        filterFloor,
+        filterType,
+        filterStatus,
+      ]
+    );
+
+  const clearFilters = () => {
+    setSearch("");
+    setFilterFloor("all");
+    setFilterType("all");
+    setFilterStatus("all");
+    setPage(1);
+  };
 
   /* ==========================================================
      STATISTICS
@@ -1250,6 +1274,125 @@ function Rooms() {
           </div>
         )}
 
+
+      {/* ======================================================
+          STAT CARDS
+      ====================================================== */}
+
+      <div className="room-stats">
+        <div className="rstat-card">
+          <div className="rstat-icon blue">
+            <IcoBed2 />
+          </div>
+
+          <div className="rstat-info">
+            <div className="rstat-label">
+              Total Rooms
+            </div>
+
+            <div className="rstat-value">
+              {totalRooms}
+            </div>
+
+            <div className="rstat-sub">
+              All rooms in this hotel
+            </div>
+          </div>
+        </div>
+
+        <div className="rstat-card">
+          <div className="rstat-icon green">
+            <IcoCheck2 />
+          </div>
+
+          <div className="rstat-info">
+            <div className="rstat-label">
+              Available Rooms
+            </div>
+
+            <div className="rstat-value">
+              {availableRooms}
+            </div>
+
+            <div className="rstat-sub">
+              {getPercentage(
+                availableRooms
+              )}
+              % of Total
+            </div>
+          </div>
+        </div>
+
+        <div className="rstat-card">
+          <div className="rstat-icon indigo">
+            <IcoUser2 />
+          </div>
+
+          <div className="rstat-info">
+            <div className="rstat-label">
+              Occupied Rooms
+            </div>
+
+            <div className="rstat-value">
+              {occupiedRooms}
+            </div>
+
+            <div className="rstat-sub">
+              {getPercentage(
+                occupiedRooms
+              )}
+              % of Total
+            </div>
+          </div>
+        </div>
+
+        <div className="rstat-card">
+          <div className="rstat-icon orange">
+            <IcoBrush />
+          </div>
+
+          <div className="rstat-info">
+            <div className="rstat-label">
+              Cleaning Rooms
+            </div>
+
+            <div className="rstat-value">
+              {cleaningRooms}
+            </div>
+
+            <div className="rstat-sub">
+              {getPercentage(
+                cleaningRooms
+              )}
+              % of Total
+            </div>
+          </div>
+        </div>
+
+        <div className="rstat-card">
+          <div className="rstat-icon red">
+            <IcoWrench />
+          </div>
+
+          <div className="rstat-info">
+            <div className="rstat-label">
+              Maintenance Rooms
+            </div>
+
+            <div className="rstat-value">
+              {maintenanceRooms}
+            </div>
+
+            <div className="rstat-sub">
+              {getPercentage(
+                maintenanceRooms
+              )}
+              % of Total
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ======================================================
           FILTER BAR
       ====================================================== */}
@@ -1341,6 +1484,29 @@ function Rooms() {
         </select>
 
         <div className="filter-spacer" />
+
+        <div className="filter-summary">
+          <span className="filter-summary-count">
+            {filtered.length}
+          </span>
+
+          <span className="filter-summary-label">
+            {filtered.length === 1
+              ? "room"
+              : "rooms"}
+          </span>
+        </div>
+
+        {hasActiveFilters && (
+          <button
+            type="button"
+            className="filter-clear"
+            onClick={clearFilters}
+          >
+            Clear Filters
+          </button>
+        )}
+
       </div>
 
       {/* ======================================================
@@ -1371,26 +1537,46 @@ function Rooms() {
                   Loading rooms...
                 </td>
               </tr>
-            ) : paginated.length ===
-              0 ? (
+            ) : paginated.length === 0 ? (
               <tr>
-                <td
-                  colSpan={7}
-                  className="rooms-table-message"
-                >
-                  No rooms found.
+                <td colSpan={7}>
+                  <div className="rooms-empty-state">
+
+                    <div className="rooms-empty-icon">
+                      <IcoBed2 />
+                    </div>
+
+                    <h3 className="rooms-empty-title">
+                      {rooms.length === 0
+                        ? "No rooms added yet"
+                        : "No matching rooms"}
+                    </h3>
+
+                    <p className="rooms-empty-description">
+                      {rooms.length === 0
+                        ? "Add your first room to start managing room availability, pricing and operational status."
+                        : "No rooms match the current search or filter selection."}
+                    </p>
+
+                    {rooms.length === 0 && (
+                      <button
+                        type="button"
+                        className="rooms-empty-action"
+                        onClick={openAdd}
+                      >
+                        <IcoPlus />
+                        Add First Room
+                      </button>
+                    )}
+
+                  </div>
                 </td>
               </tr>
             ) : (
               paginated.map(
                 (room) => (
                   <tr key={room.id}>
-                    <td
-                      style={{
-                        fontWeight:
-                          600,
-                      }}
-                    >
+                    <td className="rooms-table-primary">
                       {room.roomNo}
                     </td>
 
@@ -1411,12 +1597,7 @@ function Rooms() {
                         : "Guests"}
                     </td>
 
-                    <td
-                      style={{
-                        fontWeight:
-                          600,
-                      }}
-                    >
+                    <td className="rooms-table-price">
                       {formatCurrency(
                         room.price
                       )}
@@ -1582,130 +1763,13 @@ function Rooms() {
       </div>
 
       {/* ======================================================
-          STAT CARDS
-      ====================================================== */}
-
-      <div className="room-stats">
-        <div className="rstat-card">
-          <div className="rstat-icon blue">
-            <IcoBed2 />
-          </div>
-
-          <div className="rstat-info">
-            <div className="rstat-label">
-              Total Rooms
-            </div>
-
-            <div className="rstat-value">
-              {totalRooms}
-            </div>
-
-            <div className="rstat-sub">
-              All rooms in this hotel
-            </div>
-          </div>
-        </div>
-
-        <div className="rstat-card">
-          <div className="rstat-icon green">
-            <IcoCheck2 />
-          </div>
-
-          <div className="rstat-info">
-            <div className="rstat-label">
-              Available Rooms
-            </div>
-
-            <div className="rstat-value">
-              {availableRooms}
-            </div>
-
-            <div className="rstat-sub">
-              {getPercentage(
-                availableRooms
-              )}
-              % of Total
-            </div>
-          </div>
-        </div>
-
-        <div className="rstat-card">
-          <div className="rstat-icon indigo">
-            <IcoUser2 />
-          </div>
-
-          <div className="rstat-info">
-            <div className="rstat-label">
-              Occupied Rooms
-            </div>
-
-            <div className="rstat-value">
-              {occupiedRooms}
-            </div>
-
-            <div className="rstat-sub">
-              {getPercentage(
-                occupiedRooms
-              )}
-              % of Total
-            </div>
-          </div>
-        </div>
-
-        <div className="rstat-card">
-          <div className="rstat-icon orange">
-            <IcoBrush />
-          </div>
-
-          <div className="rstat-info">
-            <div className="rstat-label">
-              Cleaning Rooms
-            </div>
-
-            <div className="rstat-value">
-              {cleaningRooms}
-            </div>
-
-            <div className="rstat-sub">
-              {getPercentage(
-                cleaningRooms
-              )}
-              % of Total
-            </div>
-          </div>
-        </div>
-
-        <div className="rstat-card">
-          <div className="rstat-icon red">
-            <IcoWrench />
-          </div>
-
-          <div className="rstat-info">
-            <div className="rstat-label">
-              Maintenance Rooms
-            </div>
-
-            <div className="rstat-value">
-              {maintenanceRooms}
-            </div>
-
-            <div className="rstat-sub">
-              {getPercentage(
-                maintenanceRooms
-              )}
-              % of Total
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ======================================================
           ADD / EDIT MODALS
       ====================================================== */}
 
       {showAdd && (
         <RoomFormModal
-          title="+ Add New Room"
+          title="Add New Room"
+          submitLabel="Add Room"
           form={form}
           onChange={
             handleFormChange
@@ -1724,6 +1788,7 @@ function Rooms() {
       {showEdit && (
         <RoomFormModal
           title="Edit Room"
+          submitLabel="Save Changes"
           form={form}
           onChange={
             handleFormChange

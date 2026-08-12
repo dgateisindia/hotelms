@@ -31,6 +31,9 @@ const userRoutes =
 const superAdminRoutes =
   require("./routes/superAdmin");
 
+const adminRoutes =
+  require("./routes/admin");
+
 const dashboardRoutes =
   require("./routes/dashboardRoutes");
 
@@ -245,6 +248,22 @@ app.use(
 app.use(
   "/api/superadmin",
   superAdminRoutes
+);
+
+
+/* ============================================================
+   HOTEL ADMIN WORKSPACE ROUTES
+
+   adminRoutes internally applies:
+
+   requireClerkSession
+   attachDbUser()
+   requireRole("admin")
+============================================================ */
+
+app.use(
+  "/api/admin",
+  adminRoutes
 );
 
 /* ============================================================

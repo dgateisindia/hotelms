@@ -31,11 +31,32 @@ import ForgotPassword from "./pages/ForgotPassword/ForgotPassword";
    ADMIN PAGES
 ============================================================ */
 
+/*
+ * Legacy shared Admin shell.
+ *
+ * Kept temporarily for operational pages that have not yet
+ * been migrated into the new Admin Workspace.
+ */
 import Dashboard from "./pages/Dashboard/Dashboard";
+
+import AdminDashboard from "./pages/AdminDashboard/AdminDashboard";
 
 import QRCodePage from "./pages/QRCodePage";
 
 import CustomerRequestPage from "./pages/CustomerRequestPage";
+
+
+/* ============================================================
+   ADMIN LAYOUTS
+============================================================ */
+
+import AdminWorkspaceLayout from "./layouts/AdminWorkspaceLayout/AdminWorkspaceLayout";
+
+import Rooms from "./pages/Rooms/Rooms";
+
+import Customers from "./pages/Customers/Customers";
+
+import Bookings from "./pages/Bookings/Bookings";
 
 
 /* ============================================================
@@ -100,10 +121,12 @@ function ApiClientAuthBridge() {
     getToken,
   } = useAuth();
 
+
   useEffect(() => {
     if (!isLoaded) {
       return;
     }
+
 
     setupApiClientAuth(
       getToken
@@ -113,14 +136,18 @@ function ApiClientAuthBridge() {
     getToken,
   ]);
 
+
   return null;
 }
 
 
 /* ============================================================
-   ADMIN PROTECTED ROUTE
+   LEGACY ADMIN PROTECTED ROUTE
 
-   Backend performs final role and hotel authorization.
+   Temporary compatibility wrapper for Admin pages that still
+   use the old Dashboard.js shared shell.
+
+   These pages will be migrated one-by-one.
 ============================================================ */
 
 function ProtectedDashboard({
@@ -129,8 +156,51 @@ function ProtectedDashboard({
   return (
     <>
       <SignedIn>
-        <Dashboard page={page} />
+        <Dashboard
+          page={
+            page
+          }
+        />
       </SignedIn>
+
+
+      <SignedOut>
+        <Navigate
+          to="/login"
+          replace
+        />
+      </SignedOut>
+    </>
+  );
+}
+
+
+/* ============================================================
+   NEW HOTEL ADMIN WORKSPACE PROTECTION
+
+   Frontend requires Clerk sign-in.
+
+   Final authorization is performed by:
+   GET /api/admin/context
+
+   Backend verifies:
+   - Clerk session
+   - HMS account
+   - Admin role
+   - assigned hotel
+   - Admin status
+   - hotel status
+============================================================ */
+
+function ProtectedAdminWorkspace({
+  children,
+}) {
+  return (
+    <>
+      <SignedIn>
+        {children}
+      </SignedIn>
+
 
       <SignedOut>
         <Navigate
@@ -145,8 +215,6 @@ function ProtectedDashboard({
 
 /* ============================================================
    SUPER ADMIN PROTECTED ROUTE
-
-   Reused by every Super Admin page.
 ============================================================ */
 
 function ProtectedSuperAdmin({
@@ -155,16 +223,21 @@ function ProtectedSuperAdmin({
   return (
     <>
       <SignedIn>
+
         <RequireSuperAdmin>
           {children}
         </RequireSuperAdmin>
+
       </SignedIn>
 
+
       <SignedOut>
+
         <Navigate
           to="/login"
           replace
         />
+
       </SignedOut>
     </>
   );
@@ -180,7 +253,9 @@ function App() {
     <>
       <ApiClientAuthBridge />
 
+
       <Router>
+
         <Routes>
 
           {/* ==================================================
@@ -195,6 +270,7 @@ function App() {
                   <LoginPage />
                 </SignedOut>
 
+
                 <SignedIn>
                   <PostLoginRedirect />
                 </SignedIn>
@@ -203,11 +279,6 @@ function App() {
           />
 
 
-          {/*
-           * Registration remains mounted after Clerk creates
-           * the session because RegisterPage still needs to
-           * create and verify the MySQL Super Admin profile.
-           */}
           <Route
             path="/register"
             element={
@@ -226,6 +297,7 @@ function App() {
                   <ForgotPassword />
                 </SignedOut>
 
+
                 <SignedIn>
                   <PostLoginRedirect />
                 </SignedIn>
@@ -242,27 +314,24 @@ function App() {
             path="/superadmin-dashboard"
             element={
               <ProtectedSuperAdmin>
+
                 <SuperAdminDashboard />
+
               </ProtectedSuperAdmin>
             }
           />
 
 
-          {/*
-           * Hotels list page has not been built yet.
-           *
-           * Until that page exists, the Hotels sidebar item
-           * safely returns to Portfolio Overview instead of
-           * sending the user to a 404 page.
-           */}
           <Route
             path="/superadmin/hotels"
             element={
               <ProtectedSuperAdmin>
+
                 <Navigate
                   to="/superadmin-dashboard"
                   replace
                 />
+
               </ProtectedSuperAdmin>
             }
           />
@@ -270,28 +339,19 @@ function App() {
 
           {/* ==================================================
               SELECTED HOTEL WORKSPACE
-
-              SelectedHotelLayout:
-              - reads HT-xxxx from URL
-              - loads hotel from backend
-              - backend verifies Super Admin ownership
-              - provides selectedHotel through Outlet context
           ================================================== */}
 
           <Route
             path="/superadmin/hotels/:hotelDisplayId"
             element={
               <ProtectedSuperAdmin>
+
                 <SelectedHotelLayout />
+
               </ProtectedSuperAdmin>
             }
           >
 
-            {/*
-             * /superadmin/hotels/HT-0001
-             * automatically becomes:
-             * /superadmin/hotels/HT-0001/overview
-             */}
             <Route
               index
               element={
@@ -322,58 +382,96 @@ function App() {
 
 
           {/* ==================================================
-              HOTEL ADMIN DASHBOARD
+              NEW HOTEL ADMIN WORKSPACE
+
+              This is the first route migrated away from the
+              old shared Dashboard.js shell.
           ================================================== */}
 
           <Route
-            path="/admin-dashboard"
             element={
-              <ProtectedDashboard
-                page="dashboard"
-              />
+              <ProtectedAdminWorkspace>
+                <AdminWorkspaceLayout />
+              </ProtectedAdminWorkspace>
             }
-          />
+          >
 
+            <Route
+              path="/admin-dashboard"
+              element={
+                <AdminDashboard />
+              }
+            />
+
+            <Route
+              path="/rooms"
+              element={
+                <Rooms />
+              }
+            />
+
+            <Route
+              path="/customers"
+              element={
+                <Customers />
+              }
+            />
+
+
+            <Route
+              path="/bookings"
+              element={
+                <Bookings />
+              }
+            />
+
+          </Route>
+
+
+          {/* ==================================================
+              OLD /dashboard COMPATIBILITY
+
+              Never maintain two separate Admin dashboard URLs.
+          ================================================== */}
 
           <Route
             path="/dashboard"
             element={
-              <ProtectedDashboard
-                page="dashboard"
+              <Navigate
+                to="/admin-dashboard"
+                replace
               />
             }
           />
 
+
+          {/* ==================================================
+              TEMPORARY BOOKING DESK COMPATIBILITY
+
+              Dedicated Booking Desk will be built during the
+              booking module redesign.
+
+              Until then this safely opens existing Bookings
+              instead of returning 404.
+          ================================================== */}
 
           <Route
-            path="/bookings"
+            path="/booking-desk"
             element={
-              <ProtectedDashboard
-                page="bookings"
+              <Navigate
+                to="/bookings"
+                replace
               />
             }
           />
 
 
-          <Route
-            path="/rooms"
-            element={
-              <ProtectedDashboard
-                page="rooms"
-              />
-            }
-          />
+          {/* ==================================================
+              LEGACY ADMIN OPERATIONAL PAGES
 
-
-          <Route
-            path="/customers"
-            element={
-              <ProtectedDashboard
-                page="customers"
-              />
-            }
-          />
-
+              These remain working while each page is migrated
+              into AdminWorkspaceLayout one-by-one.
+          ================================================== */}
 
           <Route
             path="/billing"
@@ -446,6 +544,24 @@ function App() {
 
 
           {/* ==================================================
+              PROFILE & SECURITY TEMPORARY COMPATIBILITY
+
+              Existing Settings page remains available until
+              dedicated Admin Profile & Security page is built.
+          ================================================== */}
+
+          <Route
+            path="/profile-security"
+            element={
+              <Navigate
+                to="/settings"
+                replace
+              />
+            }
+          />
+
+
+          {/* ==================================================
               HOTEL ADMIN QR PAGE
           ================================================== */}
 
@@ -454,14 +570,19 @@ function App() {
             element={
               <>
                 <SignedIn>
+
                   <QRCodePage />
+
                 </SignedIn>
 
+
                 <SignedOut>
+
                   <Navigate
                     to="/login"
                     replace
                   />
+
                 </SignedOut>
               </>
             }
@@ -470,8 +591,6 @@ function App() {
 
           {/* ==================================================
               PUBLIC QR CUSTOMER REQUEST
-
-              Authentication intentionally not required.
           ================================================== */}
 
           <Route
@@ -488,32 +607,49 @@ function App() {
 
           <Route
             path="/400"
-            element={<Error400 />}
+            element={
+              <Error400 />
+            }
           />
+
 
           <Route
             path="/401"
-            element={<Error401 />}
+            element={
+              <Error401 />
+            }
           />
+
 
           <Route
             path="/403"
-            element={<Error403 />}
+            element={
+              <Error403 />
+            }
           />
+
 
           <Route
             path="/404"
-            element={<Error404 />}
+            element={
+              <Error404 />
+            }
           />
+
 
           <Route
             path="/500"
-            element={<Error500 />}
+            element={
+              <Error500 />
+            }
           />
+
 
           <Route
             path="/503"
-            element={<Error503 />}
+            element={
+              <Error503 />
+            }
           />
 
 
@@ -540,6 +676,7 @@ function App() {
           />
 
         </Routes>
+
       </Router>
     </>
   );
