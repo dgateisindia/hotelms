@@ -58,6 +58,7 @@ import Customers from "./pages/Customers/Customers";
 
 import Bookings from "./pages/Bookings/Bookings";
 
+import BookingDesk from "./pages/BookingDesk/BookingDesk";
 
 /* ============================================================
    SUPER ADMIN PAGES
@@ -404,6 +405,20 @@ function App() {
             />
 
             <Route
+              path="/booking-desk"
+              element={
+                <BookingDesk />
+              }
+            />
+
+            <Route
+              path="/bookings"
+              element={
+                <Bookings />
+              }
+            />
+
+            <Route
               path="/rooms"
               element={
                 <Rooms />
@@ -414,14 +429,6 @@ function App() {
               path="/customers"
               element={
                 <Customers />
-              }
-            />
-
-
-            <Route
-              path="/bookings"
-              element={
-                <Bookings />
               }
             />
 
@@ -439,27 +446,6 @@ function App() {
             element={
               <Navigate
                 to="/admin-dashboard"
-                replace
-              />
-            }
-          />
-
-
-          {/* ==================================================
-              TEMPORARY BOOKING DESK COMPATIBILITY
-
-              Dedicated Booking Desk will be built during the
-              booking module redesign.
-
-              Until then this safely opens existing Bookings
-              instead of returning 404.
-          ================================================== */}
-
-          <Route
-            path="/booking-desk"
-            element={
-              <Navigate
-                to="/bookings"
                 replace
               />
             }

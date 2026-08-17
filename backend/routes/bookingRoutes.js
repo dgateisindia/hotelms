@@ -13,6 +13,10 @@ const {
   getBooking,
   addBooking,
   updateBooking,
+  checkInBooking,
+  extendStayBooking,
+  collectBookingPayment,
+  checkoutBooking,
   cancelBooking,
   deleteBooking,
 } = require(
@@ -69,6 +73,41 @@ router.put(
   updateBooking
 );
 
+/* ============================================================
+   CHECK IN BOOKING
+============================================================ */
+
+router.post(
+  "/:id/check-in",
+  checkInBooking
+);
+
+/* ============================================================
+   EXTEND STAY
+============================================================ */
+
+router.post(
+  "/:id/extend-stay",
+  extendStayBooking
+);
+
+/* ============================================================
+   COLLECT BOOKING PAYMENT
+============================================================ */
+
+router.post(
+  "/:id/payments",
+  collectBookingPayment
+);
+
+/* ============================================================
+   CHECKOUT BOOKING
+============================================================ */
+
+router.post(
+  "/:id/checkout",
+  checkoutBooking
+);
 
 /* ============================================================
    CANCEL BOOKING

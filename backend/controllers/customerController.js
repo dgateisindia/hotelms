@@ -101,13 +101,182 @@ function normalizeEmail(value) {
     : null;
 }
 
-function normalizePhone(value) {
-  return String(value || "")
-    .trim()
-    .replace(
-      /[\s()\-]/g,
-      ""
+function normalizeIndianPhone(
+  value
+) {
+  const phone =
+    String(
+      value || ""
+    )
+      .trim()
+      .replace(
+        /[\s()\-]/g,
+        ""
+      );
+
+
+  /*
+   * UI uses:
+   * 9876543210
+   *
+   * Database canonical format:
+   * +919876543210
+   */
+
+  if (
+    /^[6-9]\d{9}$/.test(
+      phone
+    )
+  ) {
+    return `+91${phone}`;
+  }
+
+
+  if (
+    /^\+91[6-9]\d{9}$/.test(
+      phone
+    )
+  ) {
+    return phone;
+  }
+
+
+  /*
+   * Transitional compatibility:
+   * 919876543210
+   */
+  if (
+    /^91[6-9]\d{9}$/.test(
+      phone
+    )
+  ) {
+    return `+${phone}`;
+  }
+
+
+  return null;
+}
+
+
+function getPhoneCandidates(
+  value
+) {
+  const canonical =
+    normalizeIndianPhone(
+      value
     );
+
+
+  if (!canonical) {
+    return [];
+  }
+
+
+  return [
+    canonical,
+    canonical.slice(3),
+  ];
+}
+
+
+
+function validateIdProof(
+  type,
+  number
+) {
+  const proofType =
+    String(
+      type || ""
+    ).trim();
+
+
+  const proofNumber =
+    String(
+      number || ""
+    ).trim();
+
+
+  if (
+    !proofType &&
+    !proofNumber
+  ) {
+    return "";
+  }
+
+
+  if (
+    !proofType ||
+    !proofNumber
+  ) {
+    return (
+      "ID proof type and ID proof number must be entered together."
+    );
+  }
+
+
+  const normalizedType =
+    proofType.toLowerCase();
+
+
+  if (
+    normalizedType ===
+    "aadhaar"
+  ) {
+    return /^\d{12}$/.test(
+      proofNumber
+    )
+      ? ""
+      : "Aadhaar number must contain exactly 12 digits.";
+  }
+
+
+  if (
+    normalizedType ===
+    "passport"
+  ) {
+    return /^[A-Za-z0-9]{6,20}$/.test(
+      proofNumber
+    )
+      ? ""
+      : "Enter a valid passport number.";
+  }
+
+
+  if (
+    normalizedType ===
+    "driving licence"
+  ) {
+    return /^[A-Za-z0-9/-]{5,30}$/.test(
+      proofNumber
+    )
+      ? ""
+      : "Enter a valid driving licence number.";
+  }
+
+
+  if (
+    normalizedType ===
+    "voter id"
+  ) {
+    return /^[A-Za-z0-9]{8,20}$/.test(
+      proofNumber
+    )
+      ? ""
+      : "Enter a valid voter ID number.";
+  }
+
+
+  if (
+    proofNumber.length < 4 ||
+    proofNumber.length > 50
+  ) {
+    return (
+      "Enter a valid ID proof number."
+    );
+  }
+
+
+  return "";
 }
 
 /* ============================================================
@@ -145,26 +314,15 @@ function validateCustomerPayload(
   }
 
   const phone =
-    normalizePhone(
+    normalizeIndianPhone(
       source.phone
     );
+
 
   if (!phone) {
     return {
       error:
-        "Phone number is required.",
-    };
-  }
-
-  if (
-    phone.length > 30 ||
-    !/^\+?[0-9]{6,20}$/.test(
-      phone
-    )
-  ) {
-    return {
-      error:
-        "Enter a valid phone number using digits and an optional leading +.",
+        "Enter a valid 10-digit Indian mobile number.",
     };
   }
 
@@ -263,6 +421,22 @@ function validateCustomerPayload(
     };
   }
 
+  const idProofError =
+    validateIdProof(
+      idProofType,
+      idProofNumber
+    );
+
+
+  if (
+    idProofError
+  ) {
+    return {
+      error:
+        idProofError,
+    };
+  }
+
   const profileImage =
     normalizeOptionalString(
       source.profile_image
@@ -294,6 +468,134 @@ function validateCustomerPayload(
     },
   };
 }
+
+
+/* ============================================================
+   LOOKUP CUSTOMER BY PHONE
+
+   Used by Booking Desk.
+
+   Important:
+   - hotel is taken only from authenticated Admin
+   - client cannot choose hotel
+   - returns only one matching customer
+   - supports old 10-digit rows and canonical +91 rows
+============================================================ */
+
+exports.lookupCustomerByPhone =
+  async (req, res) => {
+    const hotelId =
+      getHotelId(req);
+
+
+    if (!hotelId) {
+      return sendError(
+        res,
+        403,
+        "HOTEL_CONTEXT_MISSING",
+        "Your Admin account is not linked to a valid hotel."
+      );
+    }
+
+
+    const candidates =
+      getPhoneCandidates(
+        req.query.phone
+      );
+
+
+    if (
+      candidates.length !== 2
+    ) {
+      return sendError(
+        res,
+        400,
+        "INVALID_PHONE",
+        "Enter a valid 10-digit Indian mobile number."
+      );
+    }
+
+
+    try {
+      const [[customer]] =
+        await db.query(
+          `
+            SELECT
+              customer_id,
+              full_name,
+              email,
+              phone,
+              gender,
+              nationality,
+              address,
+              id_proof_type,
+              id_proof_number,
+              profile_image,
+              created_at,
+              updated_at
+
+            FROM customers
+
+            WHERE hotel_id = ?
+
+              AND phone IN (
+                ?,
+                ?
+              )
+
+            ORDER BY
+              CASE
+                WHEN phone = ?
+                THEN 0
+                ELSE 1
+              END,
+
+              customer_id ASC
+
+            LIMIT 1
+          `,
+          [
+            hotelId,
+            candidates[0],
+            candidates[1],
+            candidates[0],
+          ]
+        );
+
+
+      if (!customer) {
+        return res
+          .status(200)
+          .json({
+            success: true,
+            found: false,
+            data: null,
+          });
+      }
+
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+          found: true,
+          data: customer,
+        });
+    } catch (error) {
+      logCustomerError(
+        "LOOKUP_CUSTOMER",
+        error
+      );
+
+
+      return sendError(
+        res,
+        500,
+        "CUSTOMER_LOOKUP_FAILED",
+        "Customer lookup could not be completed. Please try again."
+      );
+    }
+  };
 
 /* ============================================================
    GET ALL CUSTOMERS
@@ -502,6 +804,11 @@ exports.addCustomer = async (
   const customer =
     validation.value;
 
+  const phoneCandidates =
+    getPhoneCandidates(
+      customer.phone
+    );
+
   try {
     /*
      * Phone is used by our Booking Desk
@@ -520,13 +827,18 @@ exports.addCustomer = async (
           FROM customers
 
           WHERE hotel_id = ?
-            AND phone = ?
+
+            AND phone IN (
+              ?,
+              ?
+            )
 
           LIMIT 1
         `,
         [
           hotelId,
-          customer.phone,
+          phoneCandidates[0],
+          phoneCandidates[1],
         ]
       );
 
@@ -784,8 +1096,21 @@ exports.getCustomer = async (
               b.hotel_id,
               b.customer_id,
 
-              COALESCE(
-                SUM(p.amount),
+              GREATEST(
+                COALESCE(
+                  SUM(
+                    CASE
+
+                      WHEN p.transaction_type =
+                        'refund'
+                        THEN -p.amount
+
+                      ELSE p.amount
+
+                    END
+                  ),
+                  0
+                ),
                 0
               ) AS totalSpent
 
@@ -947,7 +1272,9 @@ exports.updateCustomer = async (
     const [[existing]] =
       await db.query(
         `
-          SELECT customer_id
+          SELECT
+            customer_id,
+            profile_image
 
           FROM customers
 
@@ -971,6 +1298,19 @@ exports.updateCustomer = async (
       );
     }
 
+    const profileImageToSave =
+      Object.prototype.hasOwnProperty.call(
+        req.body || {},
+        "profile_image"
+      )
+        ? customer.profileImage
+        : existing.profile_image;
+
+    const phoneCandidates =
+      getPhoneCandidates(
+        customer.phone
+      );
+    
     const [phoneMatches] =
       await db.query(
         `
@@ -979,14 +1319,20 @@ exports.updateCustomer = async (
           FROM customers
 
           WHERE hotel_id = ?
-            AND phone = ?
+
+            AND phone IN (
+              ?,
+              ?
+            )
+
             AND customer_id <> ?
 
           LIMIT 1
         `,
         [
           hotelId,
-          customer.phone,
+          phoneCandidates[0],
+          phoneCandidates[1],
           customerId,
         ]
       );
@@ -1065,7 +1411,7 @@ exports.updateCustomer = async (
           customer.address,
           customer.idProofType,
           customer.idProofNumber,
-          customer.profileImage,
+          profileImageToSave,
           hotelId,
           customerId,
         ]

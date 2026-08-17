@@ -11,6 +11,10 @@ import {
 
 import apiClient from "../../services/apiClient";
 
+import ExtendStayDialog from "./components/ExtendStayDialog";
+
+import CollectPaymentDialog from "./components/CollectPaymentDialog";
+
 import "../../styles/Bookings.css";
 
 import {
@@ -397,6 +401,61 @@ function getApiMessage(
 }
 
 
+function getNextDateValue(
+  value
+) {
+  const datePart =
+    String(
+      value || ""
+    ).slice(
+      0,
+      10
+    );
+
+
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+      datePart
+    );
+
+
+  if (!match) {
+    return "";
+  }
+
+
+  const date =
+    new Date(
+      Date.UTC(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3])
+      )
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
+
+
+  date.setUTCDate(
+    date.getUTCDate() + 1
+  );
+
+
+  return date
+    .toISOString()
+    .slice(
+      0,
+      10
+    );
+}
+
 /* ============================================================
    EMPTY STATE
 ============================================================ */
@@ -468,8 +527,121 @@ function BookingActionDialog({
     return null;
   }
 
+
   const isDelete =
     action.type === "delete";
+
+  const isCheckIn =
+    action.type === "check-in";
+
+  const isCheckout =
+    action.type === "checkout";
+
+  const isCancel =
+    action.type === "cancel";
+
+
+  let title =
+    "Booking Action";
+
+  let description =
+    null;
+
+  let buttonLabel =
+    "Confirm";
+
+  let buttonClass =
+    "booking-btn-primary";
+
+
+  if (isDelete) {
+    title =
+      "Delete Pending Booking?";
+
+    buttonLabel =
+      "Delete Booking";
+
+    buttonClass =
+      "booking-btn-danger";
+
+    description = (
+      <>
+        Booking{" "}
+        <strong>
+          {action.booking.booking_code}
+        </strong>{" "}
+        will be permanently removed only if it has no
+        payment or QR history.
+      </>
+    );
+  } else if (isCheckIn) {
+    title =
+      "Check In Guest?";
+
+    buttonLabel =
+      "Check In Guest";
+
+    description = (
+      <>
+        Guest{" "}
+        <strong>
+          {action.booking.full_name ||
+            "Guest"}
+        </strong>{" "}
+        will be checked into Room{" "}
+        <strong>
+          {action.booking.room_number ||
+            "—"}
+        </strong>.
+        The room will become occupied and the stay will
+        become active.
+      </>
+    );
+  } else if (isCheckout) {
+    title =
+      "Checkout Guest?";
+
+    buttonLabel =
+      "Checkout Guest";
+
+    description = (
+      <>
+        Guest{" "}
+        <strong>
+          {action.booking.full_name ||
+            "Guest"}
+        </strong>{" "}
+        will be checked out from Room{" "}
+        <strong>
+          {action.booking.room_number ||
+            "—"}
+        </strong>.
+        The stay will be completed and the room will move
+        to Cleaning status.
+      </>
+    );
+  } else if (isCancel) {
+    title =
+      "Cancel Booking?";
+
+    buttonLabel =
+      "Cancel Booking";
+
+    buttonClass =
+      "booking-btn-warning";
+
+    description = (
+      <>
+        Booking{" "}
+        <strong>
+          {action.booking.booking_code}
+        </strong>{" "}
+        will remain in history but its status will be
+        changed to Cancelled.
+      </>
+    );
+  }
+
 
   return (
     <div
@@ -500,46 +672,33 @@ function BookingActionDialog({
           }
           aria-hidden="true"
         >
-          {isDelete
-            ? <IcoWarn />
-            : <IcoCancel />}
+          {isDelete ? (
+            <IcoWarn />
+          ) : isCheckIn ||
+            isCheckout ? (
+            <IcoCheck />
+          ) : (
+            <IcoCancel />
+          )}
         </div>
 
+
         <h3 id="booking-action-title">
-          {isDelete
-            ? "Delete Pending Booking?"
-            : "Cancel Booking?"}
+          {title}
         </h3>
 
+
         <p>
-          {isDelete
-            ? (
-              <>
-                Booking{" "}
-                <strong>
-                  {action.booking.booking_code}
-                </strong>{" "}
-                will be permanently removed only if it has no
-                payment or QR history.
-              </>
-            )
-            : (
-              <>
-                Booking{" "}
-                <strong>
-                  {action.booking.booking_code}
-                </strong>{" "}
-                will remain in history but its status will be
-                changed to Cancelled.
-              </>
-            )}
+          {description}
         </p>
+
 
         {error && (
           <div className="booking-dialog-error">
             {error}
           </div>
         )}
+
 
         <div className="booking-confirm-actions">
 
@@ -549,24 +708,24 @@ function BookingActionDialog({
             onClick={onClose}
             disabled={processing}
           >
-            Keep Booking
+            {isCheckIn ||
+            isCheckout
+              ? "Not Now"
+              : "Keep Booking"}
           </button>
+
 
           <button
             type="button"
             className={
-              isDelete
-                ? "booking-btn-danger"
-                : "booking-btn-warning"
+              buttonClass
             }
             onClick={onConfirm}
             disabled={processing}
           >
             {processing
               ? "Processing..."
-              : isDelete
-                ? "Delete Booking"
-                : "Cancel Booking"}
+              : buttonLabel}
           </button>
 
         </div>
@@ -575,7 +734,6 @@ function BookingActionDialog({
     </div>
   );
 }
-
 
 /* ============================================================
    BOOKING VIEW DIALOG
@@ -1013,6 +1171,67 @@ function Bookings() {
     setActionError,
   ] = useState("");
 
+  const [
+    extendBooking,
+    setExtendBooking,
+  ] = useState(null);
+
+  const [
+    extendNewCheckOut,
+    setExtendNewCheckOut,
+  ] = useState("");
+
+  const [
+    extendReason,
+    setExtendReason,
+  ] = useState(
+    "guest_request"
+  );
+
+  const [
+    extendProcessing,
+    setExtendProcessing,
+  ] = useState(false);
+
+  const [
+    extendError,
+    setExtendError,
+  ] = useState("");
+
+    const [
+    paymentBooking,
+    setPaymentBooking,
+  ] = useState(null);
+
+  const [
+    paymentAmount,
+    setPaymentAmount,
+  ] = useState("");
+
+  const [
+    paymentMethod,
+    setPaymentMethod,
+  ] = useState("cash");
+
+  const [
+    paymentTransactionId,
+    setPaymentTransactionId,
+  ] = useState("");
+
+  const [
+    paymentNotes,
+    setPaymentNotes,
+  ] = useState("");
+
+  const [
+    paymentProcessing,
+    setPaymentProcessing,
+  ] = useState(false);
+
+  const [
+    paymentError,
+    setPaymentError,
+  ] = useState("");
 
   /* ==========================================================
      LOAD BOOKINGS
@@ -1373,12 +1592,29 @@ function Bookings() {
     try {
       if (
         action.type ===
+        "check-in"
+      ) {
+        await apiClient.post(
+          `/bookings/${action.booking.booking_id}/check-in`
+        );      
+      } else if (
+        action.type ===
+        "checkout"
+      ) {
+        await apiClient.post(
+          `/bookings/${action.booking.booking_id}/checkout`
+        );
+      } else if (
+        action.type ===
         "cancel"
       ) {
         await apiClient.put(
           `/bookings/${action.booking.booking_id}/cancel`
         );
-      } else {
+      } else if (
+        action.type ===
+        "delete"
+      ) {
         await apiClient.delete(
           `/bookings/${action.booking.booking_id}`
         );
@@ -1399,6 +1635,279 @@ function Bookings() {
     }
   }
 
+  /* ==========================================================
+    EXTEND STAY
+  ========================================================== */
+
+  function openExtendStay(
+    booking
+  ) {
+    setExtendBooking(
+      booking
+    );
+
+    setExtendNewCheckOut(
+      getNextDateValue(
+        booking.check_out
+      )
+    );
+
+    setExtendReason(
+      "guest_request"
+    );
+
+    setExtendError("");
+  }
+
+
+  function closeExtendStay() {
+    if (
+      extendProcessing
+    ) {
+      return;
+    }
+
+    setExtendBooking(null);
+    setExtendNewCheckOut("");
+    setExtendReason(
+      "guest_request"
+    );
+    setExtendError("");
+  }
+
+
+  async function confirmExtendStay() {
+    if (
+      !extendBooking ||
+      !extendNewCheckOut
+    ) {
+      return;
+    }
+
+
+    setExtendProcessing(true);
+    setExtendError("");
+
+
+    try {
+      await apiClient.post(
+        `/bookings/${extendBooking.booking_id}/extend-stay`,
+        {
+          new_check_out:
+            extendNewCheckOut,
+
+          reason:
+            extendReason,
+        }
+      );
+
+
+      setExtendBooking(null);
+      setExtendNewCheckOut("");
+      setExtendReason(
+        "guest_request"
+      );
+
+      await loadBookings();
+    } catch (extendRequestError) {
+      setExtendError(
+        getApiMessage(
+          extendRequestError,
+          "The stay could not be extended."
+        )
+      );
+    } finally {
+      setExtendProcessing(false);
+    }
+  }
+
+    /* ==========================================================
+     COLLECT PAYMENT
+  ========================================================== */
+
+  function openCollectPayment(
+    booking
+  ) {
+    const outstanding =
+      Number(
+        booking
+          .outstanding_amount ||
+        0
+      );
+
+
+    setPaymentBooking(
+      booking
+    );
+
+    setPaymentAmount(
+      outstanding > 0
+        ? outstanding.toFixed(2)
+        : ""
+    );
+
+    setPaymentMethod(
+      "cash"
+    );
+
+    setPaymentTransactionId(
+      ""
+    );
+
+    setPaymentNotes(
+      ""
+    );
+
+    setPaymentError(
+      ""
+    );
+  }
+
+
+  function closeCollectPayment() {
+    if (
+      paymentProcessing
+    ) {
+      return;
+    }
+
+
+    setPaymentBooking(
+      null
+    );
+
+    setPaymentAmount(
+      ""
+    );
+
+    setPaymentMethod(
+      "cash"
+    );
+
+    setPaymentTransactionId(
+      ""
+    );
+
+    setPaymentNotes(
+      ""
+    );
+
+    setPaymentError(
+      ""
+    );
+  }
+
+
+  async function confirmCollectPayment() {
+    if (!paymentBooking) {
+      return;
+    }
+
+
+    const amount =
+      Number(
+        paymentAmount
+      );
+
+
+    if (
+      !Number.isFinite(
+        amount
+      ) ||
+      amount <= 0
+    ) {
+      setPaymentError(
+        "Enter a valid payment amount."
+      );
+
+      return;
+    }
+
+
+    const outstanding =
+      Number(
+        paymentBooking
+          .outstanding_amount ||
+        0
+      );
+
+
+    setPaymentProcessing(
+      true
+    );
+
+    setPaymentError(
+      ""
+    );
+
+
+    try {
+      await apiClient.post(
+        `/bookings/${paymentBooking.booking_id}/payments`,
+        {
+          amount,
+
+          payment_method:
+            paymentMethod,
+
+          payment_stage:
+            amount + 0.009 >=
+            outstanding
+              ? "checkout"
+              : "during_stay",
+
+          transaction_id:
+            paymentMethod ===
+              "cash"
+              ? null
+              : paymentTransactionId
+                  .trim(),
+
+          notes:
+            paymentNotes
+              .trim() ||
+            null,
+        }
+      );
+
+
+      setPaymentBooking(
+        null
+      );
+
+      setPaymentAmount(
+        ""
+      );
+
+      setPaymentMethod(
+        "cash"
+      );
+
+      setPaymentTransactionId(
+        ""
+      );
+
+      setPaymentNotes(
+        ""
+      );
+
+
+      await loadBookings();
+    } catch (
+      paymentRequestError
+    ) {
+      setPaymentError(
+        getApiMessage(
+          paymentRequestError,
+          "The payment could not be recorded."
+        )
+      );
+    } finally {
+      setPaymentProcessing(
+        false
+      );
+    }
+  }
 
   /* ==========================================================
      RENDER
@@ -1771,13 +2280,62 @@ function Bookings() {
                         status ===
                           "pending" ||
                         status ===
-                          "confirmed" ||
-                        status ===
-                          "checked_in";
+                          "confirmed";
 
                       const canDelete =
                         status ===
                         "pending";
+
+                      const now =
+                        new Date();
+
+                      const checkInTime =
+                        new Date(
+                          booking.check_in
+                        );
+
+                      const checkOutTime =
+                        new Date(
+                          booking.check_out
+                        );
+
+                      const canCheckIn =
+                        status ===
+                          "confirmed" &&
+                        !booking.actual_check_in &&
+                        !Number.isNaN(
+                          checkInTime.getTime()
+                        ) &&
+                        !Number.isNaN(
+                          checkOutTime.getTime()
+                        ) &&
+                        checkInTime <= now &&
+                        checkOutTime > now;
+
+                      const outstandingAmount =
+                        Number(
+                          booking.outstanding_amount ||
+                          0
+                        );
+
+
+                      const canCollectPayment =
+                        status ===
+                          "checked_in" &&
+                        outstandingAmount >
+                          0.009;
+
+
+                      const canExtendStay =
+                        status ===
+                        "checked_in";
+
+
+                      const canCheckout =
+                        status ===
+                          "checked_in" &&
+                        outstandingAmount <=
+                          0.009;
 
                       return (
                         <tr
@@ -1921,7 +2479,72 @@ function Bookings() {
                               >
                                 <IcoEye />
                               </button>
+                              
+                              {canCheckIn && (
+                                <button
+                                  type="button"
+                                  className="booking-action-button booking-action-button--edit"
+                                  onClick={() =>
+                                    requestAction(
+                                      "check-in",
+                                      booking
+                                    )
+                                  }
+                                  title="Check in guest"
+                                  aria-label={`Check in ${booking.booking_code}`}
+                                >
+                                  <IcoCheck />
+                                </button>
+                              )}
 
+                              {canCollectPayment && (
+                                <button
+                                  type="button"
+                                  className="booking-action-button booking-action-button--edit"
+                                  onClick={() =>
+                                    openCollectPayment(
+                                      booking
+                                    )
+                                  }
+                                  title="Collect payment"
+                                  aria-label={`Collect payment for ${booking.booking_code}`}
+                                >
+                                  <IcoRupee />
+                                </button>
+                              )}
+
+                              {canExtendStay && (
+                                <button
+                                  type="button"
+                                  className="booking-action-button booking-action-button--edit"
+                                  onClick={() =>
+                                    openExtendStay(
+                                      booking
+                                    )
+                                  }
+                                  title="Extend stay"
+                                  aria-label={`Extend stay for ${booking.booking_code}`}
+                                >
+                                  <IcoClock />
+                                </button>
+                              )}
+
+                              {canCheckout && (
+                                <button
+                                  type="button"
+                                  className="booking-action-button booking-action-button--edit"
+                                  onClick={() =>
+                                    requestAction(
+                                      "checkout",
+                                      booking
+                                    )
+                                  }
+                                  title="Checkout guest"
+                                  aria-label={`Checkout ${booking.booking_code}`}
+                                >
+                                  <IcoCheck />
+                                </button>
+                              )}
 
                               {canEdit && (
                                 <button
@@ -2176,6 +2799,85 @@ function Bookings() {
         }
         onConfirm={() =>
           void confirmAction()
+        }
+      />
+
+      <ExtendStayDialog
+        booking={
+          extendBooking
+        }
+        newCheckOut={
+          extendNewCheckOut
+        }
+        minCheckOut={
+          extendBooking
+            ? getNextDateValue(
+                extendBooking.check_out
+              )
+            : ""
+        }
+        reason={
+          extendReason
+        }
+        processing={
+          extendProcessing
+        }
+        error={
+          extendError
+        }
+        onChangeCheckOut={
+          setExtendNewCheckOut
+        }
+        onChangeReason={
+          setExtendReason
+        }
+        onClose={
+          closeExtendStay
+        }
+        onConfirm={() =>
+          void confirmExtendStay()
+        }
+      />
+
+      <CollectPaymentDialog
+        booking={
+          paymentBooking
+        }
+        amount={
+          paymentAmount
+        }
+        method={
+          paymentMethod
+        }
+        transactionId={
+          paymentTransactionId
+        }
+        notes={
+          paymentNotes
+        }
+        processing={
+          paymentProcessing
+        }
+        error={
+          paymentError
+        }
+        onChangeAmount={
+          setPaymentAmount
+        }
+        onChangeMethod={
+          setPaymentMethod
+        }
+        onChangeTransactionId={
+          setPaymentTransactionId
+        }
+        onChangeNotes={
+          setPaymentNotes
+        }
+        onClose={
+          closeCollectPayment
+        }
+        onConfirm={() =>
+          void confirmCollectPayment()
         }
       />
 

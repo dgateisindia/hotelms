@@ -733,8 +733,10 @@ exports.deleteRoom = async (
    GET:
    /api/rooms/available?checkIn=...&checkOut=...
 
-   checkOut remains optional because current Booking UI first
-   loads room availability as soon as check-in is selected.
+   checkOut is kept optional for backward compatibility.
+ 
+  Current Booking Desk normally sends both checkIn
+  and checkOut.
 ============================================================ */
 
 exports.getAvailableRooms = async (
@@ -835,7 +837,15 @@ exports.getAvailableRooms = async (
     let query;
     let params;
 
+
     if (checkOut) {
+      /*
+      * booking_room_history is the authoritative
+      * room-assignment timeline.
+      *
+      * The second NOT EXISTS is only a safety fallback
+      * for legacy bookings that do not have room history.
+      */
       query = `
         SELECT
           r.room_id,
@@ -852,25 +862,92 @@ exports.getAvailableRooms = async (
         WHERE r.hotel_id = ?
           AND r.status <> 'maintenance'
 
+
+          /* --------------------------------------------
+            AUTHORITATIVE ROOM HISTORY
+          --------------------------------------------- */
+
+          AND NOT EXISTS (
+            SELECT 1
+
+            FROM booking_room_history h
+
+            INNER JOIN bookings b
+              ON b.hotel_id =
+                h.hotel_id
+
+            AND b.booking_id =
+                h.booking_id
+
+            WHERE h.hotel_id = ?
+              AND h.room_id =
+                  r.room_id
+
+              AND b.booking_status <>
+                  'cancelled'
+
+              AND h.assignment_status <>
+                  'cancelled'
+
+              AND b.booking_id <> ?
+
+              AND h.assignment_start < ?
+              AND h.assignment_end > ?
+          )
+
+
+          /* --------------------------------------------
+            LEGACY FALLBACK
+
+            Only bookings without any room-history row
+            are checked here.
+          --------------------------------------------- */
+
           AND NOT EXISTS (
             SELECT 1
 
             FROM bookings b
 
             WHERE b.hotel_id = ?
-              AND b.room_id = r.room_id
-              AND b.booking_status <> 'cancelled'
+              AND b.room_id =
+                  r.room_id
+
+              AND b.booking_status <>
+                  'cancelled'
+
               AND b.booking_id <> ?
 
               AND b.check_in < ?
               AND b.check_out > ?
+
+              AND NOT EXISTS (
+                SELECT 1
+
+                FROM booking_room_history h
+
+                WHERE h.hotel_id =
+                      b.hotel_id
+
+                  AND h.booking_id =
+                      b.booking_id
+              )
           )
 
-        ORDER BY r.room_number ASC
+        ORDER BY
+          r.room_number ASC
       `;
+
 
       params = [
         hotelId,
+
+        /* room history */
+        hotelId,
+        excludeBookingId,
+        checkOut,
+        checkIn,
+
+        /* legacy fallback */
         hotelId,
         excludeBookingId,
         checkOut,
@@ -878,12 +955,10 @@ exports.getAvailableRooms = async (
       ];
     } else {
       /*
-       * No check-out yet:
-       * treat requested stay as temporarily open-ended.
-       *
-       * Any non-cancelled booking ending after check-in
-       * blocks that room until the user chooses check-out.
-       */
+      * Compatibility mode:
+      * when check-out is not supplied, any assignment
+      * ending after the requested check-in blocks the room.
+      */
       query = `
         SELECT
           r.room_id,
@@ -900,28 +975,92 @@ exports.getAvailableRooms = async (
         WHERE r.hotel_id = ?
           AND r.status <> 'maintenance'
 
+
+          /* --------------------------------------------
+            AUTHORITATIVE ROOM HISTORY
+          --------------------------------------------- */
+
+          AND NOT EXISTS (
+            SELECT 1
+
+            FROM booking_room_history h
+
+            INNER JOIN bookings b
+              ON b.hotel_id =
+                h.hotel_id
+
+            AND b.booking_id =
+                h.booking_id
+
+            WHERE h.hotel_id = ?
+              AND h.room_id =
+                  r.room_id
+
+              AND b.booking_status <>
+                  'cancelled'
+
+              AND h.assignment_status <>
+                  'cancelled'
+
+              AND b.booking_id <> ?
+
+              AND h.assignment_end > ?
+          )
+
+
+          /* --------------------------------------------
+            LEGACY FALLBACK
+          --------------------------------------------- */
+
           AND NOT EXISTS (
             SELECT 1
 
             FROM bookings b
 
             WHERE b.hotel_id = ?
-              AND b.room_id = r.room_id
-              AND b.booking_status <> 'cancelled'
+              AND b.room_id =
+                  r.room_id
+
+              AND b.booking_status <>
+                  'cancelled'
+
               AND b.booking_id <> ?
+
               AND b.check_out > ?
+
+              AND NOT EXISTS (
+                SELECT 1
+
+                FROM booking_room_history h
+
+                WHERE h.hotel_id =
+                      b.hotel_id
+
+                  AND h.booking_id =
+                      b.booking_id
+              )
           )
 
-        ORDER BY r.room_number ASC
+        ORDER BY
+          r.room_number ASC
       `;
+
 
       params = [
         hotelId,
+
+        /* room history */
+        hotelId,
+        excludeBookingId,
+        checkIn,
+
+        /* legacy fallback */
         hotelId,
         excludeBookingId,
         checkIn,
       ];
     }
+
 
     const [rooms] =
       await db.query(
