@@ -23,7 +23,22 @@ function ReservationPaymentStep({
   paymentNow,
   balanceDue,
   paymentPreviewStatus,
+
+  refund,
+  updateRefund,
+  pricingQuote,
+  refundRequired,
+  refundRequiredAmount,
 }) {
+  const currentAmountPaid =
+    Number(
+      pricingQuote
+        ?.amount_paid ??
+      paymentNow ??
+      0
+    );
+
+
   return (
     <div className="booking-desk-section">
 
@@ -40,8 +55,12 @@ function ReservationPaymentStep({
           </h2>
 
           <p>
-            Confirm the reservation status and record any
-            payment received at the front desk.
+            {isEditMode &&
+            refundRequired
+              ? "Confirm the reservation changes and record the required refund."
+              : isEditMode
+                ? "Confirm the reservation details before saving the changes."
+                : "Confirm the reservation status and record any payment received at the front desk."}
           </p>
 
         </div>
@@ -281,14 +300,14 @@ function ReservationPaymentStep({
 
 
         {/* ====================================================
-            EDIT MODE PAYMENT
+            EDIT MODE PAYMENT STATUS
         ==================================================== */}
 
         {isEditMode && (
           <div className="booking-desk-field">
 
             <label>
-              Payment Status
+              Current Payment Status
             </label>
 
             <div className="booking-desk-readonly-field">
@@ -304,11 +323,156 @@ function ReservationPaymentStep({
             </div>
 
             <small>
-              Existing payments are managed separately from
-              reservation editing.
+              Status is derived from the payment ledger.
             </small>
 
           </div>
+        )}
+
+
+        {/* ====================================================
+            EDIT MODE REFUND DETAILS
+        ==================================================== */}
+
+        {isEditMode &&
+          refundRequired && (
+          <>
+
+            <div className="booking-desk-field">
+
+              <label>
+                Refund Required
+              </label>
+
+              <div className="booking-desk-readonly-field">
+
+                <IcoRupee />
+
+                <strong>
+                  {formatCurrency(
+                    refundRequiredAmount
+                  )}
+                </strong>
+
+              </div>
+
+              <small>
+                This amount is calculated automatically by
+                the backend from the updated reservation total.
+              </small>
+
+            </div>
+
+
+            <div className="booking-desk-field">
+
+              <label htmlFor="booking-refund-method">
+                Refund Method
+                <span>*</span>
+              </label>
+
+              <select
+                id="booking-refund-method"
+                value={
+                  refund.payment_method
+                }
+                onChange={(
+                  event
+                ) =>
+                  updateRefund(
+                    "payment_method",
+                    event.target.value
+                  )
+                }
+              >
+
+                <option value="cash">
+                  Cash
+                </option>
+
+                <option value="upi">
+                  UPI
+                </option>
+
+                <option value="card">
+                  Card
+                </option>
+
+                <option value="bank_transfer">
+                  Bank Transfer
+                </option>
+
+              </select>
+
+            </div>
+
+
+            {refund.payment_method !==
+              "cash" && (
+              <div className="booking-desk-field">
+
+                <label htmlFor="booking-refund-transaction-id">
+                  Refund Transaction ID
+                  <span>*</span>
+                </label>
+
+                <input
+                  id="booking-refund-transaction-id"
+                  type="text"
+                  value={
+                    refund.transaction_id
+                  }
+                  maxLength={255}
+                  placeholder="UPI/Card/Bank refund reference"
+                  onChange={(
+                    event
+                  ) =>
+                    updateRefund(
+                      "transaction_id",
+                      event.target.value
+                    )
+                  }
+                />
+
+              </div>
+            )}
+
+
+            <div className="booking-desk-field booking-desk-field--full">
+
+              <label htmlFor="booking-refund-notes">
+                Refund Reason
+                <span>*</span>
+              </label>
+
+              <textarea
+                id="booking-refund-notes"
+                rows="3"
+                value={
+                  refund.notes
+                }
+                maxLength={500}
+                placeholder="Example: Refund due to reduced reservation duration."
+                onChange={(
+                  event
+                ) =>
+                  updateRefund(
+                    "notes",
+                    event.target.value
+                  )
+                }
+              />
+
+              <small>
+                {
+                  refund.notes.length
+                }
+                /500
+              </small>
+
+            </div>
+
+          </>
         )}
 
 
@@ -376,7 +540,9 @@ function ReservationPaymentStep({
         <div>
 
           <span>
-            Booking Total
+            {isEditMode
+              ? "Updated Booking Total"
+              : "Booking Total"}
           </span>
 
           <strong>
@@ -388,19 +554,70 @@ function ReservationPaymentStep({
         </div>
 
 
-        <div>
+        {isEditMode &&
+        refundRequired ? (
+          <>
 
-          <span>
-            Amount Received
-          </span>
+            <div>
 
-          <strong>
-            {formatCurrency(
-              paymentNow
-            )}
-          </strong>
+              <span>
+                Currently Paid
+              </span>
 
-        </div>
+              <strong>
+                {formatCurrency(
+                  currentAmountPaid
+                )}
+              </strong>
+
+            </div>
+
+
+            <div>
+
+              <span>
+                Refund Required
+              </span>
+
+              <strong>
+                -{formatCurrency(
+                  refundRequiredAmount
+                )}
+              </strong>
+
+            </div>
+
+
+            <div>
+
+              <span>
+                Net Paid After Refund
+              </span>
+
+              <strong>
+                {formatCurrency(
+                  paymentNow
+                )}
+              </strong>
+
+            </div>
+
+          </>
+        ) : (
+          <div>
+
+            <span>
+              Amount Received
+            </span>
+
+            <strong>
+              {formatCurrency(
+                paymentNow
+              )}
+            </strong>
+
+          </div>
+        )}
 
 
         <div className="booking-desk-price-summary__total">
@@ -420,16 +637,39 @@ function ReservationPaymentStep({
       </div>
 
 
-      <div className="booking-desk-note">
-        Payment Status:{" "}
-        <strong>
-          {
-            paymentPreviewStatus
-          }
-        </strong>
-        . Status is calculated from successful payment
-        records and is not manually selected.
-      </div>
+      {isEditMode &&
+      refundRequired ? (
+        <div className="booking-desk-note">
+
+          <strong>
+            Refund confirmation:
+          </strong>{" "}
+
+          {formatCurrency(
+            refundRequiredAmount
+          )}{" "}
+          will be recorded together with the reservation
+          update in one transaction.
+
+          The refund amount cannot be manually changed.
+
+        </div>
+      ) : (
+        <div className="booking-desk-note">
+
+          Payment Status:{" "}
+
+          <strong>
+            {
+              paymentPreviewStatus
+            }
+          </strong>
+
+          . Status is calculated from successful payment
+          records and is not manually selected.
+
+        </div>
+      )}
 
     </div>
   );

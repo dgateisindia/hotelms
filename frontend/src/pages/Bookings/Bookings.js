@@ -275,11 +275,93 @@ function calculateNights(
   checkIn,
   checkOut
 ) {
+  const startPart =
+    String(
+      checkIn || ""
+    ).slice(
+      0,
+      10
+    );
+
+  const endPart =
+    String(
+      checkOut || ""
+    ).slice(
+      0,
+      10
+    );
+
+
+  const startMatch =
+    /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+      startPart
+    );
+
+  const endMatch =
+    /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+      endPart
+    );
+
+
+  if (
+    !startMatch ||
+    !endMatch
+  ) {
+    return 0;
+  }
+
+
   const start =
-    new Date(checkIn);
+    Date.UTC(
+      Number(startMatch[1]),
+      Number(startMatch[2]) - 1,
+      Number(startMatch[3])
+    );
 
   const end =
-    new Date(checkOut);
+    Date.UTC(
+      Number(endMatch[1]),
+      Number(endMatch[2]) - 1,
+      Number(endMatch[3])
+    );
+
+
+  if (
+    end <= start
+  ) {
+    return 0;
+  }
+
+
+  return Math.round(
+    (
+      end -
+      start
+    ) /
+    (
+      1000 *
+      60 *
+      60 *
+      24
+    )
+  );
+}
+
+
+function calculateStayMinutes(
+  checkIn,
+  checkOut
+) {
+  const start =
+    new Date(
+      checkIn
+    );
+
+  const end =
+    new Date(
+      checkOut
+    );
+
 
   if (
     Number.isNaN(
@@ -287,33 +369,67 @@ function calculateNights(
     ) ||
     Number.isNaN(
       end.getTime()
-    )
+    ) ||
+    end <= start
   ) {
     return 0;
   }
 
-  const milliseconds =
+
+  return (
     end.getTime() -
-    start.getTime();
+    start.getTime()
+  ) / (
+    60 *
+    1000
+  );
+}
+
+
+function formatStayDuration(
+  minutes
+) {
+  const total =
+    Number(
+      minutes || 0
+    );
+
 
   if (
-    milliseconds <= 0
+    !Number.isFinite(
+      total
+    ) ||
+    total <= 0
   ) {
-    return 0;
+    return "—";
   }
 
-  return Math.max(
-    1,
-    Math.ceil(
-      milliseconds /
-        (
-          1000 *
-          60 *
-          60 *
-          24
-        )
-    )
-  );
+
+  const hours =
+    Math.floor(
+      total / 60
+    );
+
+  const mins =
+    Math.round(
+      total % 60
+    );
+
+
+  if (!mins) {
+    return `${hours} hr${
+      hours === 1
+        ? ""
+        : "s"
+    }`;
+  }
+
+
+  return `${hours} hr${
+    hours === 1
+      ? ""
+      : "s"
+  } ${mins} min`;
 }
 
 
@@ -866,30 +982,77 @@ function BookingViewDialog({
               </div>
 
               <div className="booking-detail-row">
-                <span>Check In</span>
+                <span>
+                  Stay Type
+                </span>
+
                 <strong>
-                  {formatDateTime(
-                    booking.check_in
-                  )}
+                  {booking.stay_type ===
+                    "day_use"
+                    ? "Day Use / Short Stay"
+                    : "Overnight Stay"}
+                </strong>
+              </div>
+
+
+              <div className="booking-detail-row">
+                <span>
+                  Check In
+                </span>
+
+                <strong>
+                  {booking.stay_type ===
+                    "day_use"
+                    ? formatDateTime(
+                        booking.check_in
+                      )
+                    : formatDate(
+                        booking.check_in
+                      )}
                 </strong>
               </div>
 
               <div className="booking-detail-row">
-                <span>Check Out</span>
+                <span>
+                  {booking.stay_type ===
+                    "day_use"
+                    ? "Check Out"
+                    : "Expected Check Out"}
+                </span>
+
                 <strong>
-                  {formatDateTime(
-                    booking.check_out
-                  )}
+                  {booking.stay_type ===
+                    "day_use"
+                    ? formatDateTime(
+                        booking.check_out
+                      )
+                    : formatDate(
+                        booking.check_out
+                      )}
                 </strong>
               </div>
 
               <div className="booking-detail-row">
-                <span>Nights</span>
+                <span>
+                  {booking.stay_type ===
+                    "day_use"
+                    ? "Stay Duration"
+                    : "Nights"}
+                </span>
+
                 <strong>
-                  {calculateNights(
-                    booking.check_in,
-                    booking.check_out
-                  )}
+                  {booking.stay_type ===
+                    "day_use"
+                    ? formatStayDuration(
+                        calculateStayMinutes(
+                          booking.check_in,
+                          booking.check_out
+                        )
+                      )
+                    : calculateNights(
+                        booking.check_in,
+                        booking.check_out
+                      )}
                 </strong>
               </div>
 
@@ -905,13 +1068,10 @@ function BookingViewDialog({
 
             </section>
 
-
             <section className="booking-detail-section">
-
               <h4>
                 Booking & Payment
               </h4>
-
               <div className="booking-detail-row">
                 <span>Booking Status</span>
 
@@ -1384,6 +1544,7 @@ function Bookings() {
             const searchable =
               [
                 booking.booking_code,
+                booking.group_code,
                 booking.full_name,
                 booking.phone,
                 booking.email,
@@ -2240,7 +2401,7 @@ function Bookings() {
                     </th>
 
                     <th>
-                      Nights
+                      Duration
                     </th>
 
                     <th>
@@ -2318,18 +2479,17 @@ function Bookings() {
                           0
                         );
 
-
                       const canCollectPayment =
                         status ===
                           "checked_in" &&
                         outstandingAmount >
                           0.009;
 
-
                       const canExtendStay =
                         status ===
-                        "checked_in";
-
+                          "checked_in" &&
+                        booking.stay_type !==
+                          "day_use";
 
                       const canCheckout =
                         status ===
@@ -2346,6 +2506,7 @@ function Bookings() {
 
                           <td>
                             <div className="booking-id-cell">
+
                               <strong>
                                 {booking.booking_code}
                               </strong>
@@ -2353,6 +2514,28 @@ function Bookings() {
                               <span>
                                 #{booking.booking_id}
                               </span>
+
+                              {Number(
+                                booking.group_booking_count ||
+                                0
+                              ) > 1 && (
+                                <button
+                                  type="button"
+                                  className="booking-clear-filters"
+                                  onClick={() =>
+                                    navigate(
+                                      `/bookings/groups/${booking.reservation_group_id}`
+                                    )
+                                  }
+                                  title={`Open ${booking.group_code}`}
+                                >
+                                  {booking.group_code}
+                                  {" · "}
+                                  {booking.group_booking_count}
+                                  {" rooms"}
+                                </button>
+                              )}
+
                             </div>
                           </td>
 
@@ -2408,16 +2591,29 @@ function Bookings() {
                             </div>
                           </td>
 
-
                           <td>
                             <strong className="booking-nights">
-                              {calculateNights(
-                                booking.check_in,
-                                booking.check_out
-                              )}
+                              {booking.stay_type ===
+                                "day_use"
+                                ? `Day Use · ${formatStayDuration(
+                                    calculateStayMinutes(
+                                      booking.check_in,
+                                      booking.check_out
+                                    )
+                                  )}`
+                                : `${calculateNights(
+                                    booking.check_in,
+                                    booking.check_out
+                                  )} night${
+                                    calculateNights(
+                                      booking.check_in,
+                                      booking.check_out
+                                    ) === 1
+                                      ? ""
+                                      : "s"
+                                  }`}
                             </strong>
                           </td>
-
 
                           <td>
                             <div className="booking-amount-cell">

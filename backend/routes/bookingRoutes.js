@@ -11,7 +11,11 @@ const {
   getBookingStats,
   getBookings,
   getBooking,
+  getReservationGroupDetails,
+  quoteBookingPrice,
+  quoteBookingEditPrice,
   addBooking,
+  addReservationGroupRooms,
   updateBooking,
   checkInBooking,
   extendStayBooking,
@@ -43,6 +47,43 @@ router.get(
   getBookings
 );
 
+/* ============================================================
+   BOOKING PRICE QUOTE
+============================================================ */
+
+router.post(
+  "/quote",
+  quoteBookingPrice
+);
+
+/* ============================================================
+   EXISTING BOOKING EDIT PRICE QUOTE
+============================================================ */
+
+router.post(
+  "/:id/quote",
+  quoteBookingEditPrice
+);
+
+/* ============================================================
+   ADD ROOM(S) TO RESERVATION GROUP
+============================================================ */
+
+router.post(
+  "/groups/:groupId/rooms",
+  addReservationGroupRooms
+);
+
+/* ============================================================
+   RESERVATION GROUP DETAILS
+
+   Must stay before /:id.
+============================================================ */
+
+router.get(
+  "/groups/:groupId",
+  getReservationGroupDetails
+);
 
 /* ============================================================
    SINGLE BOOKING

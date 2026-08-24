@@ -249,6 +249,26 @@ const PAGE_CONFIG = {
   },
 
 
+  "/settings": {
+    title: "Settings",
+
+    breadcrumbs: [
+      {
+        label: "Dashboard",
+        to: "/admin-dashboard",
+      },
+
+      {
+        label: "Hotel Settings",
+      },
+
+      {
+        label: "Settings",
+      },
+    ],
+  },
+
+
   "/profile-security": {
     title: "Profile & Security",
 
@@ -415,31 +435,67 @@ function AdminWorkspaceLayout() {
       ]
     );
 
-
   const currentPage =
     useMemo(
-      () =>
-        PAGE_CONFIG[
-          currentPath
-        ] || {
-          title:
-            "Hotel Admin",
+      () => {
+        if (
+          currentPath.startsWith(
+            "/bookings/groups/"
+          )
+        ) {
+          return {
+            title:
+              "Reservation Group",
 
-          breadcrumbs: [
-            {
-              label:
-                "Dashboard",
+            breadcrumbs: [
+              {
+                label:
+                  "Dashboard",
+                to:
+                  "/admin-dashboard",
+              },
+              {
+                label:
+                  "Front Desk",
+              },
+              {
+                label:
+                  "Bookings",
 
-              to:
-                "/admin-dashboard",
-            },
+                to:
+                  "/bookings",
+              },
+              {
+                label:
+                  "Reservation Group",
+              },
+            ],
+          };
+        }
 
-            {
-              label:
-                "Hotel Admin",
-            },
-          ],
-        },
+        return (
+          PAGE_CONFIG[
+            currentPath
+          ] || {
+            title:
+              "Hotel Admin",
+
+            breadcrumbs: [
+              {
+                label:
+                  "Dashboard",
+
+                to:
+                  "/admin-dashboard",
+              },
+              {
+                label:
+                  "Hotel Admin",
+              },
+            ],
+          }
+        );
+      },
       [
         currentPath,
       ]

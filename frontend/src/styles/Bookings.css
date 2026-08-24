@@ -2326,6 +2326,39 @@
 
 
 /* ============================================================
+   RESERVATION GROUP DETAILS
+============================================================ */
+
+.bookings-page .reservation-group-info-grid {
+  width: 100%;
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap:
+    var(--space-4);
+
+  padding:
+    var(--space-5);
+
+  overflow:
+    visible;
+}
+
+
+.bookings-page
+.reservation-group-info-grid
+.booking-detail-section {
+  min-width: 0;
+}
+
+
+/* ============================================================
    RESPONSIVE
 ============================================================ */
 
@@ -2355,11 +2388,9 @@
       column;
   }
 
-
   .bookings-page .bookings-toolbar-left {
     width: 100%;
   }
-
 
   .bookings-page .bookings-toolbar-right {
     width: 100%;
@@ -2368,11 +2399,17 @@
       space-between;
   }
 
-
   .bookings-page .booking-search {
     max-width:
       none;
   }
+
+  .bookings-page
+  .reservation-group-info-grid {
+    grid-template-columns:
+      1fr;
+  }
+
 }
 
 
@@ -2386,7 +2423,6 @@
     padding-top:
       var(--space-4);
   }
-
 
   .bookings-page .bookings-page-header {
     align-items:

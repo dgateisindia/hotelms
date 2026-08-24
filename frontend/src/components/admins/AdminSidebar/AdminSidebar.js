@@ -1,13 +1,11 @@
 import React from "react";
 
 import {
-  useClerk,
   useUser,
 } from "@clerk/clerk-react";
 
 import {
   NavLink,
-  useNavigate,
 } from "react-router-dom";
 
 import {
@@ -262,29 +260,16 @@ function RequestsIcon() {
 }
 
 
-function ProfileIcon() {
+function SettingsIcon() {
   return (
     <IconBase>
       <circle
         cx="12"
-        cy="8"
-        r="4"
+        cy="12"
+        r="3"
       />
 
-      <path d="M4 21a8 8 0 0 1 16 0" />
-    </IconBase>
-  );
-}
-
-
-function LogoutIcon() {
-  return (
-    <IconBase>
-      <path d="M10 17l5-5-5-5" />
-
-      <path d="M15 12H3" />
-
-      <path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1a1.7 1.7 0 0 0-.4-1.1 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1a1.7 1.7 0 0 0 1.1-.4 1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06L7.26 3.4l.06.06A1.7 1.7 0 0 0 9.2 3.8a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2h4v.1a1.7 1.7 0 0 0 .4 1.1 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8.2a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4h.1v4h-.1a1.7 1.7 0 0 0-1.1.4 1.7 1.7 0 0 0-.6 1Z" />
     </IconBase>
   );
 }
@@ -453,14 +438,15 @@ const NAVIGATION_SECTIONS = [
 
     items: [
       {
-        key: "profile-security",
-        label: "Profile & Security",
-        to: "/profile-security",
-        icon: ProfileIcon,
+        key: "settings",
+        label: "Settings",
+        to: "/settings",
+        icon: SettingsIcon,
         end: true,
       },
     ],
   },
+  
 ];
 
 
@@ -699,15 +685,6 @@ function AdminSidebar({
   } = useUser();
 
 
-  const {
-    signOut,
-  } = useClerk();
-
-
-  const navigate =
-    useNavigate();
-
-
   /* ==========================================================
      ADMIN IDENTITY
   ========================================================== */
@@ -784,32 +761,6 @@ function AdminSidebar({
       onCloseMobile();
     }
   };
-
-
-  /* ==========================================================
-     LOGOUT
-  ========================================================== */
-
-  const handleLogout =
-    async () => {
-      try {
-        await signOut();
-
-        navigate(
-          "/login",
-          {
-            replace: true,
-          }
-        );
-      } catch (
-        logoutError
-      ) {
-        console.error(
-          "[ADMIN_SIDEBAR:LOGOUT]",
-          logoutError
-        );
-      }
-    };
 
 
   /* ==========================================================
@@ -969,42 +920,8 @@ function AdminSidebar({
           )
         )}
 
-
-        {/* ====================================================
-            LOGOUT
-        ==================================================== */}
-
-        <section className="admin-sidebar__section">
-
-          <button
-            type="button"
-            className="admin-sidebar__item"
-            onClick={
-              handleLogout
-            }
-            title={
-              isCollapsed
-                ? "Logout"
-                : undefined
-            }
-          >
-
-            <span className="admin-sidebar__item-icon">
-              <LogoutIcon />
-            </span>
-
-
-            <span className="admin-sidebar__item-label">
-              Logout
-            </span>
-
-          </button>
-
-        </section>
-
       </nav>
-
-
+      
       {/* ======================================================
           ADMIN PROFILE
       ====================================================== */}

@@ -61,6 +61,11 @@ const attendanceRoutes =
 const reportRoutes =
   require("./routes/reportRoutes");
 
+const hotelSettingsRoutes =
+  require(
+    "./routes/hotelSettingsRoutes"
+  );
+
 const customerRequestRoutes =
   require(
     "./routes/customerRequestRoutes"
@@ -265,6 +270,28 @@ app.use(
   "/api/admin",
   adminRoutes
 );
+
+
+/* ============================================================
+   HOTEL SETTINGS
+
+   hotelSettingsRoutes internally handles:
+
+   Admin:
+   /api/hotel-settings
+
+   Super Admin:
+   /api/hotel-settings/hotel/:hotelId
+
+   Authentication and role checks are handled inside
+   hotelSettingsRoutes.
+============================================================ */
+
+app.use(
+  "/api/hotel-settings",
+  hotelSettingsRoutes
+);
+
 
 /* ============================================================
    LEGACY DASHBOARD COMPATIBILITY

@@ -60,6 +60,10 @@ import Bookings from "./pages/Bookings/Bookings";
 
 import BookingDesk from "./pages/BookingDesk/BookingDesk";
 
+import ReservationGroupDetails from "./pages/ReservationGroupDetails/ReservationGroupDetails";
+
+import Settings from "./pages/Settings";
+
 /* ============================================================
    SUPER ADMIN PAGES
 ============================================================ */
@@ -419,6 +423,13 @@ function App() {
             />
 
             <Route
+              path="/bookings/groups/:groupId"
+              element={
+                <ReservationGroupDetails />
+              }
+            />
+
+            <Route
               path="/rooms"
               element={
                 <Rooms />
@@ -429,6 +440,13 @@ function App() {
               path="/customers"
               element={
                 <Customers />
+              }
+            />
+
+            <Route
+              path="/settings"
+              element={
+                <Settings />
               }
             />
 
@@ -514,16 +532,6 @@ function App() {
             element={
               <ProtectedDashboard
                 page="notifications"
-              />
-            }
-          />
-
-
-          <Route
-            path="/settings"
-            element={
-              <ProtectedDashboard
-                page="settings"
               />
             }
           />

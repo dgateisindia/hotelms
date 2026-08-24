@@ -943,6 +943,382 @@ async function collectBookingPayment(
   };
 }
 
+
+/* ============================================================
+   REFUND BOOKING OVERPAYMENT
+
+   Used when an existing reservation is edited to a lower total.
+
+   Example:
+   current net paid = ₹600
+   new booking total = ₹400
+
+   required refund = ₹200
+
+   Important:
+   - Client NEVER decides refund amount.
+   - Backend calculates exact required refund.
+   - Must run inside the SAME transaction as booking update.
+   - Cash does not require transaction reference.
+   - Card / UPI / Bank Transfer require transaction reference.
+============================================================ */
+
+async function refundBookingOverpayment(
+  connection,
+  {
+    hotelId,
+    adminId,
+    bookingId,
+
+    newTotalAmount,
+
+    method,
+    transactionId,
+    notes,
+  }
+) {
+  /* ==========================================================
+     TARGET TOTAL
+  ========================================================== */
+
+  const targetTotal =
+    Number(
+      newTotalAmount
+    );
+
+
+  if (
+    !Number.isFinite(
+      targetTotal
+    ) ||
+    targetTotal < 0
+  ) {
+    throwHttp(
+      500,
+      "INVALID_UPDATED_BOOKING_TOTAL",
+      "The updated booking total is invalid."
+    );
+  }
+
+
+  /* ==========================================================
+     PAYMENT METHOD
+  ========================================================== */
+
+  const normalizedMethod =
+    String(
+      method || ""
+    )
+      .trim()
+      .toLowerCase()
+      .replace(
+        /[\s-]+/g,
+        "_"
+      );
+
+
+  const allowedMethods =
+    new Set([
+      "cash",
+      "card",
+      "upi",
+      "bank_transfer",
+    ]);
+
+
+  if (
+    !allowedMethods.has(
+      normalizedMethod
+    )
+  ) {
+    throwHttp(
+      400,
+      "INVALID_REFUND_METHOD",
+      "Select a valid refund method."
+    );
+  }
+
+
+  /* ==========================================================
+     TRANSACTION REFERENCE
+  ========================================================== */
+
+  const normalizedTransactionId =
+    String(
+      transactionId || ""
+    ).trim();
+
+
+  if (
+    normalizedMethod !==
+      "cash" &&
+    !normalizedTransactionId
+  ) {
+    throwHttp(
+      400,
+      "REFUND_TRANSACTION_ID_REQUIRED",
+      "Transaction ID is required for non-cash refunds."
+    );
+  }
+
+
+  if (
+    normalizedTransactionId.length >
+    255
+  ) {
+    throwHttp(
+      400,
+      "REFUND_TRANSACTION_ID_TOO_LONG",
+      "Refund transaction ID is too long."
+    );
+  }
+
+
+  /* ==========================================================
+     NOTES
+  ========================================================== */
+
+  const normalizedNotes =
+    String(
+      notes || ""
+    ).trim();
+
+
+  if (
+    normalizedNotes.length >
+    500
+  ) {
+    throwHttp(
+      400,
+      "REFUND_NOTES_TOO_LONG",
+      "Refund notes cannot exceed 500 characters."
+    );
+  }
+
+
+  /* ==========================================================
+     LOCK CURRENT PAYMENT LEDGER
+
+     getLockedPaymentState() uses FOR UPDATE.
+  ========================================================== */
+
+  const currentState =
+    await getLockedPaymentState(
+      connection,
+      hotelId,
+      bookingId,
+      targetTotal
+    );
+
+
+  const currentNetPaid =
+    Math.max(
+      0,
+      Number(
+        currentState.netPaid ||
+        0
+      )
+    );
+
+
+  const requiredRefund =
+    Number(
+      Math.max(
+        0,
+        currentNetPaid -
+          targetTotal
+      ).toFixed(2)
+    );
+
+
+  if (
+    requiredRefund <=
+    0.009
+  ) {
+    throwHttp(
+      409,
+      "BOOKING_REFUND_NOT_REQUIRED",
+      "No refund is required for the updated reservation total."
+    );
+  }
+
+
+  /*
+   * Defensive check:
+   * Never refund more than the remaining successful
+   * net amount received for this booking.
+   */
+  if (
+    requiredRefund >
+    currentNetPaid +
+      0.009
+  ) {
+    throwHttp(
+      409,
+      "REFUND_EXCEEDS_NET_PAYMENT",
+      "The refund amount exceeds the net amount paid on this booking."
+    );
+  }
+
+
+  /* ==========================================================
+     RECORD REFUND
+
+     payment_stage = other because this refund is caused by
+     a pre-stay reservation edit, not normal payment collection.
+  ========================================================== */
+
+  const auditNote =
+    [
+      "Automatic refund required by reservation price reduction.",
+
+      `Updated booking total: ₹${targetTotal.toFixed(
+        2
+      )}.`,
+
+      normalizedNotes ||
+        null,
+    ]
+      .filter(
+        Boolean
+      )
+      .join(" ")
+      .slice(
+        0,
+        500
+      );
+
+
+  const [result] =
+    await connection.query(
+      `
+        INSERT INTO payments (
+          hotel_id,
+          booking_id,
+
+          transaction_type,
+          payment_stage,
+
+          amount,
+          payment_method,
+          transaction_id,
+
+          created_by_admin_id,
+          notes,
+
+          payment_status
+        )
+
+        VALUES (
+          ?,
+          ?,
+
+          'refund',
+          'other',
+
+          ?,
+          ?,
+          ?,
+
+          ?,
+          ?,
+
+          'success'
+        )
+      `,
+      [
+        hotelId,
+        bookingId,
+
+        requiredRefund,
+        normalizedMethod,
+
+        normalizedMethod ===
+          "cash"
+          ? null
+          : normalizedTransactionId,
+
+        adminId,
+        auditNote,
+      ]
+    );
+
+
+  /* ==========================================================
+     VERIFY FINAL LEDGER STATE AGAINST UPDATED TOTAL
+  ========================================================== */
+
+  const finalState =
+    await getLockedPaymentState(
+      connection,
+      hotelId,
+      bookingId,
+      targetTotal
+    );
+
+
+  if (
+    finalState.netPaid >
+    targetTotal + 0.009
+  ) {
+    throwHttp(
+      500,
+      "REFUND_RECONCILIATION_FAILED",
+      "The payment ledger could not be reconciled with the updated reservation total."
+    );
+  }
+
+
+  return {
+    refundPaymentId:
+      Number(
+        result.insertId
+      ),
+
+    bookingId,
+
+    refundAmount:
+      requiredRefund,
+
+    refundMethod:
+      normalizedMethod,
+
+    transactionId:
+      normalizedMethod ===
+        "cash"
+        ? null
+        : normalizedTransactionId,
+
+    previousNetPaid:
+      currentNetPaid,
+
+    updatedNetPaid:
+      Math.max(
+        0,
+        Number(
+          finalState.netPaid ||
+          0
+        )
+      ),
+
+    updatedBookingTotal:
+      targetTotal,
+
+    outstandingAmount:
+      Number(
+        Math.max(
+          0,
+          finalState
+            .outstandingAmount
+        ).toFixed(2)
+      ),
+
+    paymentStatus:
+      finalState
+        .paymentStatus,
+  };
+}
+
 /* ============================================================
    EXPORTS
 ============================================================ */
@@ -953,4 +1329,5 @@ module.exports = {
   syncBookingPaymentStatus,
   applyInitialPayment,
   collectBookingPayment,
+  refundBookingOverpayment,
 };

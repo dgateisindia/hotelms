@@ -35,25 +35,59 @@ function throwHttp(
 
 
 /* ============================================================
-   LOCK SELECTED ROOMS
+   LOAD ROOMS FOR BOOKING
+
+   forUpdate = true
+   → final booking/edit transaction
+   → room rows are locked
+
+   forUpdate = false
+   → pricing preview only
+   → no unnecessary database row locks
 ============================================================ */
 
-async function lockRooms(
+async function loadRooms(
   connection,
   hotelId,
-  items
+  items,
+  {
+    forUpdate = false,
+  } = {}
 ) {
   const roomIds = [
     ...new Set(
-      items.map(
+      (
+        Array.isArray(items)
+          ? items
+          : []
+      ).map(
         (item) =>
-          item.roomId
+          Number(
+            item?.roomId
+          )
       )
     ),
-  ].sort(
-    (a, b) =>
-      a - b
-  );
+  ]
+    .filter(
+      (roomId) =>
+        Number.isSafeInteger(
+          roomId
+        ) &&
+        roomId > 0
+    )
+    .sort(
+      (a, b) =>
+        a - b
+    );
+
+
+  if (!roomIds.length) {
+    throwHttp(
+      400,
+      "ROOM_SELECTION_REQUIRED",
+      "At least one valid room is required."
+    );
+  }
 
 
   const placeholders =
@@ -81,7 +115,11 @@ async function lockRooms(
 
         ORDER BY room_id ASC
 
-        FOR UPDATE
+        ${
+          forUpdate
+            ? "FOR UPDATE"
+            : ""
+        }
       `,
       [
         hotelId,
@@ -116,12 +154,24 @@ async function lockRooms(
 
 
   for (
-    const item of items
+    const item of
+      items
   ) {
     const room =
       roomMap.get(
-        item.roomId
+        Number(
+          item.roomId
+        )
       );
+
+
+    if (!room) {
+      throwHttp(
+        404,
+        "ROOM_NOT_FOUND",
+        "The selected room was not found in this hotel."
+      );
+    }
 
 
     if (
@@ -137,7 +187,9 @@ async function lockRooms(
 
 
     if (
-      item.totalGuests >
+      Number(
+        item.totalGuests
+      ) >
       Number(
         room.capacity
       )
@@ -152,6 +204,46 @@ async function lockRooms(
 
 
   return roomMap;
+}
+
+
+/* ============================================================
+   FINAL TRANSACTION ROOM LOCK
+============================================================ */
+
+async function lockRooms(
+  connection,
+  hotelId,
+  items
+) {
+  return loadRooms(
+    connection,
+    hotelId,
+    items,
+    {
+      forUpdate: true,
+    }
+  );
+}
+
+
+/* ============================================================
+   READ-ONLY ROOM DATA FOR PRICING PREVIEW
+============================================================ */
+
+async function getRoomsForPricing(
+  connection,
+  hotelId,
+  items
+) {
+  return loadRooms(
+    connection,
+    hotelId,
+    items,
+    {
+      forUpdate: false,
+    }
+  );
 }
 
 
@@ -386,6 +478,10 @@ async function createInitialRoomHistory(
 
 module.exports = {
   lockRooms,
+
+  getRoomsForPricing,
+
   ensureNoOverlap,
+
   createInitialRoomHistory,
 };

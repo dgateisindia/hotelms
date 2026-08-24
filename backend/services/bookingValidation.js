@@ -31,6 +31,10 @@ const RESERVATION_EDIT_STATUSES = new Set([
   "confirmed",
 ]);
 
+const STAY_TYPES = new Set([
+  "overnight",
+  "day_use",
+]);
 
 const BOOKING_SOURCES = new Set([
   "walk_in",
@@ -154,6 +158,239 @@ function normalizeOptionalText(
   return text;
 }
 
+/* ============================================================
+   ROOM GUEST ROSTER INPUT
+
+   This performs only structural request validation.
+
+   Hotel-policy validation such as:
+   - Adult / Child age
+   - ID requirements
+   - Extra-bed rules
+   - Child pricing
+
+   belongs to bookingGuestService.
+============================================================ */
+
+function normalizeGuestRosterFlag(
+  value
+) {
+  if (
+    value === undefined ||
+    value === null ||
+    String(value).trim() === ""
+  ) {
+    return {
+      provided: false,
+      value: false,
+    };
+  }
+
+  if (
+    value === true ||
+    value === 1 ||
+    value === "1"
+  ) {
+    return {
+      provided: true,
+      value: true,
+    };
+  }
+
+  if (
+    value === false ||
+    value === 0 ||
+    value === "0"
+  ) {
+    return {
+      provided: true,
+      value: false,
+    };
+  }
+
+  return null;
+}
+
+function normalizeRoomGuestRoster(
+  raw,
+  label
+) {
+  const primaryRaw =
+    raw?.primary_guest_staying ??
+    raw?.primaryGuestStaying;
+
+  /*
+   * Legacy bookings currently send only total_guests.
+   *
+   * During Guest & Occupancy rollout we preserve that flow
+   * until controller/frontend integration is complete.
+   */
+  const guestRosterProvided =
+    primaryRaw !== undefined ||
+    raw?.guests !== undefined;
+
+
+  if (
+    !guestRosterProvided
+  ) {
+    return {
+      error: "",
+
+      value: {
+        guestRosterProvided:
+          false,
+
+        primaryGuestStaying:
+          false,
+
+        guests:
+          null,
+
+        totalGuests:
+          null,
+      },
+    };
+  }
+
+  const primaryFlag =
+    normalizeGuestRosterFlag(
+      primaryRaw
+    );
+
+  if (
+    primaryFlag === null
+  ) {
+    return {
+      error:
+        `${label}: primary_guest_staying must be true or false.`,
+    };
+  }
+
+  const rawGuests =
+    raw?.guests === undefined ||
+    raw?.guests === null
+      ? []
+      : raw.guests;
+
+  if (
+    !Array.isArray(
+      rawGuests
+    )
+  ) {
+    return {
+      error:
+        `${label}: guests must be an array.`,
+    };
+  }
+
+  const guests = [];
+
+  for (
+    let guestIndex = 0;
+    guestIndex <
+      rawGuests.length;
+    guestIndex += 1
+  ) {
+    const guest =
+      rawGuests[
+        guestIndex
+      ];
+
+    if (
+      !guest ||
+      typeof guest !==
+        "object" ||
+      Array.isArray(
+        guest
+      )
+    ) {
+      return {
+        error:
+          `${label}: guest ${guestIndex + 1} details are invalid.`,
+      };
+    }
+
+    guests.push({
+      ...guest,
+    });
+  }
+
+  /*
+   * Primary guest is also an actual staying occupant.
+   */
+  const totalGuests =
+    (
+      primaryFlag.value
+        ? 1
+        : 0
+    ) +
+    guests.length;
+
+  if (
+    totalGuests < 1
+  ) {
+    return {
+      error:
+        `${label}: add at least one staying guest.`,
+    };
+  }
+
+  /*
+   * If client still supplies total_guests together with
+   * the roster, it must exactly match the actual roster.
+   *
+   * Server never silently trusts a conflicting count.
+   */
+  if (
+    raw?.total_guests !==
+      undefined &&
+    raw?.total_guests !==
+      null &&
+    String(
+      raw.total_guests
+    ).trim() !== ""
+  ) {
+    const declaredTotal =
+      parsePositiveInteger(
+        raw.total_guests
+      );
+
+    if (
+      !declaredTotal
+    ) {
+      return {
+        error:
+          `${label}: total_guests must be at least 1.`,
+      };
+    }
+
+    if (
+      declaredTotal !==
+      totalGuests
+    ) {
+      return {
+        error:
+          `${label}: total_guests must match the room guest roster.`,
+      };
+    }
+  }
+
+  return {
+    error: "",
+
+    value: {
+      guestRosterProvided:
+        true,
+
+      primaryGuestStaying:
+        primaryFlag.value,
+
+      guests,
+
+      totalGuests,
+    },
+  };
+}
 
 /* ============================================================
    PHONE
@@ -453,6 +690,28 @@ function normalizeBookingSource(
   return source;
 }
 
+function normalizeStayType(
+  value,
+  fallback = "overnight"
+) {
+  const stayType =
+    normalizeEnum(
+      value ||
+      fallback
+    );
+
+
+  if (
+    !STAY_TYPES.has(
+      stayType
+    )
+  ) {
+    return null;
+  }
+
+
+  return stayType;
+}
 
 /* ============================================================
    DATE HELPERS
@@ -615,7 +874,6 @@ function toMillis(
   );
 }
 
-
 function calculateNights(
   checkIn,
   checkOut
@@ -636,18 +894,122 @@ function calculateNights(
   }
 
 
+  const startDate =
+    String(
+      checkIn
+    ).slice(
+      0,
+      10
+    );
+
+
+  const endDate =
+    String(
+      checkOut
+    ).slice(
+      0,
+      10
+    );
+
+
+  const startMatch =
+    /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+      startDate
+    );
+
+
+  const endMatch =
+    /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+      endDate
+    );
+
+
+  if (
+    !startMatch ||
+    !endMatch
+  ) {
+    return 0;
+  }
+
+
+  const startDay =
+    Date.UTC(
+      Number(
+        startMatch[1]
+      ),
+      Number(
+        startMatch[2]
+      ) - 1,
+      Number(
+        startMatch[3]
+      )
+    );
+
+
+  const endDay =
+    Date.UTC(
+      Number(
+        endMatch[1]
+      ),
+      Number(
+        endMatch[2]
+      ) - 1,
+      Number(
+        endMatch[3]
+      )
+    );
+
+
   return Math.max(
-    1,
-    Math.ceil(
+    0,
+    Math.round(
       (
-        end -
-        start
+        endDay -
+        startDay
       ) /
       DAY_MS
     )
   );
 }
 
+
+function calculateStayMinutes(
+  checkIn,
+  checkOut
+) {
+  const start =
+    toMillis(
+      checkIn
+    );
+
+
+  const end =
+    toMillis(
+      checkOut
+    );
+
+
+  if (
+    !Number.isFinite(
+      start
+    ) ||
+    !Number.isFinite(
+      end
+    ) ||
+    end <= start
+  ) {
+    return 0;
+  }
+
+
+  return (
+    end -
+    start
+  ) / (
+    60 *
+    1000
+  );
+}
 
 function rangesOverlap(
   first,
@@ -958,19 +1320,116 @@ function validateBookingItems(
       };
     }
 
+    const stayType =
+      normalizeStayType(
+        raw.stay_type ??
+        source.stay_type
+      );
 
-    const totalGuests =
-      raw.total_guests ===
-        undefined ||
-      raw.total_guests ===
-        null ||
+
+    if (!stayType) {
+      return {
+        error:
+          `${label}: stay type must be overnight or day_use.`,
+      };
+    }
+
+
+    const nights =
+      calculateNights(
+        checkIn,
+        checkOut
+      );
+
+
+    const durationMinutes =
+      calculateStayMinutes(
+        checkIn,
+        checkOut
+      );
+
+    if (
+      stayType ===
+        "overnight" &&
+      nights < 1
+    ) {
+      return {
+        error:
+          `${label}: an overnight stay must have a checkout date after the check-in date. Use Day Use / Short Stay for a same-day booking.`,
+      };
+    }
+
+    if (
+      stayType ===
+        "day_use" &&
       String(
-        raw.total_guests
-      ).trim() === ""
-        ? 1
-        : parsePositiveInteger(
+        checkIn
+      ).slice(
+        0,
+        10
+      ) !==
+      String(
+        checkOut
+      ).slice(
+        0,
+        10
+      )
+    ) {
+      return {
+        error:
+          `${label}: Day Use / Short Stay must initially start and end on the same calendar date.`,
+      };
+    }
+
+    const guestRosterResult =
+      normalizeRoomGuestRoster(
+        raw,
+        label
+      );
+
+
+    if (
+      guestRosterResult.error
+    ) {
+      return {
+        error:
+          guestRosterResult.error,
+      };
+    }
+
+
+    const {
+      guestRosterProvided,
+      primaryGuestStaying,
+      guests,
+    } =
+      guestRosterResult.value;
+
+
+    /*
+    * New Guest & Occupancy flow:
+    * count comes from the actual roster.
+    *
+    * Transitional legacy flow:
+    * existing total_guests behavior remains intact until
+    * all booking entry points are connected.
+    */
+    const totalGuests =
+      guestRosterProvided
+        ? guestRosterResult
+            .value
+            .totalGuests
+        : raw.total_guests ===
+            undefined ||
+          raw.total_guests ===
+            null ||
+          String(
             raw.total_guests
-          );
+          ).trim() === ""
+            ? 1
+            : parsePositiveInteger(
+                raw.total_guests
+              );
 
 
     if (!totalGuests) {
@@ -1026,14 +1485,44 @@ function validateBookingItems(
 
     items.push({
       roomId,
+
+      stayType,
+
       checkIn,
       checkOut,
+
+      nights,
+      durationMinutes,
+
       totalGuests,
+
+      guestRosterProvided,
+      primaryGuestStaying,
+      guests,
+
       bookingStatus,
       specialRequest,
     });
+
   }
 
+  const stayTypes =
+    new Set(
+      items.map(
+        (item) =>
+          item.stayType
+      )
+    );
+
+
+  if (
+    stayTypes.size > 1
+  ) {
+    return {
+      error:
+        "All rooms in one reservation must use the same stay type.",
+    };
+  }
 
   /*
    * Same room cannot be supplied twice for
@@ -1239,12 +1728,15 @@ module.exports = {
   RESERVATION_EDIT_STATUSES,
 
   parsePositiveInteger,
+
   normalizeBookingSource,
+  normalizeStayType,
 
   normalizeIndianPhone,
   getPhoneCandidates,
 
   calculateNights,
+  calculateStayMinutes,
 
   validateCustomer,
   validateBookingItems,

@@ -1,4 +1,7 @@
-import React from "react";
+import React, {
+  useEffect,
+  useState,
+} from "react";
 
 import {
   IcoCalendar,
@@ -10,12 +13,129 @@ import {
 } from "../bookingUtils";
 
 
+/* ============================================================
+   DAY USE HELPERS
+============================================================ */
+
+function getDatePart(
+  value
+) {
+  const text =
+    String(
+      value || ""
+    );
+
+
+  return /^\d{4}-\d{2}-\d{2}/
+    .test(text)
+      ? text.slice(
+          0,
+          10
+        )
+      : "";
+}
+
+
+function getTimePart(
+  value
+) {
+  const match =
+    /[ T](\d{2}):(\d{2})/
+      .exec(
+        String(
+          value || ""
+        )
+      );
+
+
+  return match
+    ? `${match[1]}:${match[2]}`
+    : "";
+}
+
+
+function buildDateTime(
+  date,
+  time
+) {
+  if (
+    !date ||
+    !time
+  ) {
+    return "";
+  }
+
+
+  return (
+    `${date}T${time}:00`
+  );
+}
+
+
+function formatDuration(
+  minutes
+) {
+  const total =
+    Number(
+      minutes || 0
+    );
+
+
+  if (
+    !Number.isFinite(
+      total
+    ) ||
+    total <= 0
+  ) {
+    return "—";
+  }
+
+
+  const hours =
+    Math.floor(
+      total / 60
+    );
+
+
+  const remaining =
+    Math.round(
+      total % 60
+    );
+
+
+  if (
+    remaining === 0
+  ) {
+    return `${hours} hr${
+      hours === 1
+        ? ""
+        : "s"
+    }`;
+  }
+
+
+  return (
+    `${hours} hr${
+      hours === 1
+        ? ""
+        : "s"
+    } ${remaining} min`
+  );
+}
+
+
+/* ============================================================
+   COMPONENT
+============================================================ */
+
 function StayRoomsStep({
   booking,
   isEditMode,
   today,
   nights,
   updateBooking,
+
+  stayTypeLocked,
 
   selectedRooms,
   availableRooms,
@@ -28,7 +148,251 @@ function StayRoomsStep({
   updateRoomGuests,
 
   roomTotals,
+
+  dayUseEnabled,
+  dayUsePolicy,
+  policyLoading,
+  policyError,
+
+  dayUseDurationMinutes,
+
+  pricingQuote,
+  quoteLoading,
+  quoteError,
 }) {
+  const isDayUse =
+    booking.stay_type ===
+    "day_use";
+
+
+  /*
+   * Local UI values are used so selecting only
+   * the Day Use date does not accidentally create
+   * a fake midnight booking.
+   */
+  const [
+    dayUseDate,
+    setDayUseDate,
+  ] = useState("");
+
+
+  const [
+    dayUseCheckInTime,
+    setDayUseCheckInTime,
+  ] = useState("");
+
+
+  const [
+    dayUseCheckOutTime,
+    setDayUseCheckOutTime,
+  ] = useState("");
+
+
+  /* ==========================================================
+     SYNC DAY USE UI FROM BOOKING
+
+     Important for:
+     - returning to Step 2
+     - future Day Use edit mode
+  ========================================================== */
+
+  useEffect(() => {
+    if (
+      !isDayUse
+    ) {
+      return;
+    }
+
+
+    setDayUseDate(
+      getDatePart(
+        booking.check_in
+      ) ||
+      getDatePart(
+        booking.check_out
+      )
+    );
+
+
+    setDayUseCheckInTime(
+      getTimePart(
+        booking.check_in
+      )
+    );
+
+
+    setDayUseCheckOutTime(
+      getTimePart(
+        booking.check_out
+      )
+    );
+  }, [
+    isDayUse,
+    booking.check_in,
+    booking.check_out,
+  ]);
+
+
+  /* ==========================================================
+     DAY USE INPUT HANDLERS
+  ========================================================== */
+
+  function applyDayUseValues(
+    date,
+    checkInTime,
+    checkOutTime
+  ) {
+    updateBooking(
+      "check_in",
+      buildDateTime(
+        date,
+        checkInTime
+      )
+    );
+
+
+    updateBooking(
+      "check_out",
+      buildDateTime(
+        date,
+        checkOutTime
+      )
+    );
+  }
+
+
+  function changeDayUseDate(
+    value
+  ) {
+    setDayUseDate(
+      value
+    );
+
+
+    applyDayUseValues(
+      value,
+      dayUseCheckInTime,
+      dayUseCheckOutTime
+    );
+  }
+
+
+  function changeDayUseCheckInTime(
+    value
+  ) {
+    setDayUseCheckInTime(
+      value
+    );
+
+
+    applyDayUseValues(
+      dayUseDate,
+      value,
+      dayUseCheckOutTime
+    );
+  }
+
+
+  function changeDayUseCheckOutTime(
+    value
+  ) {
+    setDayUseCheckOutTime(
+      value
+    );
+
+
+    applyDayUseValues(
+      dayUseDate,
+      dayUseCheckInTime,
+      value
+    );
+  }
+
+
+  const durationLabel =
+    formatDuration(
+      dayUseDurationMinutes
+    );
+
+
+  const quoteTotal =
+    Number(
+      pricingQuote
+        ?.total_amount ||
+      0
+    );
+
+  const editPreviousTotal =
+    Number(
+      pricingQuote
+        ?.previous_total_amount ||
+      0
+    );
+
+
+  const editUpdatedTotal =
+    Number(
+      pricingQuote
+        ?.total_amount ||
+      0
+    );
+
+
+  const editDifference =
+    Number(
+      pricingQuote
+        ?.difference_amount ||
+      0
+    );
+
+
+  const editAmountPaid =
+    Number(
+      pricingQuote
+        ?.amount_paid ||
+      0
+    );
+
+
+  const editBalanceDue =
+    Number(
+      pricingQuote
+        ?.outstanding_amount ||
+      0
+    );
+
+
+  const editPaymentConflict =
+    pricingQuote
+      ?.payment_conflict ===
+    true;
+
+
+  const editRefundRequired =
+    Math.max(
+      0,
+      Number(
+        (
+          editAmountPaid -
+          editUpdatedTotal
+        ).toFixed(2)
+      )
+    );
+
+
+  const editQuoteReady =
+    isEditMode &&
+    pricingQuote &&
+    selectedRooms.length === 1 &&
+    Number(
+      pricingQuote.room_id
+    ) ===
+      Number(
+        selectedRooms[0]
+          ?.room_id
+      );
+
+
   return (
     <div className="booking-desk-section">
 
@@ -45,7 +409,7 @@ function StayRoomsStep({
           </h2>
 
           <p>
-            Choose the planned stay dates and select rooms
+            Choose the planned stay and select rooms
             that are genuinely available.
           </p>
 
@@ -55,98 +419,503 @@ function StayRoomsStep({
 
 
       {/* ======================================================
-          STAY DATES
+          STAY TYPE
       ====================================================== */}
 
-      <div className="booking-desk-stay-grid">
+      <div className="booking-desk-field">
 
+        <label htmlFor="booking-stay-type">
+          Stay Type
+          <span>*</span>
+        </label>
 
-        <div className="booking-desk-field">
+        <select
+          id="booking-stay-type"
+          value={
+            booking.stay_type
+          }
+          disabled={
+            isEditMode ||
+            stayTypeLocked ||
+            policyLoading
+          }
+          onChange={(
+            event
+          ) =>
+            updateBooking(
+              "stay_type",
+              event.target.value
+            )
+          }
+        >
+          <option value="overnight">
+            Overnight Stay
+          </option>
 
-          <label htmlFor="booking-check-in">
-            Check In
-            <span>*</span>
-          </label>
+          {(
+            dayUseEnabled ||
+            booking.stay_type ===
+              "day_use"
+          ) && (
+            <option value="day_use">
+              Day Use / Short Stay
+            </option>
+          )}
+        </select>
 
-          <div className="booking-desk-input-icon">
+        {stayTypeLocked ? (
+          <small>
+            Stay type is inherited from the reservation group
+            and cannot be changed while adding rooms.
+          </small>
+        ) : (
+          <>
+            {!isEditMode &&
+              policyLoading && (
+                <small>
+                  Checking hotel stay policy...
+                </small>
+              )}
 
-            <IcoCalendar />
+            {!isEditMode &&
+              !policyLoading &&
+              policyError && (
+                <small>
+                  {policyError}
+                </small>
+              )}
 
-            <input
-              id="booking-check-in"
-              type="date"
-              min={
-                isEditMode
-                  ? undefined
-                  : today
-              }
-              value={
-                booking.check_in
-              }
-              onChange={(
-                event
-              ) =>
-                updateBooking(
-                  "check_in",
-                  event.target.value
-                )
-              }
-            />
+            {!isEditMode &&
+              !policyLoading &&
+              !policyError &&
+              !dayUseEnabled && (
+                <small>
+                  Day Use / Short Stay is currently disabled
+                  in Hotel Settings.
+                </small>
+              )}
 
-          </div>
-
-        </div>
-
-
-        <div className="booking-desk-field">
-
-          <label htmlFor="booking-check-out">
-            Expected Check Out
-            <span>*</span>
-          </label>
-
-          <div className="booking-desk-input-icon">
-
-            <IcoCalendar />
-
-            <input
-              id="booking-check-out"
-              type="date"
-              min={
-                booking.check_in ||
-                today
-              }
-              value={
-                booking.check_out
-              }
-              onChange={(
-                event
-              ) =>
-                updateBooking(
-                  "check_out",
-                  event.target.value
-                )
-              }
-            />
-
-          </div>
-
-        </div>
-
-
-        <div className="booking-desk-stay-summary">
-
-          <span>
-            Total Nights
-          </span>
-
-          <strong>
-            {nights}
-          </strong>
-
-        </div>
+            {!isEditMode &&
+              isDayUse &&
+              dayUseEnabled && (
+                <small>
+                  Day Use pricing is calculated automatically
+                  from the hotel policy.
+                </small>
+              )}
+          </>
+        )}
 
       </div>
+
+
+      {/* ======================================================
+          OVERNIGHT STAY
+      ====================================================== */}
+
+      {!isDayUse && (
+        <div className="booking-desk-stay-grid">
+
+
+          <div className="booking-desk-field">
+
+            <label htmlFor="booking-check-in">
+              Check In
+              <span>*</span>
+            </label>
+
+            <div className="booking-desk-input-icon">
+
+              <IcoCalendar />
+
+              <input
+                id="booking-check-in"
+                type="date"
+                min={
+                  isEditMode
+                    ? undefined
+                    : today
+                }
+                value={
+                  booking.check_in
+                }
+                onChange={(
+                  event
+                ) =>
+                  updateBooking(
+                    "check_in",
+                    event.target.value
+                  )
+                }
+              />
+
+            </div>
+
+          </div>
+
+
+          <div className="booking-desk-field">
+
+            <label htmlFor="booking-check-out">
+              Expected Check Out
+              <span>*</span>
+            </label>
+
+            <div className="booking-desk-input-icon">
+
+              <IcoCalendar />
+
+              <input
+                id="booking-check-out"
+                type="date"
+                min={
+                  booking.check_in ||
+                  today
+                }
+                value={
+                  booking.check_out
+                }
+                onChange={(
+                  event
+                ) =>
+                  updateBooking(
+                    "check_out",
+                    event.target.value
+                  )
+                }
+              />
+
+            </div>
+
+          </div>
+
+
+          <div className="booking-desk-stay-summary">
+
+            <span>
+              Total Nights
+            </span>
+
+            <strong>
+              {nights}
+            </strong>
+
+          </div>
+
+        </div>
+      )}
+
+
+      {/* ======================================================
+          DAY USE / SHORT STAY
+      ====================================================== */}
+
+      {isDayUse && (
+        <div className="booking-desk-stay-grid">
+
+
+          <div className="booking-desk-field">
+
+            <label htmlFor="day-use-date">
+              Stay Date
+              <span>*</span>
+            </label>
+
+            <div className="booking-desk-input-icon">
+
+              <IcoCalendar />
+
+              <input
+                id="day-use-date"
+                type="date"
+                min={
+                  isEditMode
+                    ? undefined
+                    : today
+                }
+                value={
+                  dayUseDate
+                }
+                onChange={(
+                  event
+                ) =>
+                  changeDayUseDate(
+                    event.target.value
+                  )
+                }
+              />
+
+            </div>
+
+          </div>
+
+
+          <div className="booking-desk-field">
+
+            <label htmlFor="day-use-check-in-time">
+              Check-In Time
+              <span>*</span>
+            </label>
+
+            <input
+              id="day-use-check-in-time"
+              type="time"
+              value={
+                dayUseCheckInTime
+              }
+              disabled={
+                !dayUseDate
+              }
+              onChange={(
+                event
+              ) =>
+                changeDayUseCheckInTime(
+                  event.target.value
+                )
+              }
+            />
+
+          </div>
+
+
+          <div className="booking-desk-field">
+
+            <label htmlFor="day-use-check-out-time">
+              Check-Out Time
+              <span>*</span>
+            </label>
+
+            <input
+              id="day-use-check-out-time"
+              type="time"
+              value={
+                dayUseCheckOutTime
+              }
+              disabled={
+                !dayUseDate
+              }
+              onChange={(
+                event
+              ) =>
+                changeDayUseCheckOutTime(
+                  event.target.value
+                )
+              }
+            />
+
+          </div>
+
+
+          <div className="booking-desk-stay-summary">
+
+            <span>
+              Stay Duration
+            </span>
+
+            <strong>
+              {durationLabel}
+            </strong>
+
+          </div>
+
+        </div>
+      )}
+
+
+      {/* ======================================================
+          DAY USE QUOTE STATUS
+      ====================================================== */}
+
+      {isDayUse &&
+        !isEditMode &&
+        selectedRooms.length >
+          0 && (
+          <div
+            className={
+              quoteError
+                ? "booking-desk-room-state booking-desk-room-state--error"
+                : "booking-desk-room-state"
+            }
+          >
+            {quoteLoading
+              ? "Calculating Day Use price..."
+              : quoteError
+                ? quoteError
+                : pricingQuote
+                  ? `Day Use price confirmed: ${formatCurrency(
+                      quoteTotal
+                    )}`
+                  : "Select a valid Day Use time range to calculate the price."}
+          </div>
+        )}
+
+      {/* ======================================================
+          EDIT PRICE PREVIEW
+      ====================================================== */}
+
+      {isEditMode &&
+        selectedRooms.length >
+          0 && (
+          <section className="booking-desk-review-card">
+
+            <h3>
+              Price Update
+            </h3>
+
+
+            {quoteLoading ? (
+              <div>
+                <span>
+                  Status
+                </span>
+
+                <strong>
+                  Recalculating...
+                </strong>
+              </div>
+            ) : quoteError ? (
+              <div>
+                <span>
+                  Pricing
+                </span>
+
+                <strong>
+                  {quoteError}
+                </strong>
+              </div>
+            ) : editQuoteReady ? (
+              <>
+
+                <div>
+                  <span>
+                    Previous Total
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      editPreviousTotal
+                    )}
+                  </strong>
+                </div>
+
+
+                <div>
+                  <span>
+                    Updated Total
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      editUpdatedTotal
+                    )}
+                  </strong>
+                </div>
+
+
+                <div>
+                  <span>
+                    {editDifference > 0
+                      ? "Additional Amount"
+                      : editDifference < 0
+                        ? "Reduction"
+                        : "Price Change"}
+                  </span>
+
+                  <strong>
+                    {editDifference > 0
+                      ? `+${formatCurrency(
+                          editDifference
+                        )}`
+                      : editDifference < 0
+                        ? `-${formatCurrency(
+                            Math.abs(
+                              editDifference
+                            )
+                          )}`
+                        : formatCurrency(
+                            0
+                          )}
+                  </strong>
+                </div>
+
+
+                <div>
+                  <span>
+                    Already Paid
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      editAmountPaid
+                    )}
+                  </strong>
+                </div>
+
+
+                <div>
+                  <span>
+                    Updated Balance Due
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      editBalanceDue
+                    )}
+                  </strong>
+                </div>
+
+
+                {editPaymentConflict && (
+                  <div className="booking-desk-room-state booking-desk-room-state--error">
+
+                    <div>
+                      <strong>
+                        Payment adjustment required
+                      </strong>
+
+                      <p>
+                        The updated reservation total is lower than
+                        the amount already paid.
+                      </p>
+
+                      <p>
+                        <strong>
+                          {formatCurrency(
+                            editRefundRequired
+                          )}
+                        </strong>{" "}
+                        must be refunded or adjusted before this
+                        reservation can continue.
+                      </p>
+                    </div>
+
+                  </div>
+                )}
+
+              </>
+            ) : (
+              <div>
+                <span>
+                  Pricing
+                </span>
+
+                <strong>
+                  Waiting for a valid reservation price...
+                </strong>
+              </div>
+            )}
+
+
+            {editQuoteReady &&
+              isDayUse && (
+                <small>
+                  Day Use pricing is recalculated using the
+                  original booking-time hotel policy.
+                </small>
+              )}
+
+          </section>
+        )}
 
 
       {/* ======================================================
@@ -185,8 +954,9 @@ function StayRoomsStep({
       !booking.check_out ? (
 
         <div className="booking-desk-room-state">
-          Select check-in and expected check-out dates to
-          see available rooms.
+          {isDayUse
+            ? "Select the stay date, check-in time and check-out time to see available rooms."
+            : "Select check-in and expected check-out dates to see available rooms."}
         </div>
 
       ) : roomsLoading ? (
@@ -205,7 +975,7 @@ function StayRoomsStep({
         0 ? (
 
         <div className="booking-desk-room-state">
-          No rooms are available for the selected dates.
+          No rooms are available for the selected stay.
         </div>
 
       ) : (
@@ -291,7 +1061,9 @@ function StayRoomsStep({
                     </strong>
 
                     <span>
-                      / night
+                      {isDayUse
+                        ? " standard nightly rate"
+                        : " / night"}
                     </span>
 
                   </div>
@@ -418,16 +1190,26 @@ function StayRoomsStep({
                 <div className="booking-desk-selected__amount">
 
                   <span>
-                    {nights} night
-                    {nights === 1
-                      ? ""
-                      : "s"}
+                    {isDayUse
+                      ? (
+                          dayUseDurationMinutes >
+                          0
+                            ? `Day Use · ${durationLabel}`
+                            : "Day Use"
+                        )
+                      : `${nights} night${
+                          nights === 1
+                            ? ""
+                            : "s"
+                        }`}
                   </span>
 
                   <strong>
-                    {formatCurrency(
-                      room.total_amount
-                    )}
+                    {quoteLoading
+                      ? "Calculating..."
+                      : formatCurrency(
+                          room.total_amount
+                        )}
                   </strong>
 
                 </div>

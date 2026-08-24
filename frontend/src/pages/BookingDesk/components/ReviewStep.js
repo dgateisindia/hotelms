@@ -8,6 +8,139 @@ import {
 } from "../bookingUtils";
 
 
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function formatDateTime(
+  value
+) {
+  if (!value) {
+    return "—";
+  }
+
+
+  const date =
+    new Date(
+      value
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "—";
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }
+  ).format(
+    date
+  );
+}
+
+
+function calculateStayMinutes(
+  checkIn,
+  checkOut
+) {
+  const start =
+    new Date(
+      checkIn
+    );
+
+  const end =
+    new Date(
+      checkOut
+    );
+
+
+  if (
+    Number.isNaN(
+      start.getTime()
+    ) ||
+    Number.isNaN(
+      end.getTime()
+    ) ||
+    end <= start
+  ) {
+    return 0;
+  }
+
+
+  return (
+    end.getTime() -
+    start.getTime()
+  ) / (
+    60 *
+    1000
+  );
+}
+
+
+function formatStayDuration(
+  minutes
+) {
+  const total =
+    Number(
+      minutes || 0
+    );
+
+
+  if (
+    !Number.isFinite(
+      total
+    ) ||
+    total <= 0
+  ) {
+    return "—";
+  }
+
+
+  const hours =
+    Math.floor(
+      total / 60
+    );
+
+
+  const mins =
+    Math.round(
+      total % 60
+    );
+
+
+  if (!mins) {
+    return `${hours} hr${
+      hours === 1
+        ? ""
+        : "s"
+    }`;
+  }
+
+
+  return `${hours} hr${
+    hours === 1
+      ? ""
+      : "s"
+  } ${mins} min`;
+}
+
+
+/* ============================================================
+   COMPONENT
+============================================================ */
+
 function ReviewStep({
   guest,
   matchedCustomer,
@@ -16,6 +149,9 @@ function ReviewStep({
   payment,
   isEditMode,
   existingPaymentStatus,
+
+  isAddRoomMode,
+  reservationGroup,
 
   nights,
   selectedRooms,
@@ -26,7 +162,39 @@ function ReviewStep({
   paymentNow,
   balanceDue,
   paymentPreviewStatus,
+
+  refund,
+  pricingQuote,
+  refundRequired,
+  refundRequiredAmount,
 }) {
+  const isDayUse =
+    booking.stay_type ===
+    "day_use";
+
+
+  const stayDurationMinutes =
+    isDayUse
+      ? calculateStayMinutes(
+          booking.check_in,
+          booking.check_out
+        )
+      : 0;
+
+
+  const stayDurationLabel =
+    formatStayDuration(
+      stayDurationMinutes
+    );
+
+  const currentAmountPaid =
+    Number(
+      pricingQuote
+        ?.amount_paid ??
+      paymentNow ??
+      0
+    );
+
   return (
     <div className="booking-desk-section">
 
@@ -43,8 +211,12 @@ function ReviewStep({
           </h2>
 
           <p>
-            Verify guest, room and payment information before
-            saving.
+            {isAddRoomMode
+              ? `Verify the room being added to ${
+                  reservationGroup?.group_code ||
+                  "this reservation group"
+                }.`
+              : "Verify guest, room and payment information before saving."}
           </p>
 
         </div>
@@ -139,39 +311,67 @@ function ReviewStep({
             Stay
           </h3>
 
+
+          <div>
+            <span>
+              Stay Type
+            </span>
+
+            <strong>
+              {isDayUse
+                ? "Day Use / Short Stay"
+                : "Overnight Stay"}
+            </strong>
+          </div>
+
+
           <div>
             <span>
               Check In
             </span>
 
             <strong>
-              {formatDate(
-                booking.check_in
-              )}
+              {isDayUse
+                ? formatDateTime(
+                    booking.check_in
+                  )
+                : formatDate(
+                    booking.check_in
+                  )}
             </strong>
           </div>
 
 
           <div>
             <span>
-              Expected Check Out
+              {isDayUse
+                ? "Check Out"
+                : "Expected Check Out"}
             </span>
 
             <strong>
-              {formatDate(
-                booking.check_out
-              )}
+              {isDayUse
+                ? formatDateTime(
+                    booking.check_out
+                  )
+                : formatDate(
+                    booking.check_out
+                  )}
             </strong>
           </div>
 
 
           <div>
             <span>
-              Nights
+              {isDayUse
+                ? "Stay Duration"
+                : "Nights"}
             </span>
 
             <strong>
-              {nights}
+              {isDayUse
+                ? stayDurationLabel
+                : nights}
             </strong>
           </div>
 
@@ -190,7 +390,13 @@ function ReviewStep({
 
           <div>
             <span>
-              Booking Total
+              {isEditMode
+                ? "Updated Booking Total"
+                : isAddRoomMode
+                  ? selectedRooms.length > 1
+                    ? "Added Rooms Total"
+                    : "Added Room Total"
+                  : "Booking Total"}
             </span>
 
             <strong>
@@ -200,19 +406,60 @@ function ReviewStep({
             </strong>
           </div>
 
+          {isEditMode &&
+          refundRequired ? (
+            <>
 
-          <div>
-            <span>
-              Received
-            </span>
+              <div>
+                <span>
+                  Currently Paid
+                </span>
 
-            <strong>
-              {formatCurrency(
-                paymentNow
-              )}
-            </strong>
-          </div>
+                <strong>
+                  {formatCurrency(
+                    currentAmountPaid
+                  )}
+                </strong>
+              </div>
 
+              <div>
+                <span>
+                  Refund
+                </span>
+
+                <strong>
+                  -{formatCurrency(
+                    refundRequiredAmount
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Net Paid After Refund
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    paymentNow
+                  )}
+                </strong>
+              </div>
+
+            </>
+          ) : (
+            <div>
+              <span>
+                Received
+              </span>
+
+              <strong>
+                {formatCurrency(
+                  paymentNow
+                )}
+              </strong>
+            </div>
+          )}
 
           <div>
             <span>
@@ -226,10 +473,12 @@ function ReviewStep({
             </strong>
           </div>
 
-
           <div>
             <span>
-              Status
+              {isEditMode &&
+              refundRequired
+                ? "Projected Status"
+                : "Status"}
             </span>
 
             <strong>
@@ -241,7 +490,6 @@ function ReviewStep({
 
         </section>
 
-
         {/* ====================================================
             RESERVATION
         ==================================================== */}
@@ -251,6 +499,19 @@ function ReviewStep({
           <h3>
             Reservation
           </h3>
+
+          {isAddRoomMode && (
+            <div>
+              <span>
+                Reservation Group
+              </span>
+
+              <strong>
+                {reservationGroup?.group_code ||
+                  "—"}
+              </strong>
+            </div>
+          )}
 
           <div>
             <span>
@@ -290,23 +551,33 @@ function ReviewStep({
             </strong>
           </div>
 
-
           <div>
             <span>
-              Payment Method
+              {isEditMode &&
+              refundRequired
+                ? "Refund Method"
+                : isEditMode
+                  ? "Payment Status"
+                  : "Payment Method"}
             </span>
 
             <strong className="booking-desk-capitalize">
 
-              {isEditMode
-                ? existingPaymentStatus
-                : payment.mode ===
-                  "none"
-                  ? "No payment"
-                  : payment.payment_method.replaceAll(
-                      "_",
-                      " "
-                    )}
+              {isEditMode &&
+              refundRequired
+                ? refund.payment_method.replaceAll(
+                    "_",
+                    " "
+                  )
+                : isEditMode
+                  ? existingPaymentStatus
+                  : payment.mode ===
+                    "none"
+                    ? "No payment"
+                    : payment.payment_method.replaceAll(
+                        "_",
+                        " "
+                      )}
 
             </strong>
           </div>
@@ -315,6 +586,91 @@ function ReviewStep({
 
       </div>
 
+      {isEditMode &&
+        refundRequired && (
+          <section className="booking-desk-review-rooms">
+
+            <h3>
+              Refund Details
+            </h3>
+
+            <div className="booking-desk-review-room">
+
+              <div>
+                <strong>
+                  Refund Amount
+                </strong>
+
+                <span>
+                  Backend calculated from the payment ledger
+                </span>
+              </div>
+
+              <div>
+                <strong>
+                  {formatCurrency(
+                    refundRequiredAmount
+                  )}
+                </strong>
+              </div>
+
+            </div>
+
+            <div className="booking-desk-review-room">
+
+              <div>
+                <strong>
+                  Refund Method
+                </strong>
+
+                <span className="booking-desk-capitalize">
+                  {refund.payment_method.replaceAll(
+                    "_",
+                    " "
+                  )}
+                </span>
+              </div>
+
+              {refund.payment_method !==
+                "cash" && (
+                <div>
+                  <span>
+                    Transaction ID
+                  </span>
+
+                  <strong>
+                    {refund.transaction_id ||
+                      "—"}
+                  </strong>
+                </div>
+              )}
+
+            </div>
+
+            <div className="booking-desk-review-room">
+
+              <div>
+                <strong>
+                  Refund Reason
+                </strong>
+
+                <span>
+                  {refund.notes ||
+                    "—"}
+                </span>
+              </div>
+
+            </div>
+
+            <div className="booking-desk-review-note">
+
+              The refund and reservation update will be recorded
+              together when Save Changes is confirmed.
+
+            </div>
+
+          </section>
+        )}
 
       {/* ======================================================
           ROOMS
@@ -323,9 +679,12 @@ function ReviewStep({
       <section className="booking-desk-review-rooms">
 
         <h3>
-          Room Details
+          {isAddRoomMode
+            ? selectedRooms.length > 1
+              ? "Rooms Being Added"
+              : "Room Being Added"
+            : "Room Details"}
         </h3>
-
 
         {roomTotals.map(
           (
@@ -351,11 +710,16 @@ function ReviewStep({
                   {
                     room.room_type
                   }
+
                   {" · "}
-                  {formatCurrency(
-                    room.price_per_night
-                  )}
-                  /night
+
+                  {isDayUse
+                    ? `Standard rate ${formatCurrency(
+                        room.price_per_night
+                      )}/night`
+                    : `${formatCurrency(
+                        room.price_per_night
+                      )}/night`}
                 </span>
 
               </div>
@@ -374,6 +738,14 @@ function ReviewStep({
                       ? ""
                       : "s"
                   }
+
+                  {isDayUse
+                    ? ` · ${stayDurationLabel}`
+                    : ` · ${nights} night${
+                        nights === 1
+                          ? ""
+                          : "s"
+                      }`}
                 </span>
 
                 <strong>
@@ -392,7 +764,11 @@ function ReviewStep({
         <div className="booking-desk-review-total">
 
           <span>
-            Grand Total
+            {isAddRoomMode
+              ? selectedRooms.length > 1
+                ? "Added Rooms Total"
+                : "Added Room Total"
+              : "Grand Total"}
           </span>
 
           <strong>
@@ -428,8 +804,12 @@ function ReviewStep({
 
 
       <div className="booking-desk-review-note">
-        Room availability and final room rate will be
-        verified again when the reservation is confirmed.
+        {isAddRoomMode
+          ? `The selected room will be added to ${
+              reservationGroup?.group_code ||
+              "the existing reservation group"
+            }. Existing room bookings and their payments will not be changed. Availability and pricing will be verified again before saving.`
+          : "Room availability and pricing will be verified again by the system before the reservation is saved."}
       </div>
 
     </div>

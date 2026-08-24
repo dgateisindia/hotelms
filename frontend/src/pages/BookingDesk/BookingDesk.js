@@ -2,6 +2,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -11,6 +12,10 @@ import {
 } from "react-router-dom";
 
 import apiClient from "../../services/apiClient";
+
+import hotelSettingsService, {
+  HOTEL_SETTINGS_SCOPE,
+} from "../../services/hotelSettingsService";
 
 import {
   digitsOnly,
@@ -86,6 +91,7 @@ const EMPTY_GUEST = {
 
 
 const EMPTY_BOOKING = {
+  stay_type: "overnight",
   check_in: "",
   check_out: "",
   booking_status: "confirmed",
@@ -99,6 +105,230 @@ const EMPTY_PAYMENT = {
   transaction_id: "",
   notes: "",
 };
+
+const EMPTY_REFUND = {
+  payment_method: "cash",
+  transaction_id: "",
+  notes: "",
+};
+
+function normalizeBookingDateTime(
+  value
+) {
+  if (!value) {
+    return "";
+  }
+
+
+  const text =
+    String(
+      value
+    ).trim();
+
+
+  function toLocalValue(
+    date
+  ) {
+    const pad =
+      (number) =>
+        String(
+          number
+        ).padStart(
+          2,
+          "0"
+        );
+
+
+    return (
+      `${date.getFullYear()}-` +
+      `${pad(
+        date.getMonth() + 1
+      )}-` +
+      `${pad(
+        date.getDate()
+      )}T` +
+      `${pad(
+        date.getHours()
+      )}:` +
+      `${pad(
+        date.getMinutes()
+      )}:` +
+      `${pad(
+        date.getSeconds()
+      )}`
+    );
+  }
+
+
+  /*
+   * API may return:
+   * 2026-08-22T09:32:00.000Z
+   *
+   * Convert timezone-aware values to hotel/admin
+   * browser local datetime before editing.
+   */
+  if (
+    /(?:Z|[+-]\d{2}:\d{2})$/i.test(
+      text
+    )
+  ) {
+    const date =
+      new Date(
+        text
+      );
+
+
+    return Number.isNaN(
+      date.getTime()
+    )
+      ? ""
+      : toLocalValue(
+          date
+        );
+  }
+
+
+  /*
+   * Already-local DB/API datetime.
+   * Do not shift it again.
+   */
+  const localMatch =
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/
+      .exec(
+        text
+      );
+
+
+  if (
+    localMatch
+  ) {
+    return (
+      `${localMatch[1]}-` +
+      `${localMatch[2]}-` +
+      `${localMatch[3]}T` +
+      `${localMatch[4]}:` +
+      `${localMatch[5]}:` +
+      `${localMatch[6] || "00"}`
+    );
+  }
+
+
+  const fallbackDate =
+    new Date(
+      text
+    );
+
+
+  return Number.isNaN(
+    fallbackDate.getTime()
+  )
+    ? ""
+    : toLocalValue(
+        fallbackDate
+      );
+}
+
+
+function formatStayDateTime(
+  value
+) {
+  if (!value) {
+    return "—";
+  }
+
+
+  const date =
+    new Date(
+      value
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return formatDate(
+      value
+    );
+  }
+
+
+  return new Intl.DateTimeFormat(
+    "en-IN",
+    {
+      day:
+        "2-digit",
+
+      month:
+        "short",
+
+      year:
+        "numeric",
+
+      hour:
+        "numeric",
+
+      minute:
+        "2-digit",
+
+      hour12:
+        true,
+    }
+  ).format(
+    date
+  );
+}
+
+
+function formatStayDuration(
+  minutes
+) {
+  const total =
+    Number(
+      minutes || 0
+    );
+
+
+  if (
+    !Number.isFinite(
+      total
+    ) ||
+    total <= 0
+  ) {
+    return "—";
+  }
+
+
+  const hours =
+    Math.floor(
+      total / 60
+    );
+
+
+  const mins =
+    Math.round(
+      total % 60
+    );
+
+
+  if (!mins) {
+    return `${hours} hr${
+      hours === 1
+        ? ""
+        : "s"
+    }`;
+  }
+
+
+  return (
+    `${hours} hr${
+      hours === 1
+        ? ""
+        : "s"
+    } ${mins} min`
+  );
+}
 
 /* ============================================================
    MAIN COMPONENT
@@ -151,6 +381,61 @@ function BookingDesk() {
   const isEditMode =
     Boolean(
       editBookingId
+    );
+
+  const addRoomGroupId =
+    useMemo(
+      () => {
+        if (
+          isEditMode
+        ) {
+          return null;
+        }
+
+
+        const params =
+          new URLSearchParams(
+            location.search
+          );
+
+
+        if (
+          params.get(
+            "mode"
+          ) !==
+          "add-room"
+        ) {
+          return null;
+        }
+
+
+        const value =
+          Number(
+            params.get(
+              "group"
+            )
+          );
+
+
+        return (
+          Number.isSafeInteger(
+            value
+          ) &&
+          value > 0
+        )
+          ? value
+          : null;
+      },
+      [
+        location.search,
+        isEditMode,
+      ]
+    );
+
+
+  const isAddRoomMode =
+    Boolean(
+      addRoomGroupId
     );
 
 
@@ -222,6 +507,57 @@ function BookingDesk() {
     setExistingAmountPaid,
   ] = useState(0);
 
+  const [
+    dayUsePolicy,
+    setDayUsePolicy,
+  ] = useState({
+    enabled: false,
+  });
+
+
+  const [
+    policyLoading,
+    setPolicyLoading,
+  ] = useState(
+    !isEditMode
+  );
+
+
+  const [
+    policyError,
+    setPolicyError,
+  ] = useState("");
+
+
+  const [
+    pricingQuote,
+    setPricingQuote,
+  ] = useState(null);
+
+
+  const [
+    quoteLoading,
+    setQuoteLoading,
+  ] = useState(false);
+
+
+  const [
+    quoteError,
+    setQuoteError,
+  ] = useState("");
+
+
+  const [
+    existingBookingTotal,
+    setExistingBookingTotal,
+  ] = useState(0);
+
+  const [
+    reservationGroup,
+    setReservationGroup,
+  ] = useState(
+    null
+  );
 
   /* ==========================================================
      PAYMENT
@@ -234,6 +570,12 @@ function BookingDesk() {
     EMPTY_PAYMENT
   );
 
+  const [
+    refund,
+    setRefund,
+  ] = useState(
+    EMPTY_REFUND
+  );
 
   /* ==========================================================
      ROOMS
@@ -271,7 +613,8 @@ function BookingDesk() {
     loading,
     setLoading,
   ] = useState(
-    isEditMode
+    isEditMode ||
+    isAddRoomMode
   );
 
 
@@ -285,6 +628,43 @@ function BookingDesk() {
     formError,
     setFormError,
   ] = useState("");
+
+  const formErrorRef =
+    useRef(null);
+
+  useEffect(() => {
+    if (
+      !formError
+    ) {
+      return;
+    }
+
+
+    const timer =
+      window.setTimeout(
+        () => {
+          formErrorRef
+            .current
+            ?.scrollIntoView({
+              behavior:
+                "smooth",
+
+              block:
+                "center",
+            });
+        },
+        50
+      );
+
+
+    return () => {
+      window.clearTimeout(
+        timer
+      );
+    };
+  }, [
+    formError,
+  ]);
 
 
   const [
@@ -309,14 +689,124 @@ function BookingDesk() {
 
   const nights =
     useMemo(
-      () =>
-        calculateNights(
+      () => {
+        if (
+          booking.stay_type ===
+          "day_use"
+        ) {
+          return 0;
+        }
+
+
+        return calculateNights(
           booking.check_in,
           booking.check_out
-        ),
+        );
+      },
       [
+        booking.stay_type,
         booking.check_in,
         booking.check_out,
+      ]
+    );
+
+
+  const dayUseDurationMinutes =
+    useMemo(
+      () => {
+        if (
+          booking.stay_type !==
+            "day_use" ||
+          !booking.check_in ||
+          !booking.check_out
+        ) {
+          return 0;
+        }
+
+
+        const start =
+          new Date(
+            booking.check_in
+          );
+
+
+        const end =
+          new Date(
+            booking.check_out
+          );
+
+
+        if (
+          Number.isNaN(
+            start.getTime()
+          ) ||
+          Number.isNaN(
+            end.getTime()
+          ) ||
+          end <= start
+        ) {
+          return 0;
+        }
+
+
+        return (
+          end.getTime() -
+          start.getTime()
+        ) / (
+          60 *
+          1000
+        );
+      },
+      [
+        booking.stay_type,
+        booking.check_in,
+        booking.check_out,
+      ]
+    );
+
+
+  const stayRangeValid =
+    useMemo(
+      () => {
+        if (
+          !booking.check_in ||
+          !booking.check_out
+        ) {
+          return false;
+        }
+
+
+        if (
+          booking.stay_type ===
+          "day_use"
+        ) {
+          return (
+            dayUseDurationMinutes >
+              0 &&
+            String(
+              booking.check_in
+            ).slice(
+              0,
+              10
+            ) ===
+            String(
+              booking.check_out
+            ).slice(
+              0,
+              10
+            )
+          );
+        }
+
+
+        return nights > 0;
+      },
+      [
+        booking.stay_type,
+        booking.check_in,
+        booking.check_out,
+        dayUseDurationMinutes,
+        nights,
       ]
     );
 
@@ -326,6 +816,325 @@ function BookingDesk() {
       matchedCustomer
     ) &&
     !editingCustomer;
+
+  /* ==========================================================
+    BOOKING POLICY
+
+    Booking Desk only needs the current Day Use policy
+    to decide whether the option should be available.
+
+    Pricing itself still comes from /bookings/quote.
+  ========================================================== */
+
+  useEffect(() => {
+    if (
+      isEditMode
+    ) {
+      setPolicyLoading(false);
+
+      return;
+    }
+
+
+    let active =
+      true;
+
+
+    async function loadBookingPolicy() {
+      setPolicyLoading(true);
+      setPolicyError("");
+
+
+      try {
+        const data =
+          await hotelSettingsService
+            .getSettings({
+              scope:
+                HOTEL_SETTINGS_SCOPE
+                  .ADMIN,
+            });
+
+
+        if (!active) {
+          return;
+        }
+
+
+        setDayUsePolicy(
+          data
+            ?.settings
+            ?.day_use ||
+          {
+            enabled: false,
+          }
+        );
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+
+        setDayUsePolicy({
+          enabled: false,
+        });
+
+
+        setPolicyError(
+          error?.message ||
+          "Hotel stay policy could not be loaded."
+        );
+      } finally {
+        if (active) {
+          setPolicyLoading(false);
+        }
+      }
+    }
+
+
+    void loadBookingPolicy();
+
+
+    return () => {
+      active = false;
+    };
+  }, [
+    isEditMode,
+  ]);
+
+
+  /* ==========================================================
+    LOAD RESERVATION GROUP FOR ADD ROOM MODE
+  ========================================================== */
+
+  useEffect(() => {
+    if (
+      !isAddRoomMode ||
+      !addRoomGroupId
+    ) {
+      return;
+    }
+
+    let active =
+      true;
+
+    async function loadReservationGroup() {
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        const response =
+          await apiClient.get(
+            `/bookings/groups/${addRoomGroupId}`
+          );
+
+        const data =
+          response.data?.data;
+
+        if (
+          !active
+        ) {
+          return;
+        }
+
+        if (
+          !data ||
+          !data.customer ||
+          !Array.isArray(
+            data.bookings
+          )
+        ) {
+          setLoadError(
+            "The reservation group could not be loaded."
+          );
+
+          return;
+        }
+
+        const openBookings =
+          data.bookings.filter(
+            (item) =>
+              item.booking_status !==
+              "cancelled"
+          );
+
+        const groupCanAcceptRoom =
+          openBookings.some(
+            (item) =>
+              [
+                "pending",
+                "confirmed",
+                "checked_in",
+              ].includes(
+                item.booking_status
+              )
+          );
+
+        if (
+          !groupCanAcceptRoom
+        ) {
+          setLoadError(
+            "New rooms cannot be added to a completed or fully cancelled reservation group."
+          );
+
+          return;
+        }
+
+        const stayTypes =
+          new Set(
+            openBookings.map(
+              (item) =>
+                item.stay_type
+            )
+          );
+
+        if (
+          stayTypes.size !== 1
+        ) {
+          setLoadError(
+            "This reservation group contains inconsistent stay types and requires review."
+          );
+
+          return;
+        }
+
+        const groupStayType =
+          [
+            ...stayTypes,
+          ][0];
+
+        const customer =
+          data.customer;
+
+        setReservationGroup({
+          reservation_group_id:
+            data.reservation_group_id,
+
+          group_code:
+            data.group_code,
+        });
+
+        setExistingCustomerId(
+          Number(
+            customer.customer_id
+          )
+        );
+
+        setGuest({
+          phone:
+            splitStoredPhone(
+              customer.phone
+            ),
+
+          guest_name:
+            customer.full_name ||
+            "",
+
+          email:
+            customer.email ||
+            "",
+
+          gender:
+            customer.gender ||
+            "",
+
+          nationality:
+            customer.nationality ||
+            "",
+
+          address:
+            customer.address ||
+            "",
+
+          id_proof_type:
+            customer.id_proof_type ||
+            "",
+
+          id_proof_number:
+            customer.id_proof_number ||
+            "",
+        });
+
+        setMatchedCustomer({
+          customer_id:
+            customer.customer_id,
+
+          full_name:
+            customer.full_name,
+
+          phone:
+            customer.phone,
+
+          email:
+            customer.email,
+
+          gender:
+            customer.gender,
+
+          nationality:
+            customer.nationality,
+
+          address:
+            customer.address,
+
+          id_proof_type:
+            customer.id_proof_type,
+
+          id_proof_number:
+            customer.id_proof_number,
+        });
+
+        setBooking(
+          (current) => ({
+            ...current,
+
+            stay_type:
+              groupStayType,
+
+            check_in: "",
+            check_out: "",
+
+            booking_status:
+              "confirmed",
+
+            special_request:
+              "",
+          })
+        );
+
+        /*
+        * Guest already belongs to this reservation.
+        * Start directly from Stay & Rooms.
+        */
+        setStep(2);
+      } catch (error) {
+        if (
+          active
+        ) {
+          setLoadError(
+            getApiMessage(
+              error,
+              "The reservation group could not be loaded."
+            )
+          );
+        }
+      } finally {
+        if (
+          active
+        ) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadReservationGroup();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    addRoomGroupId,
+    isAddRoomMode,
+  ]);
 
   /* ==========================================================
      LOAD EXISTING BOOKING
@@ -401,6 +1210,13 @@ function BookingDesk() {
           )
         );
 
+        setExistingBookingTotal(
+          Number(
+            data.total_amount ||
+            0
+          )
+        );
+
 
         const localPhone =
           splitStoredPhone(
@@ -471,26 +1287,42 @@ function BookingDesk() {
             data.id_proof_number,
         });
 
+        const existingStayType =
+          data.stay_type ||
+          "overnight";
 
         setBooking({
+          stay_type:
+            existingStayType,
+
           check_in:
             data.check_in
-              ? String(
-                  data.check_in
-                ).slice(
-                  0,
-                  10
-                )
+              ? existingStayType ===
+                  "day_use"
+                ? normalizeBookingDateTime(
+                    data.check_in
+                  )
+                : String(
+                    data.check_in
+                  ).slice(
+                    0,
+                    10
+                  )
               : "",
 
           check_out:
             data.check_out
-              ? String(
-                  data.check_out
-                ).slice(
-                  0,
-                  10
-                )
+              ? existingStayType ===
+                  "day_use"
+                ? normalizeBookingDateTime(
+                    data.check_out
+                  )
+                : String(
+                    data.check_out
+                  ).slice(
+                    0,
+                    10
+                  )
               : "",
 
           booking_status:
@@ -589,11 +1421,11 @@ function BookingDesk() {
 
   useEffect(() => {
     if (
-      isEditMode
+      isEditMode ||
+      isAddRoomMode
     ) {
       return;
     }
-
 
     const phone =
       digitsOnly(
@@ -769,6 +1601,7 @@ function BookingDesk() {
   }, [
     guest.phone,
     isEditMode,
+    isAddRoomMode,
   ]);
 
 
@@ -791,12 +1624,15 @@ function BookingDesk() {
 
 
         if (
-          nights <= 0
+          !stayRangeValid
         ) {
           setAvailableRooms([]);
 
           setRoomsError(
-            "Check-out must be later than check-in."
+            booking.stay_type ===
+              "day_use"
+              ? "Day Use must start and end on the same day, and checkout must be later than check-in."
+              : "Check-out must be later than check-in."
           );
 
           return;
@@ -892,11 +1728,12 @@ function BookingDesk() {
         }
       },
       [
+        booking.stay_type,
         booking.check_in,
         booking.check_out,
         editBookingId,
         isEditMode,
-        nights,
+        stayRangeValid,
       ]
     );
 
@@ -931,27 +1768,340 @@ function BookingDesk() {
 
 
   /* ==========================================================
+    TRUSTED BOOKING PRICE QUOTE
+
+    CREATE:
+    /bookings/quote
+    → current hotel policy
+
+    EDIT:
+    /bookings/:id/quote
+    → original booking policy snapshot
+
+    Final Save still recalculates authoritatively.
+  ========================================================== */
+
+  useEffect(() => {
+    const missingEditContext =
+      isEditMode &&
+      (
+        !editBookingId ||
+        !existingCustomerId
+      );
+
+
+    if (
+      !stayRangeValid ||
+      selectedRooms.length ===
+        0 ||
+      missingEditContext
+    ) {
+      setPricingQuote(null);
+      setQuoteLoading(false);
+      setQuoteError("");
+
+      return;
+    }
+
+
+    let active =
+      true;
+
+
+    setPricingQuote(null);
+    setQuoteLoading(true);
+    setQuoteError("");
+
+
+    const timer =
+      window.setTimeout(
+        async () => {
+          try {
+            let response;
+
+
+            if (
+              isEditMode
+            ) {
+              const room =
+                selectedRooms[0];
+
+
+              response =
+                await apiClient.post(
+                  `/bookings/${editBookingId}/quote`,
+                  {
+                    customer_id:
+                      existingCustomerId,
+
+                    stay_type:
+                      booking.stay_type,
+
+                    room_id:
+                      Number(
+                        room.room_id
+                      ),
+
+                    check_in:
+                      booking.check_in,
+
+                    check_out:
+                      booking.check_out,
+
+                    total_guests:
+                      Number(
+                        room.total_guests ||
+                        1
+                      ),
+
+                    booking_status:
+                      booking.booking_status,
+
+                    special_request:
+                      booking.special_request.trim() ||
+                      null,
+                  }
+                );
+            } else {
+              response =
+                await apiClient.post(
+                  "/bookings/quote",
+                  {
+                    stay_type:
+                      booking.stay_type,
+
+                    booking_status:
+                      booking.booking_status,
+
+                    rooms:
+                      selectedRooms.map(
+                        (room) => ({
+                          room_id:
+                            Number(
+                              room.room_id
+                            ),
+
+                          check_in:
+                            booking.check_in,
+
+                          check_out:
+                            booking.check_out,
+
+                          total_guests:
+                            Number(
+                              room.total_guests ||
+                              1
+                            ),
+                        })
+                      ),
+                  }
+                );
+            }
+
+
+            if (
+              !active
+            ) {
+              return;
+            }
+
+
+            setPricingQuote(
+              response.data?.data ||
+              null
+            );
+          } catch (
+            error
+          ) {
+            if (
+              !active
+            ) {
+              return;
+            }
+
+
+            setPricingQuote(null);
+
+
+            setQuoteError(
+              getApiMessage(
+                error,
+                isEditMode
+                  ? "The updated reservation price could not be calculated."
+                  : "Booking price could not be calculated."
+              )
+            );
+          } finally {
+            if (
+              active
+            ) {
+              setQuoteLoading(false);
+            }
+          }
+        },
+        250
+      );
+
+
+    return () => {
+      active = false;
+
+      window.clearTimeout(
+        timer
+      );
+    };
+  }, [
+    isEditMode,
+    editBookingId,
+    existingCustomerId,
+    stayRangeValid,
+    booking.stay_type,
+    booking.check_in,
+    booking.check_out,
+    booking.booking_status,
+    booking.special_request,
+    selectedRooms,
+  ]);
+
+  /* ==========================================================
      TOTALS
   ========================================================== */
 
   const roomTotals =
     useMemo(
-      () =>
-        selectedRooms.map(
-          (room) => ({
-            ...room,
+      () => {
+        /*
+        * Existing Overnight edit preserves old behaviour.
+        *
+        * Existing Day Use remains on its stored total until
+        * dedicated snapshot-based Edit Quote UI is connected.
+        */
+        if (
+          isEditMode
+        ) {
+          return selectedRooms.map(
+            (room) => {
+              const quoteMatchesRoom =
+                pricingQuote &&
+                Number(
+                  pricingQuote.room_id
+                ) ===
+                Number(
+                  room.room_id
+                );
 
-            total_amount:
-              Number(
-                room.price_per_night ||
-                0
-              ) *
-              nights,
-          })
-        ),
+
+              return {
+                ...room,
+
+                pricing_mode:
+                  quoteMatchesRoom
+                    ? pricingQuote
+                        .pricing_mode ||
+                      null
+                    : null,
+
+                duration_minutes:
+                  quoteMatchesRoom
+                    ? pricingQuote
+                        .duration_minutes ??
+                      null
+                    : null,
+
+                rate_per_night:
+                  quoteMatchesRoom
+                    ? Number(
+                        pricingQuote
+                          .rate_per_night ??
+                        room.price_per_night ??
+                        0
+                      )
+                    : Number(
+                        room.price_per_night ||
+                        0
+                      ),
+
+                total_amount:
+                  quoteMatchesRoom
+                    ? Number(
+                        pricingQuote
+                          .total_amount ||
+                        0
+                      )
+                    : existingBookingTotal,
+              };
+            }
+          );
+        }
+
+        const quoteRooms =
+          Array.isArray(
+            pricingQuote?.rooms
+          )
+            ? pricingQuote.rooms
+            : [];
+
+        const quoteMap =
+          new Map(
+            quoteRooms.map(
+              (quote) => [
+                Number(
+                  quote.room_id
+                ),
+                quote,
+              ]
+            )
+          );
+
+
+        return selectedRooms.map(
+          (room) => {
+            const quote =
+              quoteMap.get(
+                Number(
+                  room.room_id
+                )
+              );
+
+
+            return {
+              ...room,
+
+              pricing_mode:
+                quote
+                  ?.pricing_mode ||
+                null,
+
+              duration_minutes:
+                quote
+                  ?.duration_minutes ??
+                null,
+
+              rate_per_night:
+                quote
+                  ?.rate_per_night ??
+                Number(
+                  room.price_per_night ||
+                  0
+                ),
+
+              total_amount:
+                Number(
+                  quote
+                    ?.total_amount ||
+                  0
+                ),
+            };
+          }
+        );
+      },
       [
-        selectedRooms,
+        booking.stay_type,
+        existingBookingTotal,
+        isEditMode,
         nights,
+        pricingQuote,
+        selectedRooms,
       ]
     );
 
@@ -1001,16 +2151,43 @@ function BookingDesk() {
       ]
     );
 
+  const refundRequired =
+    isEditMode &&
+    pricingQuote
+      ?.refund_required ===
+      true &&
+    Number(
+      pricingQuote
+        ?.refund_required_amount ||
+      0
+    ) >
+      0.009;
 
+
+  const refundRequiredAmount =
+    refundRequired
+      ? Number(
+          pricingQuote
+            .refund_required_amount
+        )
+      : 0;
+  
   const paymentNow =
     useMemo(
       () => {
         if (
           isEditMode
         ) {
-          return existingAmountPaid;
+          return Math.max(
+            0,
+            Number(
+              (
+                existingAmountPaid -
+                refundRequiredAmount
+              ).toFixed(2)
+            )
+          );
         }
-
 
         if (
           payment.mode ===
@@ -1044,6 +2221,7 @@ function BookingDesk() {
         return 0;
       },
       [
+        refundRequiredAmount,
         existingAmountPaid,
         grandTotal,
         isEditMode,
@@ -1084,6 +2262,13 @@ function BookingDesk() {
         grandTotal,
       ]
     );
+
+    const pricingSaveBlocked =
+      isEditMode &&
+      pricingQuote
+        ?.can_save ===
+        false &&
+      !refundRequired;
 
 
 
@@ -1363,6 +2548,38 @@ function BookingDesk() {
     field,
     value
   ) {
+    if (
+      field ===
+        "stay_type" &&
+      isAddRoomMode
+    ) {
+      return;
+    }
+    if (
+      field ===
+        "stay_type" &&
+      !isEditMode &&
+      !isAddRoomMode
+    ) {
+      setBooking(
+        (current) => ({
+          ...current,
+
+          stay_type:
+            value,
+
+          check_in: "",
+          check_out: "",
+        })
+      );
+      setSelectedRooms([]);
+      setAvailableRooms([]);
+      setPricingQuote(null);
+      setQuoteError("");
+      setRoomsError("");
+      setFormError("");
+      return;
+    }
     setBooking(
       (current) => ({
         ...current,
@@ -1370,8 +2587,6 @@ function BookingDesk() {
           value,
       })
     );
-
-
     setFormError("");
   }
 
@@ -1387,11 +2602,22 @@ function BookingDesk() {
           value,
       })
     );
-
-
     setFormError("");
   }
 
+  function updateRefund(
+    field,
+    value
+  ) {
+    setRefund(
+      (current) => ({
+        ...current,
+        [field]:
+          value,
+      })
+    );
+    setFormError("");
+  }
 
   /* ==========================================================
      ROOM SELECTION
@@ -1589,15 +2815,50 @@ function BookingDesk() {
     }
 
     if (
+      step === 2 &&
+      !error
+    ) {
+      if (
+        quoteLoading
+      ) {
+        error =
+          "Calculating the booking price. Please wait.";
+      } else if (
+        quoteError
+      ) {
+        error =
+          quoteError;
+      } else if (
+        !pricingQuote
+      ) {
+        error =
+          "The booking price could not be confirmed.";
+      } else if (
+        isEditMode &&
+        pricingQuote
+          .can_save ===
+          false &&
+        !refundRequired
+      ) {
+        error =
+          pricingQuote
+            .payment_message ||
+          "This reservation cannot be saved until its payment adjustment is resolved.";
+      }
+    }
+
+    if (
       step === 3
     ) {
       error =
         validateReservationPaymentStep({
-          booking,
-          payment,
-          isEditMode,
-          grandTotal,
-        });
+        booking,
+        payment,
+        isEditMode,
+        grandTotal,
+        refund,
+        pricingQuote,
+      });
     }
 
     if (error) {
@@ -1625,6 +2886,16 @@ function BookingDesk() {
   function goBack() {
     setFormError("");
 
+    if (
+      isAddRoomMode &&
+      step === 2
+    ) {
+      navigate(
+        `/bookings/groups/${addRoomGroupId}`
+      );
+
+      return;
+    }
 
     setStep(
       (current) =>
@@ -1655,11 +2926,15 @@ function BookingDesk() {
     }
     
     const validationError =
-      validateGuestStep({
-        isEditMode,
-        guest,
-        matchedCustomer,
-      }) ||
+      (
+        isAddRoomMode
+          ? ""
+          : validateGuestStep({
+              isEditMode,
+              guest,
+              matchedCustomer,
+            })
+      ) ||
       validateStayRoomsStep({
         booking,
         nights,
@@ -1670,6 +2945,8 @@ function BookingDesk() {
         payment,
         isEditMode,
         grandTotal,
+        refund,
+        pricingQuote,
       });
 
 
@@ -1683,10 +2960,46 @@ function BookingDesk() {
       return;
     }
 
+    if (
+      quoteLoading ||
+      quoteError ||
+      !pricingQuote
+    ) {
+      setFormError(
+        quoteError ||
+        (
+          quoteLoading
+            ? "Calculating the booking price. Please wait."
+            : "The booking price could not be confirmed."
+        )
+      );
+
+      setStep(2);
+
+      return;
+    }
+
+
+    if (
+      isEditMode &&
+      pricingQuote
+        .can_save ===
+        false &&
+      !refundRequired
+    ) {
+      setFormError(
+        pricingQuote
+          .payment_message ||
+        "This reservation cannot be saved until its payment adjustment is resolved."
+      );
+
+      setStep(2);
+
+      return;
+    }
 
     setSubmitting(true);
     setFormError("");
-
 
     try {
       if (
@@ -1695,47 +3008,82 @@ function BookingDesk() {
         const room =
           roomTotals[0];
 
+        const editPayload = {
+          customer_id:
+            existingCustomerId,
+
+          room_id:
+            room.room_id,
+
+          stay_type:
+            booking.stay_type,
+
+          check_in:
+            booking.check_in,
+
+          check_out:
+            booking.check_out,
+
+          total_guests:
+            room.total_guests,
+
+          booking_status:
+            booking.booking_status,
+
+          special_request:
+            booking.special_request.trim() ||
+            null,
+        };
+
+        if (
+          refundRequired
+        ) {
+          editPayload.refund = {
+            payment_method:
+              refund.payment_method,
+
+            transaction_id:
+              refund.payment_method ===
+                "cash"
+                ? null
+                : refund.transaction_id.trim(),
+
+            notes:
+              refund.notes.trim(),
+          };
+        }
 
         const response =
           await apiClient.put(
             `/bookings/${editBookingId}`,
-            {
-              customer_id:
-                existingCustomerId,
-
-              room_id:
-                room.room_id,
-
-              check_in:
-                booking.check_in,
-
-              check_out:
-                booking.check_out,
-
-              total_guests:
-                room.total_guests,
-
-              booking_status:
-                booking.booking_status,
-
-              special_request:
-                booking.special_request.trim() ||
-                null,
-            }
+            editPayload
           );
-
 
         const result =
           response.data?.data ||
           {};
 
-
         setSuccess({
+          stayType:
+            result.stay_type ||
+            booking.stay_type,
+
+          durationMinutes:
+            Number(
+              result.duration_minutes ||
+              dayUseDurationMinutes ||
+              0
+            ),
+            
           title:
             "Reservation Updated",
 
           message:
-            "The reservation was updated successfully.",
+            result.refund
+              ? `Reservation updated successfully and ${formatCurrency(
+                  result.refund.amount
+                )} refund recorded.`
+              : "The reservation was updated successfully.",
 
           edit: true,
 
@@ -1782,6 +3130,10 @@ function BookingDesk() {
             result.payment_status ||
             existingPaymentStatus,
 
+          refund:
+            result.refund ||
+            null,
+
           bookings: [
             {
               bookingId:
@@ -1815,6 +3167,9 @@ function BookingDesk() {
             room_id:
               room.room_id,
 
+            stay_type:
+              booking.stay_type,
+
             check_in:
               booking.check_in,
 
@@ -1833,6 +3188,141 @@ function BookingDesk() {
           })
         );
 
+      if (
+        isAddRoomMode
+      ) {
+        const payload = {
+          stay_type:
+            booking.stay_type,
+
+          booking_source:
+            "walk_in",
+
+          rooms,
+        };
+
+        if (
+          payment.mode !==
+          "none"
+        ) {
+          payload.initial_payment = {
+            mode:
+              payment.mode,
+
+            amount:
+              payment.mode ===
+                "advance"
+                ? Number(
+                    payment.amount
+                  )
+                : undefined,
+
+            payment_method:
+              payment.payment_method,
+
+            transaction_id:
+              payment.payment_method ===
+                "cash"
+                ? null
+                : payment.transaction_id.trim(),
+
+            notes:
+              payment.notes.trim() ||
+              null,
+          };
+        }
+
+        const response =
+          await apiClient.post(
+            `/bookings/groups/${addRoomGroupId}/rooms`,
+            payload
+          );
+
+        const result =
+          response.data?.data ||
+          {};
+
+        const paymentResult =
+          result.payment ||
+          {};
+
+        const firstCreatedBooking =
+          Array.isArray(
+            result.bookings
+          )
+            ? result.bookings[0]
+            : null;
+
+        setSuccess({
+          stayType:
+            firstCreatedBooking
+              ?.stayType ||
+            booking.stay_type,
+
+          durationMinutes:
+            Number(
+              firstCreatedBooking
+                ?.durationMinutes ||
+              dayUseDurationMinutes ||
+              0
+            ),
+
+          title:
+            roomTotals.length > 1
+              ? "Rooms Added"
+              : "Room Added",
+
+          message:
+            response.data?.message ||
+            "Room added to reservation successfully.",
+
+          edit: false,
+
+          addRoomMode: true,
+
+          reservationGroupId:
+            addRoomGroupId,
+
+          groupCode:
+            reservationGroup
+              ?.group_code,
+
+          guestName:
+            guest.guest_name,
+
+          checkIn:
+            booking.check_in,
+
+          checkOut:
+            booking.check_out,
+
+          nights,
+
+          grandTotal:
+            Number(
+              paymentResult.grandTotal ??
+              grandTotal
+            ),
+
+          amountReceived:
+            Number(
+              paymentResult.amountReceived ??
+              0
+            ),
+
+          balanceDue:
+            Number(
+              paymentResult.balanceDue ??
+              grandTotal
+            ),
+
+          bookings:
+            result.bookings ||
+            [],
+        });
+
+        return;
+      }
 
       const phone =
         matchedCustomer
@@ -1845,6 +3335,9 @@ function BookingDesk() {
 
 
       const payload = {
+        stay_type:
+          booking.stay_type,
+
         guest_name:
           guest.guest_name.trim(),
 
@@ -1926,8 +3419,27 @@ function BookingDesk() {
         response.data?.payment ||
         {};
 
+      const firstCreatedBooking =
+        Array.isArray(
+          response.data?.bookings
+        )
+          ? response.data.bookings[0]
+          : null;
 
       setSuccess({
+        stayType:
+          firstCreatedBooking
+            ?.stayType ||
+          booking.stay_type,
+
+        durationMinutes:
+          Number(
+            firstCreatedBooking
+              ?.durationMinutes ||
+            dayUseDurationMinutes ||
+            0
+          ),
+          
         title:
           roomTotals.length > 1
             ? "Bookings Created"
@@ -1996,37 +3508,33 @@ function BookingDesk() {
       ...EMPTY_GUEST,
     });
 
-
     setBooking({
       ...EMPTY_BOOKING,
     });
-
 
     setPayment({
       ...EMPTY_PAYMENT,
     });
 
-
     setMatchedCustomer(
       null
     );
+
+    setRefund({
+      ...EMPTY_REFUND,
+    });
 
     setEditingCustomer(false);
 
     setSelectedRooms([]);
 
-
     setAvailableRooms([]);
-
 
     setRoomsError("");
 
-
     setFormError("");
 
-
     setSuccess(null);
-
 
     setStep(1);
   }
@@ -2071,11 +3579,15 @@ function BookingDesk() {
             type="button"
             onClick={() =>
               navigate(
-                "/bookings"
+                isAddRoomMode
+                  ? `/bookings/groups/${addRoomGroupId}`
+                  : "/bookings"
               )
             }
           >
-            Back to Bookings
+            {isAddRoomMode
+              ? "Back to Reservation Group"
+              : "Back to Bookings"}
           </button>
 
         </div>
@@ -2167,38 +3679,88 @@ function BookingDesk() {
                 </strong>
               </div>
 
+              {success.addRoomMode && (
+                <div>
+                  <span>
+                    Reservation Group
+                  </span>
+
+                  <strong>
+                    {success.groupCode ||
+                      "—"}
+                  </strong>
+                </div>
+              )}
+
+              <div>
+                <span>
+                  Stay Type
+                </span>
+
+                <strong>
+                  {success.stayType ===
+                    "day_use"
+                    ? "Day Use / Short Stay"
+                    : "Overnight Stay"}
+                </strong>
+              </div>
+
+
               <div>
                 <span>
                   Check In
                 </span>
 
                 <strong>
-                  {formatDate(
-                    success.checkIn
-                  )}
+                  {success.stayType ===
+                    "day_use"
+                    ? formatStayDateTime(
+                        success.checkIn
+                      )
+                    : formatDate(
+                        success.checkIn
+                      )}
                 </strong>
               </div>
 
+
               <div>
                 <span>
-                  Expected Check Out
+                  {success.stayType ===
+                    "day_use"
+                    ? "Check Out"
+                    : "Expected Check Out"}
                 </span>
 
                 <strong>
-                  {formatDate(
-                    success.checkOut
-                  )}
+                  {success.stayType ===
+                    "day_use"
+                    ? formatStayDateTime(
+                        success.checkOut
+                      )
+                    : formatDate(
+                        success.checkOut
+                      )}
                 </strong>
               </div>
 
+
               <div>
                 <span>
-                  Nights
+                  {success.stayType ===
+                    "day_use"
+                    ? "Stay Duration"
+                    : "Nights"}
                 </span>
 
                 <strong>
-                  {success.nights ||
-                    nights}
+                  {success.stayType ===
+                    "day_use"
+                    ? formatStayDuration(
+                        success.durationMinutes
+                      )
+                    : success.nights ||
+                      nights}
                 </strong>
               </div>
 
@@ -2208,12 +3770,18 @@ function BookingDesk() {
             <section className="booking-desk-review-card">
 
               <h3>
-                Payment Summary
+                {success.addRoomMode
+                  ? "Added Room Payment Summary"
+                  : "Payment Summary"}
               </h3>
 
               <div>
                 <span>
-                  Booking Total
+                  {success.addRoomMode
+                    ? success.bookings?.length > 1
+                      ? "Added Rooms Total"
+                      : "Added Room Total"
+                    : "Booking Total"}
                 </span>
 
                 <strong>
@@ -2223,17 +3791,61 @@ function BookingDesk() {
                 </strong>
               </div>
 
-              <div>
-                <span>
-                  Amount Received
-                </span>
+              {success.refund ? (
+                <>
+                  <div>
+                    <span>
+                      Refund Processed
+                    </span>
 
-                <strong>
-                  {formatCurrency(
-                    paid
-                  )}
-                </strong>
-              </div>
+                    <strong>
+                      -{formatCurrency(
+                        success.refund.amount
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      Refund Method
+                    </span>
+
+                    <strong className="booking-desk-capitalize">
+                      {String(
+                        success.refund.payment_method ||
+                        ""
+                      ).replaceAll(
+                        "_",
+                        " "
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      Net Paid
+                    </span>
+
+                    <strong>
+                      {formatCurrency(
+                        paid
+                      )}
+                    </strong>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <span>
+                    Amount Received
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      paid
+                    )}
+                  </strong>
+                </div>
+              )}
 
               <div>
                 <span>
@@ -2305,15 +3917,20 @@ function BookingDesk() {
               className="booking-desk-btn booking-desk-btn--secondary"
               onClick={() =>
                 navigate(
-                  "/bookings"
+                  isAddRoomMode
+                    ? `/bookings/groups/${addRoomGroupId}`
+                    : "/bookings"
                 )
               }
             >
-              View Bookings
+              {isAddRoomMode
+                ? "Back to Reservation Group"
+                : "View Bookings"}
             </button>
 
 
-            {!isEditMode && (
+            {!isEditMode &&
+              !isAddRoomMode && (
               <button
                 type="button"
                 className="booking-desk-btn booking-desk-btn--primary"
@@ -2354,13 +3971,17 @@ function BookingDesk() {
           <h1>
             {isEditMode
               ? "Edit Reservation"
-              : "Booking Desk"}
+              : isAddRoomMode
+                ? `Add Room to ${reservationGroup?.group_code || "Reservation"}`
+                : "Booking Desk"}
           </h1>
 
           <p>
             {isEditMode
               ? "Update this reservation before the guest checks in."
-              : "Create a hotel reservation using the guided front-desk flow."}
+              : isAddRoomMode
+                ? `Add additional room reservations for ${guest.guest_name || "this guest"}.`
+                : "Create a hotel reservation using the guided front-desk flow."}
           </p>
         </div>
 
@@ -2370,13 +3991,17 @@ function BookingDesk() {
           className="booking-desk-back-link"
           onClick={() =>
             navigate(
-              "/bookings"
+              isAddRoomMode
+                ? `/bookings/groups/${addRoomGroupId}`
+                : "/bookings"
             )
           }
         >
           <IcoChevL />
 
-          Back to Bookings
+          {isAddRoomMode
+            ? "Back to Reservation Group"
+            : "Back to Bookings"}
         </button>
 
       </div>
@@ -2442,6 +4067,9 @@ function BookingDesk() {
 
       {formError && (
         <div
+          ref={
+            formErrorRef
+          }
           className="booking-desk-error"
           role="alert"
         >
@@ -2499,6 +4127,9 @@ function BookingDesk() {
 
         {step === 2 && (
           <StayRoomsStep
+            stayTypeLocked={
+              isAddRoomMode
+            }
             booking={
               booking
             }
@@ -2540,6 +4171,38 @@ function BookingDesk() {
             }
             roomTotals={
               roomTotals
+            }
+            dayUseEnabled={
+              dayUsePolicy
+                ?.enabled === true
+            }
+
+            dayUsePolicy={
+              dayUsePolicy
+            }
+
+            policyLoading={
+              policyLoading
+            }
+
+            policyError={
+              policyError
+            }
+
+            dayUseDurationMinutes={
+              dayUseDurationMinutes
+            }
+
+            pricingQuote={
+              pricingQuote
+            }
+
+            quoteLoading={
+              quoteLoading
+            }
+
+            quoteError={
+              quoteError
             }
           />
         )}
@@ -2583,6 +4246,21 @@ function BookingDesk() {
             paymentPreviewStatus={
               paymentPreviewStatus
             }
+            refund={
+              refund
+            }
+            updateRefund={
+              updateRefund
+            }
+            pricingQuote={
+              pricingQuote
+            }
+            refundRequired={
+              refundRequired
+            }
+            refundRequiredAmount={
+              refundRequiredAmount
+            }
           />
         )}
 
@@ -2607,6 +4285,13 @@ function BookingDesk() {
             }
             isEditMode={
               isEditMode
+            }
+            isAddRoomMode={
+              isAddRoomMode
+            }
+
+            reservationGroup={
+              reservationGroup
             }
             existingPaymentStatus={
               existingPaymentStatus
@@ -2634,6 +4319,18 @@ function BookingDesk() {
             }
             paymentPreviewStatus={
               paymentPreviewStatus
+            }
+            refund={
+              refund
+            }
+            pricingQuote={
+              pricingQuote
+            }
+            refundRequired={
+              refundRequired
+            }
+            refundRequiredAmount={
+              refundRequiredAmount
             }
           />
         )}
@@ -2677,7 +4374,9 @@ function BookingDesk() {
               }
               onClick={() =>
                 navigate(
-                  "/bookings"
+                  isAddRoomMode
+                    ? `/bookings/groups/${addRoomGroupId}`
+                    : "/bookings"
                 )
               }
             >
@@ -2689,6 +4388,25 @@ function BookingDesk() {
               <button
                 type="button"
                 className="booking-desk-btn booking-desk-btn--primary"
+                disabled={
+                  submitting ||
+                  (
+                    step === 2 &&
+                    (
+                      quoteLoading ||
+                      pricingSaveBlocked
+                    )
+                  )
+                }
+                title={
+                  pricingSaveBlocked
+                    ? (
+                        pricingQuote
+                          ?.payment_message ||
+                        "Resolve the payment adjustment before continuing."
+                      )
+                    : undefined
+                }
                 onClick={
                   goNext
                 }
@@ -2700,7 +4418,9 @@ function BookingDesk() {
                 type="button"
                 className="booking-desk-btn booking-desk-btn--primary"
                 disabled={
-                  submitting
+                  submitting ||
+                  quoteLoading ||
+                  pricingSaveBlocked
                 }
                 onClick={() =>
                   void handleSubmit()
@@ -2712,9 +4432,13 @@ function BookingDesk() {
                   ? "Saving..."
                   : isEditMode
                     ? "Save Changes"
-                    : selectedRooms.length > 1
-                      ? "Confirm Reservations"
-                      : "Confirm Reservation"}
+                    : isAddRoomMode
+                      ? selectedRooms.length > 1
+                        ? "Add Rooms"
+                        : "Add Room"
+                      : selectedRooms.length > 1
+                        ? "Confirm Reservations"
+                        : "Confirm Reservation"}
               </button>
             )}
 
