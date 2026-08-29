@@ -84,6 +84,25 @@ function parsePositiveInteger(
   return null;
 }
 
+function parseNonNegativeInteger(
+  value
+) {
+  const parsed =
+    Number(value);
+
+
+  if (
+    Number.isSafeInteger(
+      parsed
+    ) &&
+    parsed >= 0
+  ) {
+    return parsed;
+  }
+
+
+  return null;
+}
 
 function parseMoney(
   value
@@ -326,14 +345,6 @@ function normalizeRoomGuestRoster(
     ) +
     guests.length;
 
-  if (
-    totalGuests < 1
-  ) {
-    return {
-      error:
-        `${label}: add at least one staying guest.`,
-    };
-  }
 
   /*
    * If client still supplies total_guests together with
@@ -351,16 +362,17 @@ function normalizeRoomGuestRoster(
     ).trim() !== ""
   ) {
     const declaredTotal =
-      parsePositiveInteger(
+      parseNonNegativeInteger(
         raw.total_guests
       );
 
+
     if (
-      !declaredTotal
+      declaredTotal === null
     ) {
       return {
         error:
-          `${label}: total_guests must be at least 1.`,
+          `${label}: total_guests must be zero or more.`,
       };
     }
 
@@ -1407,12 +1419,14 @@ function validateBookingItems(
 
 
     /*
-    * New Guest & Occupancy flow:
-    * count comes from the actual roster.
+    * Flexible reservation model:
     *
-    * Transitional legacy flow:
-    * existing total_guests behavior remains intact until
-    * all booking entry points are connected.
+    * A room can be reserved with zero occupants captured.
+    * Guests may be added and checked in later.
+    *
+    * If a detailed roster is supplied, its actual size is
+    * authoritative. Legacy total_guests is accepted only as
+    * a non-negative compatibility value.
     */
     const totalGuests =
       guestRosterProvided
@@ -1420,22 +1434,24 @@ function validateBookingItems(
             .value
             .totalGuests
         : raw.total_guests ===
-            undefined ||
-          raw.total_guests ===
-            null ||
-          String(
-            raw.total_guests
-          ).trim() === ""
-            ? 1
-            : parsePositiveInteger(
-                raw.total_guests
-              );
+              undefined ||
+            raw.total_guests ===
+              null ||
+            String(
+              raw.total_guests
+            ).trim() === ""
+          ? 0
+          : parseNonNegativeInteger(
+              raw.total_guests
+            );
 
 
-    if (!totalGuests) {
+    if (
+      totalGuests === null
+    ) {
       return {
         error:
-          `${label}: total guests must be at least 1.`,
+          `${label}: total guests must be zero or more.`,
       };
     }
 

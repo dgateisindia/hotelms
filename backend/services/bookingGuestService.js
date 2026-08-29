@@ -10,11 +10,19 @@
    - Persist and read booking_guests
 
    Important:
-   - Customer = reservation owner / primary guest profile.
+   - Customer = reservation contact profile.
+   - Reservation Contact may or may not be a staying Primary Guest.
    - Accompanying guests do NOT become customer records.
    - Day Use currently records occupants but does not apply
      per-night child / extra-bed charges.
 ============================================================ */
+
+const {
+  resolveAllowedGuestIdProofTypes,
+  validateGuestIdProof,
+} = require(
+  "./guestIdProofService"
+);
 
 const MAX_GUEST_AGE = 120;
 
@@ -137,6 +145,48 @@ function optionalText(
   return text;
 }
 
+function normalizeGuestPhone(
+  value,
+  label = "Guest phone"
+) {
+  const phone =
+    optionalText(
+      value,
+      30,
+      label
+    );
+
+  if (!phone) {
+    return null;
+  }
+
+  if (
+    !/^[+\d\s().-]+$/.test(phone)
+  ) {
+    throw guestError(
+      400,
+      "INVALID_GUEST_PHONE",
+      `${label} contains invalid characters.`
+    );
+  }
+
+  const digitCount =
+    phone.replace(/\D/g, "").length;
+
+  if (
+    digitCount < 7 ||
+    digitCount > 15
+  ) {
+    throw guestError(
+      400,
+      "INVALID_GUEST_PHONE",
+      `${label} must contain between 7 and 15 digits.`
+    );
+  }
+
+  return phone;
+}
+
 
 function strictBoolean(
   value,
@@ -214,108 +264,6 @@ function normalizeAge(
   }
 
   return age;
-}
-
-
-/* ============================================================
-   ID PROOF
-============================================================ */
-
-function validateIdProof(
-  type,
-  number,
-  label
-) {
-  const proofType =
-    optionalText(
-      type,
-      100,
-      `${label} ID proof type`
-    );
-
-  const proofNumber =
-    optionalText(
-      number,
-      100,
-      `${label} ID proof number`
-    );
-
-  if (
-    Boolean(proofType) !==
-    Boolean(proofNumber)
-  ) {
-    throw guestError(
-      400,
-      "INVALID_GUEST_ID_PROOF",
-      `${label} ID proof type and ID proof number must be entered together.`
-    );
-  }
-
-  if (!proofType) {
-    return {
-      idProofType: null,
-      idProofNumber: null,
-    };
-  }
-
-  const normalizedType =
-    proofType.toLowerCase();
-
-  let valid = true;
-
-  if (
-    normalizedType ===
-    "aadhaar"
-  ) {
-    valid =
-      /^\d{12}$/.test(
-        proofNumber
-      );
-  } else if (
-    normalizedType ===
-    "passport"
-  ) {
-    valid =
-      /^[A-Za-z0-9]{6,20}$/.test(
-        proofNumber
-      );
-  } else if (
-    normalizedType ===
-    "driving licence"
-  ) {
-    valid =
-      /^[A-Za-z0-9/-]{5,30}$/.test(
-        proofNumber
-      );
-  } else if (
-    normalizedType ===
-    "voter id"
-  ) {
-    valid =
-      /^[A-Za-z0-9]{8,20}$/.test(
-        proofNumber
-      );
-  } else {
-    valid =
-      proofNumber.length >= 4 &&
-      proofNumber.length <= 50;
-  }
-
-  if (!valid) {
-    throw guestError(
-      400,
-      "INVALID_GUEST_ID_PROOF",
-      `${label} ID proof number is invalid.`
-    );
-  }
-
-  return {
-    idProofType:
-      proofType,
-
-    idProofNumber:
-      proofNumber,
-  };
 }
 
 
@@ -473,11 +421,28 @@ function normalizeGuestPolicy(
     );
   }
 
+  let allowedIdProofTypes;
+
+  try {
+    allowedIdProofTypes =
+      resolveAllowedGuestIdProofTypes(
+        source.allowed_id_proof_types
+      );
+  } catch (error) {
+    throw guestError(
+      500,
+      "INVALID_GUEST_POLICY",
+      "The booking's allowed guest ID proof types are invalid."
+    );
+  }
+
   return {
     primaryIdRequired:
       source
         .id_proof_required ===
       true,
+
+    allowedIdProofTypes,
 
     allGuestNamesRequired:
       source
@@ -572,6 +537,12 @@ function normalizePrimaryCustomer(
       "Primary guest name"
     );
 
+  const phone =
+    normalizeGuestPhone(
+      customer.phone,
+      "Primary guest phone"
+    );
+
   if (!fullName) {
     throw guestError(
       400,
@@ -581,15 +552,21 @@ function normalizePrimaryCustomer(
   }
 
   const idProof =
-    validateIdProof(
-      customer.idProofType ??
+    validateGuestIdProof({
+      type:
+        customer.idProofType ??
         customer.id_proof_type,
 
-      customer.idProofNumber ??
+      number:
+        customer.idProofNumber ??
         customer.id_proof_number,
 
-      "Primary guest"
-    );
+      label:
+        "Primary guest",
+
+      allowedTypes:
+        policy.allowedIdProofTypes,
+    });
 
   if (
     policy.primaryIdRequired &&
@@ -613,6 +590,7 @@ function normalizePrimaryCustomer(
       "adult",
 
     fullName,
+    phone,
 
     age:
       null,
@@ -678,6 +656,12 @@ function normalizeAccompanyingGuest(
       `${label} name`
     );
 
+  const phone =
+    normalizeGuestPhone(
+      source.phone,
+      `${label} phone`
+    );
+
   if (
     policy
       .allGuestNamesRequired &&
@@ -733,11 +717,20 @@ function normalizeAccompanyingGuest(
   }
 
   const idProof =
-    validateIdProof(
-      source.id_proof_type,
-      source.id_proof_number,
-      label
-    );
+    validateGuestIdProof({
+      type:
+        source.id_proof_type ??
+        source.idProofType,
+
+      number:
+        source.id_proof_number ??
+        source.idProofNumber,
+
+      label,
+
+      allowedTypes:
+        policy.allowedIdProofTypes,
+    });
 
   const idRequired =
     guestType ===
@@ -837,6 +830,7 @@ function normalizeAccompanyingGuest(
     guestType,
 
     fullName,
+    phone,
     age,
 
     idProofType:
@@ -851,6 +845,75 @@ function normalizeAccompanyingGuest(
   };
 }
 
+/* ============================================================
+   SINGLE ARRIVING GUEST
+
+   Used by individual guest check-in.
+
+   Reservation Contact:
+   guestRole = primary
+
+   Any other person:
+   guestRole = accompanying
+============================================================ */
+
+function prepareSingleBookingGuest({
+  guestRole = "accompanying",
+  guest,
+  primaryCustomer = null,
+  guestPolicy,
+}) {
+  const policy =
+    normalizeGuestPolicy(
+      guestPolicy
+    );
+
+
+  const role =
+    String(
+      guestRole ||
+      "accompanying"
+    )
+      .trim()
+      .toLowerCase();
+
+
+  if (
+    ![
+      "primary",
+      "accompanying",
+    ].includes(
+      role
+    )
+  ) {
+    throw guestError(
+      400,
+      "INVALID_GUEST_ROLE",
+      "Guest role must be Primary or Accompanying."
+    );
+  }
+
+
+  const normalizedGuest =
+    role ===
+      "primary"
+      ? normalizePrimaryCustomer(
+          primaryCustomer,
+          policy
+        )
+      : normalizeAccompanyingGuest(
+          guest,
+          0,
+          policy
+        );
+
+
+  return {
+    policy,
+    guest:
+      normalizedGuest,
+  };
+}
 
 /* ============================================================
    ROOM / REQUEST ROSTER
@@ -862,7 +925,7 @@ function prepareGuestRosters({
   guestPolicy,
   primaryCustomer,
   primaryMode =
-    "exactly_one",
+    "zero_or_one",
 }) {
   if (
     !Array.isArray(rooms) ||
@@ -892,11 +955,8 @@ function prepareGuestRosters({
       guestPolicy
     );
 
-  const primary =
-    normalizePrimaryCustomer(
-      primaryCustomer,
-      policy
-    );
+  let primary =
+    null;
 
   const prepared =
     rooms.map(
@@ -983,6 +1043,13 @@ function prepareGuestRosters({
         if (
           primaryGuestStaying
         ) {
+          if (!primary) {
+            primary =
+              normalizePrimaryCustomer(
+                primaryCustomer,
+                policy
+              );
+          }
           guests.push({
             ...primary,
           });
@@ -1005,16 +1072,6 @@ function prepareGuestRosters({
 
         const totalGuests =
           guests.length;
-
-        if (
-          totalGuests < 1
-        ) {
-          throw guestError(
-            400,
-            "ROOM_GUEST_REQUIRED",
-            `Room ${room.room_number}: add at least one staying guest.`
-          );
-        }
 
         const capacity =
           Number(
@@ -1389,6 +1446,7 @@ async function loadPrimaryCustomerWithConnection(
     SELECT
       customer_id,
       full_name,
+      phone,
       id_proof_type,
       id_proof_number
 
@@ -1430,6 +1488,9 @@ async function loadPrimaryCustomerWithConnection(
 
     fullName:
       customer.full_name,
+
+    phone:
+      customer.phone,
 
     idProofType:
       customer.id_proof_type,
@@ -1481,14 +1542,29 @@ async function insertBookingGuestsWithConnection(
   if (
     !Array.isArray(
       guests
-    ) ||
-    guests.length < 1
+    )
   ) {
     throw guestError(
       500,
-      "BOOKING_GUESTS_REQUIRED",
-      "At least one booking guest is required before saving the reservation."
+      "INVALID_BOOKING_GUEST_LIST",
+      "Booking guests must be supplied as a list."
     );
+  }
+
+
+  if (
+    guests.length === 0
+  ) {
+    return {
+      bookingId:
+        bId,
+
+      guestCount:
+        0,
+
+      bookingGuestIds:
+        [],
+    };
   }
 
   const insertedIds = [];
@@ -1529,6 +1605,7 @@ async function insertBookingGuestsWithConnection(
             guest_role,
             guest_type,
             full_name,
+            phone,
             age,
             id_proof_type,
             id_proof_number,
@@ -1540,7 +1617,7 @@ async function insertBookingGuestsWithConnection(
           )
 
           VALUES (
-            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, NULL
           )
         `,
@@ -1555,6 +1632,7 @@ async function insertBookingGuestsWithConnection(
           guest.guestRole,
           guest.guestType,
           guest.fullName,
+          guest.phone,
           guest.age,
           guest.idProofType,
           guest.idProofNumber,
@@ -1598,6 +1676,166 @@ async function insertBookingGuestsWithConnection(
   };
 }
 
+/* ============================================================
+   INSERT INDIVIDUALLY CHECKED-IN GUEST
+
+   Important:
+   - Guest is created only when genuinely arriving.
+   - No fake expected guest is created.
+   - Actual check-in time comes from the database clock.
+============================================================ */
+
+async function insertCheckedInGuestWithConnection(
+  connection,
+  {
+    hotelId,
+    bookingId,
+    customerId = null,
+    adminId,
+    guest,
+  }
+) {
+  const hId =
+    positiveId(
+      hotelId,
+      "Hotel ID"
+    );
+
+
+  const bId =
+    positiveId(
+      bookingId,
+      "Booking ID"
+    );
+
+
+  const aId =
+    positiveId(
+      adminId,
+      "Admin ID"
+    );
+
+
+  if (
+    !guest ||
+    ![
+      "primary",
+      "accompanying",
+    ].includes(
+      guest.guestRole
+    ) ||
+    !GUEST_TYPES.has(
+      guest.guestType
+    )
+  ) {
+    throw guestError(
+      500,
+      "INVALID_CHECKIN_GUEST",
+      "The guest prepared for check-in is invalid."
+    );
+  }
+
+
+  const isPrimary =
+    guest.guestRole ===
+    "primary";
+
+
+  const cId =
+    isPrimary
+      ? positiveId(
+          customerId,
+          "Customer ID"
+        )
+      : null;
+
+
+  const [result] =
+    await connection.query(
+      `
+        INSERT INTO booking_guests (
+          hotel_id,
+          booking_id,
+          customer_id,
+          guest_role,
+          guest_type,
+          full_name,
+          phone,
+          age,
+          id_proof_type,
+          id_proof_number,
+          extra_bed_used,
+          child_charge_amount,
+          extra_bed_charge_amount,
+
+          guest_status,
+          actual_check_in,
+          checked_in_by_admin_id,
+
+          created_by_admin_id,
+          updated_by_admin_id
+        )
+
+        VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+
+          'checked_in',
+          CURRENT_TIMESTAMP,
+          ?,
+
+          ?,
+          NULL
+        )
+      `,
+      [
+        hId,
+        bId,
+        cId,
+
+        guest.guestRole,
+        guest.guestType,
+        guest.fullName,
+        guest.phone,
+        guest.age,
+        guest.idProofType,
+        guest.idProofNumber,
+
+        guest.extraBedUsed
+          ? 1
+          : 0,
+
+        money(
+          guest
+            .childChargeAmount ??
+          0
+        ),
+
+        money(
+          guest
+            .extraBedChargeAmount ??
+          0
+        ),
+
+        aId,
+        aId,
+      ]
+    );
+
+
+  return {
+    bookingGuestId:
+      Number(
+        result.insertId
+      ),
+
+    bookingId:
+      bId,
+
+    guestStatus:
+      "checked_in",
+  };
+}
 
 async function replaceBookingGuestsWithConnection(
   connection,
@@ -1637,6 +1875,127 @@ async function replaceBookingGuestsWithConnection(
 }
 
 
+function mapBookingGuestRow(
+  row
+) {
+  return {
+    bookingGuestId:
+      Number(
+        row.booking_guest_id
+      ),
+
+    bookingId:
+      row.booking_id ===
+        undefined
+        ? null
+        : Number(
+            row.booking_id
+          ),
+
+    customerId:
+      row.customer_id ===
+        null
+        ? null
+        : Number(
+            row.customer_id
+          ),
+
+    guestRole:
+      row.guest_role,
+
+    guestType:
+      row.guest_type,
+
+    fullName:
+      row.full_name,
+
+    phone:
+      row.phone,
+
+    age:
+      row.age ===
+        null
+        ? null
+        : Number(
+            row.age
+          ),
+
+    idProofType:
+      row.id_proof_type,
+
+    idProofNumber:
+      row.id_proof_number,
+
+    extraBedUsed:
+      Boolean(
+        row.extra_bed_used
+      ),
+
+    childChargeAmount:
+      Number(
+        row.child_charge_amount ||
+        0
+      ),
+
+    extraBedChargeAmount:
+      Number(
+        row.extra_bed_charge_amount ||
+        0
+      ),
+
+    guestStatus:
+      row.guest_status ||
+      "expected",
+
+    actualCheckIn:
+      row.actual_check_in ||
+      null,
+
+    actualCheckOut:
+      row.actual_check_out ||
+      null,
+
+    checkedInByAdminId:
+      row.checked_in_by_admin_id ===
+        null ||
+      row.checked_in_by_admin_id ===
+        undefined
+        ? null
+        : Number(
+            row.checked_in_by_admin_id
+          ),
+
+    checkedOutByAdminId:
+      row.checked_out_by_admin_id ===
+        null ||
+      row.checked_out_by_admin_id ===
+        undefined
+        ? null
+        : Number(
+            row.checked_out_by_admin_id
+          ),
+
+    createdByAdminId:
+      Number(
+        row.created_by_admin_id
+      ),
+
+    updatedByAdminId:
+      row.updated_by_admin_id ===
+        null
+        ? null
+        : Number(
+            row.updated_by_admin_id
+          ),
+
+    createdAt:
+      row.created_at,
+
+    updatedAt:
+      row.updated_at,
+  };
+}
+
 /* ============================================================
    READ BOOKING GUESTS
 ============================================================ */
@@ -1669,12 +2028,20 @@ async function getBookingGuestsWithConnection(
           guest_role,
           guest_type,
           full_name,
+          phone,
           age,
           id_proof_type,
           id_proof_number,
           extra_bed_used,
           child_charge_amount,
           extra_bed_charge_amount,
+
+          guest_status,
+          actual_check_in,
+          actual_check_out,
+          checked_in_by_admin_id,
+          checked_out_by_admin_id,
+
           created_by_admin_id,
           updated_by_admin_id,
           created_at,
@@ -1700,95 +2067,20 @@ async function getBookingGuestsWithConnection(
     );
 
   return rows.map(
-    (row) => ({
-      bookingGuestId:
-        Number(
-          row.booking_guest_id
-        ),
-
-      customerId:
-        row.customer_id ===
-          null
-          ? null
-          : Number(
-              row.customer_id
-            ),
-
-      guestRole:
-        row.guest_role,
-
-      guestType:
-        row.guest_type,
-
-      fullName:
-        row.full_name,
-
-      age:
-        row.age ===
-          null
-          ? null
-          : Number(
-              row.age
-            ),
-
-      idProofType:
-        row.id_proof_type,
-
-      idProofNumber:
-        row.id_proof_number,
-
-      extraBedUsed:
-        Boolean(
-          row.extra_bed_used
-        ),
-
-      childChargeAmount:
-        Number(
-          row
-            .child_charge_amount ||
-          0
-        ),
-
-      extraBedChargeAmount:
-        Number(
-          row
-            .extra_bed_charge_amount ||
-          0
-        ),
-
-      createdByAdminId:
-        Number(
-          row
-            .created_by_admin_id
-        ),
-
-      updatedByAdminId:
-        row
-          .updated_by_admin_id ===
-        null
-          ? null
-          : Number(
-              row
-                .updated_by_admin_id
-            ),
-
-      createdAt:
-        row.created_at,
-
-      updatedAt:
-        row.updated_at,
-    })
+    mapBookingGuestRow
   );
 }
 
-
 /* ============================================================
-   GROUP PRIMARY GUEST COUNT
+   READ RESERVATION GROUP GUESTS
 
-   Used by Add Another Room / future group operations.
+   Returns only genuinely captured occupant records.
+
+   Historical bookings without booking_guests remain empty;
+   they are never fake-backfilled.
 ============================================================ */
 
-async function countGroupPrimaryGuestsWithConnection(
+async function getReservationGroupGuestsWithConnection(
   connection,
   {
     hotelId,
@@ -1807,6 +2099,108 @@ async function countGroupPrimaryGuestsWithConnection(
       "Reservation group ID"
     );
 
+
+  const [rows] =
+    await connection.query(
+      `
+        SELECT
+          bg.booking_guest_id,
+          bg.booking_id,
+          bg.customer_id,
+          bg.guest_role,
+          bg.guest_type,
+          bg.full_name,
+          bg.phone,
+          bg.age,
+          bg.id_proof_type,
+          bg.id_proof_number,
+          bg.extra_bed_used,
+          bg.child_charge_amount,
+          bg.extra_bed_charge_amount,
+
+          bg.guest_status,
+          bg.actual_check_in,
+          bg.actual_check_out,
+          bg.checked_in_by_admin_id,
+          bg.checked_out_by_admin_id,
+
+          bg.created_by_admin_id,
+          bg.updated_by_admin_id,
+          bg.created_at,
+          bg.updated_at
+
+        FROM booking_guests bg
+
+        INNER JOIN bookings b
+          ON b.hotel_id =
+             bg.hotel_id
+         AND b.booking_id =
+             bg.booking_id
+
+        WHERE bg.hotel_id = ?
+          AND b.reservation_group_id = ?
+
+        ORDER BY
+          b.booking_id ASC,
+
+          CASE
+            WHEN bg.guest_role = 'primary'
+            THEN 0
+            ELSE 1
+          END,
+
+          bg.booking_guest_id ASC
+      `,
+      [
+        hId,
+        groupId,
+      ]
+    );
+
+
+  return rows.map(
+    mapBookingGuestRow
+  );
+}
+
+/* ============================================================
+   GROUP PRIMARY GUEST COUNT
+
+   Used by Add Another Room / future group operations.
+============================================================ */
+
+async function countGroupPrimaryGuestsWithConnection(
+  connection,
+  {
+    hotelId,
+    reservationGroupId,
+    excludeBookingId = null,
+  }
+) {
+  const hId =
+    positiveId(
+      hotelId,
+      "Hotel ID"
+    );
+
+  const groupId =
+    positiveId(
+      reservationGroupId,
+      "Reservation group ID"
+    );
+
+  const excludedId =
+    excludeBookingId ===
+      null ||
+    excludeBookingId ===
+      undefined
+      ? null
+      : positiveId(
+          excludeBookingId,
+          "Excluded booking ID"
+        );
+
+
   const [[row]] =
     await connection.query(
       `
@@ -1824,12 +2218,19 @@ async function countGroupPrimaryGuestsWithConnection(
         WHERE bg.hotel_id = ?
           AND b.reservation_group_id = ?
           AND bg.guest_role = 'primary'
+          AND (
+            ? IS NULL
+            OR bg.booking_id <> ?
+          )
       `,
       [
         hId,
         groupId,
+        excludedId,
+        excludedId,
       ]
     );
+
 
   return Number(
     row?.primary_count ||
@@ -1849,15 +2250,21 @@ module.exports = {
 
   prepareGuestRosters,
 
+  prepareSingleBookingGuest,
+
   calculateGuestCharges,
 
   loadPrimaryCustomerWithConnection,
 
   insertBookingGuestsWithConnection,
 
+  insertCheckedInGuestWithConnection,
+
   replaceBookingGuestsWithConnection,
 
   getBookingGuestsWithConnection,
+
+  getReservationGroupGuestsWithConnection,
 
   countGroupPrimaryGuestsWithConnection,
 };

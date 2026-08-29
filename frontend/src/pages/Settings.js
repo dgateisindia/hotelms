@@ -541,6 +541,9 @@ const SECTION_FIELD_LABELS = {
     id_proof_required:
       "Primary Guest ID Proof Required",
 
+    allowed_id_proof_types:
+      "Allowed Guest ID Proof Types",
+
     all_guest_names_required:
       "Record Names Of All Staying Guests",
 
@@ -660,6 +663,7 @@ const SECTION_FIELD_ORDER = {
     "phone_required",
     "email_required",
     "id_proof_required",
+    "allowed_id_proof_types",
 
     "all_guest_names_required",
     "other_adult_id_required",
@@ -830,6 +834,17 @@ const STATIC_SELECTS = {
 
 
 const ARRAY_OPTIONS = {
+  "guest_requirements.allowed_id_proof_types": [
+    ["Aadhaar", "Aadhaar"],
+    ["Passport", "Passport"],
+    [
+      "Driving Licence",
+      "Driving Licence",
+    ],
+    ["Voter ID", "Voter ID"],
+    ["Other", "Other"],
+  ],
+
   "payment.allowed_methods": [
     ["cash", "Cash"],
     ["upi", "UPI"],
@@ -5515,10 +5530,9 @@ function Settings({
                               "rules",
                               "presets",
                               "child_age_rules",
+                              "allowed_id_proof_types",
                               "pricing_slabs",
-                            ].includes(
-                              key
-                            )
+                            ].includes(key)
                               ? "is-wide"
                               : ""
                           }`}

@@ -13,11 +13,13 @@ const {
   getBooking,
   getReservationGroupDetails,
   quoteBookingPrice,
+  quoteReservationGroupRooms,
   quoteBookingEditPrice,
   addBooking,
   addReservationGroupRooms,
   updateBooking,
   checkInBooking,
+  checkInBookingGuest,
   extendStayBooking,
   collectBookingPayment,
   checkoutBooking,
@@ -63,6 +65,15 @@ router.post(
 router.post(
   "/:id/quote",
   quoteBookingEditPrice
+);
+
+/* ============================================================
+   ADD ROOM PRICE QUOTE
+============================================================ */
+
+router.post(
+  "/groups/:groupId/rooms/quote",
+  quoteReservationGroupRooms
 );
 
 /* ============================================================
@@ -121,6 +132,23 @@ router.put(
 router.post(
   "/:id/check-in",
   checkInBooking
+);
+
+/* ============================================================
+   CHECK IN INDIVIDUAL GUEST
+
+   Room-first / guests-later flow.
+
+   Existing expected guest:
+   booking_guest_id
+
+   New arriving guest:
+   guest_role + guest
+============================================================ */
+
+router.post(
+  "/:id/guests/check-in",
+  checkInBookingGuest
 );
 
 /* ============================================================

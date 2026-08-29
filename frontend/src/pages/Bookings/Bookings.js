@@ -1,19 +1,10 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-
-import {
-  useNavigate,
-} from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import apiClient from "../../services/apiClient";
-
 import ExtendStayDialog from "./components/ExtendStayDialog";
-
 import CollectPaymentDialog from "./components/CollectPaymentDialog";
+import ManageGuestsDialog from "./components/ManageGuestsDialog";
 
 import "../../styles/Bookings.css";
 
@@ -647,9 +638,6 @@ function BookingActionDialog({
   const isDelete =
     action.type === "delete";
 
-  const isCheckIn =
-    action.type === "check-in";
-
   const isCheckout =
     action.type === "checkout";
 
@@ -688,29 +676,6 @@ function BookingActionDialog({
         </strong>{" "}
         will be permanently removed only if it has no
         payment or QR history.
-      </>
-    );
-  } else if (isCheckIn) {
-    title =
-      "Check In Guest?";
-
-    buttonLabel =
-      "Check In Guest";
-
-    description = (
-      <>
-        Guest{" "}
-        <strong>
-          {action.booking.full_name ||
-            "Guest"}
-        </strong>{" "}
-        will be checked into Room{" "}
-        <strong>
-          {action.booking.room_number ||
-            "—"}
-        </strong>.
-        The room will become occupied and the stay will
-        become active.
       </>
     );
   } else if (isCheckout) {
@@ -788,14 +753,7 @@ function BookingActionDialog({
           }
           aria-hidden="true"
         >
-          {isDelete ? (
-            <IcoWarn />
-          ) : isCheckIn ||
-            isCheckout ? (
-            <IcoCheck />
-          ) : (
-            <IcoCancel />
-          )}
+          {isDelete ? <IcoWarn /> : isCheckout ? <IcoCheck /> : <IcoCancel />}
         </div>
 
 
@@ -824,10 +782,7 @@ function BookingActionDialog({
             onClick={onClose}
             disabled={processing}
           >
-            {isCheckIn ||
-            isCheckout
-              ? "Not Now"
-              : "Keep Booking"}
+            {isCheckout ? "Not Now" : "Keep Booking"}
           </button>
 
 
@@ -926,12 +881,10 @@ function BookingViewDialog({
 
             <section className="booking-detail-section">
 
-              <h4>
-                Guest Information
-              </h4>
+              <h4>Reservation Contact</h4>
 
               <div className="booking-detail-row">
-                <span>Customer</span>
+                <span>Contact Name</span>
                 <strong>
                   {booking.full_name || "—"}
                 </strong>
@@ -1315,6 +1268,8 @@ function Bookings() {
     viewError,
     setViewError,
   ] = useState("");
+
+  const [manageGuestsBooking, setManageGuestsBooking] = useState(null);
 
   const [
     action,
@@ -1712,6 +1667,14 @@ function Bookings() {
     setViewLoading(false);
   }
 
+  function openManageGuests(booking) {
+    setManageGuestsBooking(booking);
+  }
+
+  function closeManageGuests() {
+    setManageGuestsBooking(null);
+  }
+
 
   /* ==========================================================
      CANCEL / DELETE
@@ -1751,38 +1714,21 @@ function Bookings() {
     setActionError("");
 
     try {
-      if (
-        action.type ===
-        "check-in"
-      ) {
-        await apiClient.post(
-          `/bookings/${action.booking.booking_id}/check-in`
-        );      
-      } else if (
-        action.type ===
-        "checkout"
-      ) {
+      if (action.type === "checkout") {
         await apiClient.post(
           `/bookings/${action.booking.booking_id}/checkout`
         );
-      } else if (
-        action.type ===
-        "cancel"
-      ) {
+      } else if (action.type === "cancel") {
         await apiClient.put(
           `/bookings/${action.booking.booking_id}/cancel`
         );
-      } else if (
-        action.type ===
-        "delete"
-      ) {
+      } else if (action.type === "delete") {
         await apiClient.delete(
           `/bookings/${action.booking.booking_id}`
         );
       }
 
       setAction(null);
-
       await loadBookings();
     } catch (actionRequestError) {
       setActionError(
@@ -2255,7 +2201,7 @@ function Bookings() {
                   event.target.value
                 )
               }
-              placeholder="Search booking, customer, phone or room..."
+              placeholder="Search booking, contact, phone or room..."
               aria-label="Search bookings"
             />
 
@@ -2384,41 +2330,15 @@ function Bookings() {
 
                 <thead>
                   <tr>
-                    <th>
-                      Booking
-                    </th>
-
-                    <th>
-                      Guest
-                    </th>
-
-                    <th>
-                      Room
-                    </th>
-
-                    <th>
-                      Stay
-                    </th>
-
-                    <th>
-                      Duration
-                    </th>
-
-                    <th>
-                      Amount
-                    </th>
-
-                    <th>
-                      Payment
-                    </th>
-
-                    <th>
-                      Status
-                    </th>
-
-                    <th>
-                      Actions
-                    </th>
+                    <th>Booking</th>
+                    <th>Contact</th>
+                    <th>Room</th>
+                    <th>Stay</th>
+                    <th>Occupancy</th>
+                    <th>Amount</th>
+                    <th>Payment</th>
+                    <th>Status</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
 
@@ -2426,16 +2346,22 @@ function Bookings() {
 
                   {paginatedBookings.map(
                     (booking) => {
-                      const status =
-                        normalizeText(
-                          booking.booking_status
-                        );
+                      const status = normalizeText(
+                        booking.booking_status
+                      );
+
+                      const groupRoomCount = Math.max(
+                        1,
+                        Number(booking.group_booking_count || 1)
+                      );
+
+                      const hasReservationGroup =
+                        Number(booking.reservation_group_id) > 0 &&
+                        Boolean(booking.group_code);
 
                       const canEdit =
-                        status ===
-                          "pending" ||
-                        status ===
-                          "confirmed";
+                        status === "pending" ||
+                        status === "confirmed";
 
                       const canCancel =
                         status ===
@@ -2447,31 +2373,8 @@ function Bookings() {
                         status ===
                         "pending";
 
-                      const now =
-                        new Date();
-
-                      const checkInTime =
-                        new Date(
-                          booking.check_in
-                        );
-
-                      const checkOutTime =
-                        new Date(
-                          booking.check_out
-                        );
-
-                      const canCheckIn =
-                        status ===
-                          "confirmed" &&
-                        !booking.actual_check_in &&
-                        !Number.isNaN(
-                          checkInTime.getTime()
-                        ) &&
-                        !Number.isNaN(
-                          checkOutTime.getTime()
-                        ) &&
-                        checkInTime <= now &&
-                        checkOutTime > now;
+                      const canManageGuests =
+                        status === "confirmed" || status === "checked_in";
 
                       const outstandingAmount =
                         Number(
@@ -2497,6 +2400,38 @@ function Bookings() {
                         outstandingAmount <=
                           0.009;
 
+                      const checkedInGuests = Number(
+                        booking.checked_in_guest_count || 0
+                      );
+
+                      const expectedGuests = Number(
+                        booking.expected_guest_count || 0
+                      );
+
+                      const roomCapacity = Number(
+                        booking.capacity || 0
+                      );
+
+                      const stayDuration =
+                        booking.stay_type === "day_use"
+                          ? `Day Use · ${formatStayDuration(
+                              calculateStayMinutes(
+                                booking.check_in,
+                                booking.check_out
+                              )
+                            )}`
+                          : `${calculateNights(
+                              booking.check_in,
+                              booking.check_out
+                            )} night${
+                              calculateNights(
+                                booking.check_in,
+                                booking.check_out
+                              ) === 1
+                                ? ""
+                                : "s"
+                            }`;
+
                       return (
                         <tr
                           key={
@@ -2515,10 +2450,7 @@ function Bookings() {
                                 #{booking.booking_id}
                               </span>
 
-                              {Number(
-                                booking.group_booking_count ||
-                                0
-                              ) > 1 && (
+                              {hasReservationGroup && (
                                 <button
                                   type="button"
                                   className="booking-clear-filters"
@@ -2527,12 +2459,12 @@ function Bookings() {
                                       `/bookings/groups/${booking.reservation_group_id}`
                                     )
                                   }
-                                  title={`Open ${booking.group_code}`}
+                                  title={`Open reservation ${booking.group_code}`}
                                 >
                                   {booking.group_code}
                                   {" · "}
-                                  {booking.group_booking_count}
-                                  {" rooms"}
+                                  {groupRoomCount}
+                                  {groupRoomCount === 1 ? " room" : " rooms"}
                                 </button>
                               )}
 
@@ -2572,47 +2504,29 @@ function Bookings() {
 
 
                           <td>
-                            <div className="booking-stay-cell">
-                              <span>
-                                {formatDate(
-                                  booking.check_in
-                                )}
-                              </span>
+                            <div className="booking-room-cell">
+                              <strong>{stayDuration}</strong>
 
-                              <span className="booking-stay-arrow">
-                                →
+                              <span>
+                                In · {formatDateTime(booking.check_in)}
                               </span>
 
                               <span>
-                                {formatDate(
-                                  booking.check_out
-                                )}
+                                Out · {formatDateTime(booking.check_out)}
                               </span>
                             </div>
                           </td>
-
+                          
                           <td>
-                            <strong className="booking-nights">
-                              {booking.stay_type ===
-                                "day_use"
-                                ? `Day Use · ${formatStayDuration(
-                                    calculateStayMinutes(
-                                      booking.check_in,
-                                      booking.check_out
-                                    )
-                                  )}`
-                                : `${calculateNights(
-                                    booking.check_in,
-                                    booking.check_out
-                                  )} night${
-                                    calculateNights(
-                                      booking.check_in,
-                                      booking.check_out
-                                    ) === 1
-                                      ? ""
-                                      : "s"
-                                  }`}
-                            </strong>
+                            <div className="booking-room-cell">
+                              <strong>
+                                {checkedInGuests} / {roomCapacity || "—"} staying
+                              </strong>
+
+                              <span>
+                                {expectedGuests} expected
+                              </span>
+                            </div>
                           </td>
 
                           <td>
@@ -2676,18 +2590,13 @@ function Bookings() {
                                 <IcoEye />
                               </button>
                               
-                              {canCheckIn && (
+                              {canManageGuests && (
                                 <button
                                   type="button"
                                   className="booking-action-button booking-action-button--edit"
-                                  onClick={() =>
-                                    requestAction(
-                                      "check-in",
-                                      booking
-                                    )
-                                  }
-                                  title="Check in guest"
-                                  aria-label={`Check in ${booking.booking_code}`}
+                                  onClick={() => openManageGuests(booking)}
+                                  title="Manage guests / check-in"
+                                  aria-label={`Manage guests for ${booking.booking_code}`}
                                 >
                                   <IcoCheck />
                                 </button>
@@ -2965,37 +2874,24 @@ function Bookings() {
       ====================================================== */}
 
       <BookingViewDialog
-        booking={
-          viewBooking
-        }
-        loading={
-          viewLoading
-        }
-        error={
-          viewError
-        }
-        onClose={
-          closeViewBooking
-        }
+        booking={viewBooking}
+        loading={viewLoading}
+        error={viewError}
+        onClose={closeViewBooking}
       />
 
+      <ManageGuestsDialog
+        booking={manageGuestsBooking}
+        onClose={closeManageGuests}
+        onChanged={() => void loadBookings()}
+      />
 
       <BookingActionDialog
-        action={
-          action
-        }
-        processing={
-          actionProcessing
-        }
-        error={
-          actionError
-        }
-        onClose={
-          closeAction
-        }
-        onConfirm={() =>
-          void confirmAction()
-        }
+        action={action}
+        processing={actionProcessing}
+        error={actionError}
+        onClose={closeAction}
+        onConfirm={() => void confirmAction()}
       />
 
       <ExtendStayDialog

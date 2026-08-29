@@ -112,6 +112,269 @@ const EMPTY_REFUND = {
   notes: "",
 };
 
+const EMPTY_ROOM_GUEST = {
+  guest_type: "adult",
+  full_name: "",
+  phone: "",
+  age: "",
+  id_proof_type: "",
+  id_proof_number: "",
+  extra_bed_used: false,
+};
+
+
+function createEmptyRoomGuest() {
+  return {
+    ...EMPTY_ROOM_GUEST,
+  };
+}
+
+
+function normalizeRoomGuest(
+  value
+) {
+  const guest =
+    value || {};
+
+
+  return {
+    booking_guest_id:
+      guest.booking_guest_id ??
+      null,
+
+    guest_type:
+      guest.guest_type ===
+      "child"
+        ? "child"
+        : "adult",
+
+    full_name:
+      guest.full_name ||
+      "",
+
+    phone:
+      guest.phone ||
+      "",
+
+    age:
+      guest.age ===
+        null ||
+      guest.age ===
+        undefined ||
+      guest.age ===
+        ""
+        ? ""
+        : Number(
+            guest.age
+          ),
+
+    id_proof_type:
+      guest.id_proof_type ||
+      "",
+
+    id_proof_number:
+      guest.id_proof_number ||
+      "",
+
+    extra_bed_used:
+      guest.extra_bed_used ===
+      true,
+  };
+}
+
+
+function isEmptyRoomGuest(
+  guest
+) {
+  if (!guest) {
+    return true;
+  }
+
+  return (
+    !String(
+      guest.full_name ||
+      ""
+    ).trim() &&
+    !String(
+      guest.phone ||
+      ""
+    ).trim() &&
+    (
+      guest.age === "" ||
+      guest.age === null ||
+      guest.age === undefined
+    ) &&
+    !String(
+      guest.id_proof_type ||
+      ""
+    ).trim() &&
+    !String(
+      guest.id_proof_number ||
+      ""
+    ).trim() &&
+    guest.extra_bed_used !== true
+  );
+  
+}
+
+
+function getRoomGuestCount(
+  room
+) {
+  if (
+    room?.roster_captured ===
+    true
+  ) {
+    return (
+      (
+        room
+          .primary_guest_staying ===
+        true
+          ? 1
+          : 0
+      ) +
+      (
+        Array.isArray(
+          room.guests
+        )
+          ? room.guests.length
+          : 0
+      )
+    );
+  }
+
+
+  const total =
+    Number(
+      room?.total_guests ||
+      0
+    );
+
+
+  return (
+    Number.isSafeInteger(
+      total
+    ) &&
+    total >= 1
+  )
+    ? total
+    : 1;
+}
+
+
+function syncRoomGuestCount(
+  room
+) {
+  return {
+    ...room,
+
+    total_guests:
+      getRoomGuestCount(
+        room
+      ),
+  };
+}
+
+
+function buildRoomOccupancyPayload(
+  room
+) {
+  const totalGuests =
+    getRoomGuestCount(
+      room
+    );
+
+
+  /*
+   * Legacy booking without captured roster:
+   * preserve old total_guests behaviour.
+   *
+   * Never invent historical occupants.
+   */
+  if (
+    room?.roster_captured !==
+    true
+  ) {
+    return {
+      total_guests:
+        totalGuests,
+    };
+  }
+
+
+  return {
+    total_guests:
+      totalGuests,
+
+    primary_guest_staying:
+      room
+        .primary_guest_staying ===
+      true,
+
+    guests:
+      (
+        Array.isArray(
+          room.guests
+        )
+          ? room.guests
+          : []
+      ).map(
+        (guest) => ({
+          guest_type:
+            guest.guest_type ===
+            "child"
+              ? "child"
+              : "adult",
+
+          full_name:
+            String(
+              guest.full_name ||
+              ""
+            ).trim(),
+
+          phone:
+            String(
+              guest.phone ||
+              ""
+            ).trim() ||
+            null,
+
+          age:
+            guest.guest_type ===
+              "child" &&
+            guest.age !==
+              "" &&
+            guest.age !==
+              null &&
+            guest.age !==
+              undefined
+              ? Number(
+                  guest.age
+                )
+              : null,
+
+          id_proof_type:
+            String(
+              guest.id_proof_type ||
+              ""
+            ).trim() ||
+            null,
+
+          id_proof_number:
+            String(
+              guest.id_proof_number ||
+              ""
+            ).trim() ||
+            null,
+
+          extra_bed_used:
+            guest.extra_bed_used ===
+            true,
+        })
+      ),
+  };
+}
+
 function normalizeBookingDateTime(
   value
 ) {
@@ -514,6 +777,22 @@ function BookingDesk() {
     enabled: false,
   });
 
+  const [
+    guestRequirementsPolicy,
+    setGuestRequirementsPolicy,
+  ] = useState(null);
+
+
+  const [
+    groupPrimaryGuestAllocated,
+    setGroupPrimaryGuestAllocated,
+  ] = useState(false);
+
+
+  const [
+    editPrimaryGuestAllocatedElsewhere,
+    setEditPrimaryGuestAllocatedElsewhere,
+  ] = useState(false);
 
   const [
     policyLoading,
@@ -820,10 +1099,14 @@ function BookingDesk() {
   /* ==========================================================
     BOOKING POLICY
 
-    Booking Desk only needs the current Day Use policy
-    to decide whether the option should be available.
+    CREATE / ADD ROOM:
+    - current Day Use policy
+    - current Guest & Occupancy policy
 
-    Pricing itself still comes from /bookings/quote.
+    EDIT:
+    - policy comes from immutable booking snapshot
+
+    Pricing itself always remains backend-authoritative.
   ========================================================== */
 
   useEffect(() => {
@@ -860,13 +1143,23 @@ function BookingDesk() {
         }
 
 
+        const settings =
+          data?.settings ||
+          {};
+
+
         setDayUsePolicy(
-          data
-            ?.settings
-            ?.day_use ||
+          settings.day_use ||
           {
             enabled: false,
           }
+        );
+
+
+        setGuestRequirementsPolicy(
+          settings
+            .guest_requirements ||
+          null
         );
       } catch (error) {
         if (!active) {
@@ -877,6 +1170,10 @@ function BookingDesk() {
         setDayUsePolicy({
           enabled: false,
         });
+
+        setGuestRequirementsPolicy(
+          null
+        );
 
 
         setPolicyError(
@@ -1002,6 +1299,20 @@ function BookingDesk() {
             ...stayTypes,
           ][0];
 
+        const primaryGuestAlreadyAllocated =
+          openBookings.some(
+            (item) =>
+              item
+                ?.occupancy
+                ?.primary_guest_staying ===
+              true
+          );
+
+
+        setGroupPrimaryGuestAllocated(
+          primaryGuestAlreadyAllocated
+        );
+
         const customer =
           data.customer;
 
@@ -1011,6 +1322,9 @@ function BookingDesk() {
 
           group_code:
             data.group_code,
+
+          primary_guest_already_allocated:
+            primaryGuestAlreadyAllocated,
         });
 
         setExistingCustomerId(
@@ -1291,6 +1605,61 @@ function BookingDesk() {
           data.stay_type ||
           "overnight";
 
+        const bookingPolicySnapshot =
+          data
+            .booking_policy_snapshot ||
+          null;
+
+
+        setDayUsePolicy(
+          bookingPolicySnapshot
+            ?.day_use ||
+          {
+            enabled:
+              existingStayType ===
+              "day_use",
+          }
+        );
+
+
+        setGuestRequirementsPolicy(
+          bookingPolicySnapshot
+            ?.guest_requirements ||
+          null
+        );
+
+
+        const occupancy =
+          data.occupancy ||
+          null;
+
+
+        const rosterCaptured =
+          occupancy
+            ?.roster_captured ===
+          true;
+
+
+        const primaryGuestStaying =
+          rosterCaptured &&
+          occupancy
+            ?.primary_guest_staying ===
+          true;
+
+
+        const accompanyingGuests =
+          rosterCaptured &&
+          Array.isArray(
+            occupancy
+              ?.accompanying_guests
+          )
+            ? occupancy
+                .accompanying_guests
+                .map(
+                  normalizeRoomGuest
+                )
+            : [];
+
         setBooking({
           stay_type:
             existingStayType,
@@ -1357,6 +1726,12 @@ function BookingDesk() {
                 1
               ),
 
+            max_extra_beds:
+              Number(
+                data.max_extra_beds ??
+                0
+              ),
+
             /*
              * Important:
              * preserve historical booked rate.
@@ -1367,15 +1742,113 @@ function BookingDesk() {
                 0
               ),
 
+            roster_captured:
+              rosterCaptured,
+
+            primary_guest_staying:
+              primaryGuestStaying,
+
+            guests:
+              accompanyingGuests,
+
             total_guests:
-              Number(
-                data.total_guests ||
-                1
-              ),
+              rosterCaptured
+                ? (
+                    (
+                      primaryGuestStaying
+                        ? 1
+                        : 0
+                    ) +
+                    accompanyingGuests
+                      .length
+                  )
+                : Number(
+                    data.total_guests ||
+                    1
+                  ),
 
             existing: true,
           },
         ]);
+
+        /*
+        * Single-room Edit must know whether the reservation
+        * group's Primary Guest belongs to another room.
+        */
+        setEditPrimaryGuestAllocatedElsewhere(
+          false
+        );
+
+
+        const reservationGroupId =
+          Number(
+            data.reservation_group_id
+          );
+
+
+        if (
+          Number.isSafeInteger(
+            reservationGroupId
+          ) &&
+          reservationGroupId > 0
+        ) {
+          try {
+            const groupResponse =
+              await apiClient.get(
+                `/bookings/groups/${reservationGroupId}`
+              );
+
+
+            if (!active) {
+              return;
+            }
+
+
+            const groupBookings =
+              Array.isArray(
+                groupResponse
+                  .data
+                  ?.data
+                  ?.bookings
+              )
+                ? groupResponse
+                    .data
+                    .data
+                    .bookings
+                : [];
+
+
+            const primaryElsewhere =
+              groupBookings.some(
+                (item) =>
+                  Number(
+                    item.booking_id
+                  ) !==
+                    Number(
+                      editBookingId
+                    ) &&
+                  item
+                    ?.occupancy
+                    ?.primary_guest_staying ===
+                    true
+              );
+
+
+            setEditPrimaryGuestAllocatedElsewhere(
+              primaryElsewhere
+            );
+          } catch {
+            /*
+            * Backend still protects Primary uniqueness during
+            * quote/save. Failure of this helper lookup must not
+            * make the booking itself unreadable.
+            */
+            setEditPrimaryGuestAllocatedElsewhere(
+              false
+            );
+          }
+        }
+
       } catch (
         error
       ) {
@@ -1848,11 +2321,9 @@ function BookingDesk() {
                     check_out:
                       booking.check_out,
 
-                    total_guests:
-                      Number(
-                        room.total_guests ||
-                        1
-                      ),
+                    ...buildRoomOccupancyPayload(
+                      room
+                    ),
 
                     booking_status:
                       booking.booking_status,
@@ -1863,39 +2334,99 @@ function BookingDesk() {
                   }
                 );
             } else {
-              response =
-                await apiClient.post(
-                  "/bookings/quote",
-                  {
-                    stay_type:
-                      booking.stay_type,
-
-                    booking_status:
-                      booking.booking_status,
-
-                    rooms:
-                      selectedRooms.map(
-                        (room) => ({
-                          room_id:
-                            Number(
-                              room.room_id
-                            ),
-
-                          check_in:
-                            booking.check_in,
-
-                          check_out:
-                            booking.check_out,
-
-                          total_guests:
-                            Number(
-                              room.total_guests ||
-                              1
-                            ),
-                        })
+              const quoteRooms =
+                selectedRooms.map(
+                  (room) => ({
+                    room_id:
+                      Number(
+                        room.room_id
                       ),
-                  }
+
+                    check_in:
+                      booking.check_in,
+
+                    check_out:
+                      booking.check_out,
+
+                    ...buildRoomOccupancyPayload(
+                      room
+                    ),
+                  })
                 );
+
+
+              if (
+                isAddRoomMode
+              ) {
+                response =
+                  await apiClient.post(
+                    `/bookings/groups/${addRoomGroupId}/rooms/quote`,
+                    {
+                      stay_type:
+                        booking.stay_type,
+
+                      booking_status:
+                        booking.booking_status,
+
+                      rooms:
+                        quoteRooms,
+                    }
+                  );
+              } else {
+                const phone =
+                  matchedCustomer
+                    ? normalizeStoredPhone(
+                        matchedCustomer.phone
+                      )
+                    : buildPhoneNumber(
+                        guest.phone
+                      );
+
+
+                response =
+                  await apiClient.post(
+                    "/bookings/quote",
+                    {
+                      stay_type:
+                        booking.stay_type,
+
+                      guest_name:
+                        guest.guest_name.trim(),
+
+                      phone,
+
+                      email:
+                        guest.email.trim() ||
+                        null,
+
+                      gender:
+                        guest.gender ||
+                        null,
+
+                      nationality:
+                        guest.nationality.trim() ||
+                        null,
+
+                      address:
+                        guest.address.trim() ||
+                        null,
+
+                      id_proof_type:
+                        guest.id_proof_type ||
+                        null,
+
+                      id_proof_number:
+                        guest.id_proof_number.trim() ||
+                        null,
+
+                      booking_status:
+                        booking.booking_status,
+
+                      rooms:
+                        quoteRooms,
+                    }
+                  );
+              }
             }
 
 
@@ -1961,6 +2492,18 @@ function BookingDesk() {
     booking.booking_status,
     booking.special_request,
     selectedRooms,
+
+    isAddRoomMode,
+    addRoomGroupId,
+    matchedCustomer,
+    guest.phone,
+    guest.guest_name,
+    guest.email,
+    guest.gender,
+    guest.nationality,
+    guest.address,
+    guest.id_proof_type,
+    guest.id_proof_number,
   ]);
 
   /* ==========================================================
@@ -2020,6 +2563,62 @@ function BookingDesk() {
                         room.price_per_night ||
                         0
                       ),
+
+                room_charge:
+                  quoteMatchesRoom
+                    ? Number(
+                        pricingQuote
+                          .room_charge ||
+                        0
+                      )
+                    : null,
+
+                child_charge_amount:
+                  quoteMatchesRoom
+                    ? Number(
+                        pricingQuote
+                          .child_charge_amount ||
+                        0
+                      )
+                    : 0,
+
+                extra_bed_charge_amount:
+                  quoteMatchesRoom
+                    ? Number(
+                        pricingQuote
+                          .extra_bed_charge_amount ||
+                        0
+                      )
+                    : 0,
+
+                guest_charge_amount:
+                  quoteMatchesRoom
+                    ? Number(
+                        pricingQuote
+                          .guest_charge_amount ||
+                        0
+                      )
+                    : 0,
+
+                max_extra_beds:
+                  quoteMatchesRoom
+                    ? Number(
+                        pricingQuote
+                          .max_extra_beds ??
+                        room.max_extra_beds ??
+                        0
+                      )
+                    : Number(
+                        room.max_extra_beds ??
+                        0
+                      ),
+
+                extra_beds_used:
+                  quoteMatchesRoom
+                    ? pricingQuote
+                        .extra_beds_used ??
+                      null
+                    : null,
 
                 total_amount:
                   quoteMatchesRoom
@@ -2085,6 +2684,47 @@ function BookingDesk() {
                   0
                 ),
 
+              room_charge:
+                Number(
+                  quote
+                    ?.room_charge ||
+                  0
+                ),
+
+              child_charge_amount:
+                Number(
+                  quote
+                    ?.child_charge_amount ||
+                  0
+                ),
+
+              extra_bed_charge_amount:
+                Number(
+                  quote
+                    ?.extra_bed_charge_amount ||
+                  0
+                ),
+
+              guest_charge_amount:
+                Number(
+                  quote
+                    ?.guest_charge_amount ||
+                  0
+                ),
+
+              max_extra_beds:
+                Number(
+                  quote
+                    ?.max_extra_beds ??
+                  room.max_extra_beds ??
+                  0
+                ),
+
+              extra_beds_used:
+                quote
+                  ?.extra_beds_used ??
+                null,
+
               total_amount:
                 Number(
                   quote
@@ -2140,9 +2780,8 @@ function BookingDesk() {
             room
           ) =>
             total +
-            Number(
-              room.total_guests ||
-              0
+            getRoomGuestCount(
+              room
             ),
           0
         ),
@@ -2642,8 +3281,17 @@ function BookingDesk() {
     if (
       isEditMode
     ) {
+      /*
+      * Room change during Edit must preserve the
+      * existing occupant roster.
+      */
+      const currentRoom =
+        selectedRooms[0] ||
+        null;
+
+
       setSelectedRooms([
-        {
+        syncRoomGuestCount({
           ...room,
 
           room_id:
@@ -2663,52 +3311,113 @@ function BookingDesk() {
               1
             ),
 
-          total_guests: 1,
-        },
+          max_extra_beds:
+            Number(
+              room.max_extra_beds ??
+              0
+            ),
+
+          roster_captured:
+            currentRoom
+              ?.roster_captured ===
+            true,
+
+          primary_guest_staying:
+            currentRoom
+              ?.primary_guest_staying ===
+            true,
+
+          guests:
+            Array.isArray(
+              currentRoom?.guests
+            )
+              ? currentRoom.guests
+              : [],
+
+          total_guests:
+            currentRoom
+              ?.total_guests ||
+            1,
+
+          existing: true,
+        }),
       ]);
 
 
-      return;
-    }
+      setFormError("");
 
-
-    if (
-      isRoomSelected(
-        room.room_id
-      )
-    ) {
       return;
     }
 
 
     setSelectedRooms(
-      (current) => [
-        ...current,
+      (current) => {
+        if (
+          current.some(
+            (selected) =>
+              Number(
+                selected.room_id
+              ) ===
+              Number(
+                room.room_id
+              )
+          )
+        ) {
+          return current;
+        }
 
-        {
-          ...room,
 
-          room_id:
-            Number(
-              room.room_id
-            ),
+        return [
+          ...current,
 
-          price_per_night:
-            Number(
-              room.price_per_night ||
-              0
-            ),
+          syncRoomGuestCount({
+            ...room,
 
-          capacity:
-            Number(
-              room.capacity ||
-              1
-            ),
+            room_id:
+              Number(
+                room.room_id
+              ),
 
-          total_guests: 1,
-        },
-      ]
+            price_per_night:
+              Number(
+                room.price_per_night ||
+                0
+              ),
+
+            capacity:
+              Number(
+                room.capacity ||
+                1
+              ),
+
+            max_extra_beds:
+              Number(
+                room.max_extra_beds ??
+                0
+              ),
+
+            /*
+              * Room-first reservation:
+              * selecting a room does not automatically create
+              * or allocate any staying guest.
+              *
+              * Guests can be added now optionally or later
+              * when they actually arrive.
+              */
+              roster_captured:
+                true,
+
+              primary_guest_staying:
+                false,
+
+              guests: [],
+          }),
+        ];
+      }
     );
+
+
+    setFormError("");
   }
 
 
@@ -2729,9 +3438,14 @@ function BookingDesk() {
             Number(
               room.room_id
             ) !==
-            Number(roomId)
+            Number(
+              roomId
+            )
         )
     );
+
+
+    setFormError("");
   }
 
 
@@ -2740,7 +3454,20 @@ function BookingDesk() {
     value
   ) {
     const parsed =
-      Number(value);
+      Number(
+        value
+      );
+
+
+    const desiredTotal =
+    (
+      Number.isSafeInteger(
+        parsed
+      ) &&
+      parsed >= 0
+    )
+      ? parsed
+      : 0;
 
 
     setSelectedRooms(
@@ -2751,26 +3478,381 @@ function BookingDesk() {
               Number(
                 room.room_id
               ) !==
-              Number(roomId)
+              Number(
+                roomId
+              )
             ) {
               return room;
             }
 
 
-            return {
-              ...room,
+            if (
+              room.roster_captured !==
+              true
+            ) {
+              return {
+                ...room,
 
-              total_guests:
-                Number.isSafeInteger(
-                  parsed
-                ) &&
-                parsed >= 1
-                  ? parsed
-                  : 1,
-            };
+                total_guests:
+                  desiredTotal,
+              };
+            }
+
+
+            const primaryCount =
+              room
+                .primary_guest_staying ===
+              true
+                ? 1
+                : 0;
+
+
+            const requiredAccompanying =
+              Math.max(
+                0,
+                desiredTotal -
+                  primaryCount
+              );
+
+
+            let guests =
+              Array.isArray(
+                room.guests
+              )
+                ? [
+                    ...room.guests,
+                  ]
+                : [];
+
+
+            if (
+              guests.length >
+              requiredAccompanying
+            ) {
+              guests =
+                guests.slice(
+                  0,
+                  requiredAccompanying
+                );
+            }
+
+
+            while (
+              guests.length <
+              requiredAccompanying
+            ) {
+              guests.push(
+                createEmptyRoomGuest()
+              );
+            }
+
+
+            return syncRoomGuestCount({
+              ...room,
+              guests,
+            });
           }
         )
     );
+
+
+    setFormError("");
+  }
+
+
+  function updateRoomPrimaryGuest(
+    roomId,
+    value
+  ) {
+    const shouldStay =
+      value === true;
+
+
+    /*
+    * Existing reservation already owns the Primary Guest
+    * in another room.
+    */
+    if (
+      shouldStay &&
+      isAddRoomMode &&
+      groupPrimaryGuestAllocated
+    ) {
+      return;
+    }
+
+
+    if (
+      shouldStay &&
+      isEditMode &&
+      editPrimaryGuestAllocatedElsewhere
+    ) {
+      return;
+    }
+
+
+    setSelectedRooms(
+      (current) =>
+        current.map(
+          (room) => {
+            const isTarget =
+              Number(
+                room.room_id
+              ) ===
+              Number(
+                roomId
+              );
+
+            let nextPrimary =
+              room
+                .primary_guest_staying ===
+              true;
+
+
+            if (
+              shouldStay
+            ) {
+              nextPrimary =
+                isTarget;
+            } else if (
+              isTarget
+            ) {
+              nextPrimary =
+                false;
+            }
+
+
+            let guests =
+              Array.isArray(
+                room.guests
+              )
+                ? [
+                    ...room.guests,
+                  ]
+                : [];
+
+
+            if (
+              isTarget &&
+              nextPrimary &&
+              guests.length === 1 &&
+              isEmptyRoomGuest(
+                guests[0]
+              )
+            ) {
+              guests = [];
+            }
+
+
+            return syncRoomGuestCount({
+              ...room,
+
+              primary_guest_staying:
+                nextPrimary,
+
+              guests,
+            });
+          }
+        )
+    );
+
+
+    setFormError("");
+  }
+
+
+  function addAccompanyingGuest(
+    roomId
+  ) {
+    setSelectedRooms(
+      (current) =>
+        current.map(
+          (room) => {
+            if (
+              Number(
+                room.room_id
+              ) !==
+              Number(
+                roomId
+              )
+            ) {
+              return room;
+            }
+
+
+            if (
+              getRoomGuestCount(
+                room
+              ) >=
+              Number(
+                room.capacity ||
+                1
+              )
+            ) {
+              return room;
+            }
+
+
+            return syncRoomGuestCount({
+              ...room,
+
+              roster_captured:
+                true,
+
+              guests: [
+                ...(
+                  Array.isArray(
+                    room.guests
+                  )
+                    ? room.guests
+                    : []
+                ),
+
+                createEmptyRoomGuest(),
+              ],
+            });
+          }
+        )
+    );
+
+
+    setFormError("");
+  }
+
+
+  function removeAccompanyingGuest(
+    roomId,
+    guestIndex
+  ) {
+    setSelectedRooms(
+      (current) =>
+        current.map(
+          (room) => {
+            if (
+              Number(
+                room.room_id
+              ) !==
+              Number(
+                roomId
+              )
+            ) {
+              return room;
+            }
+
+
+            const guests =
+              Array.isArray(
+                room.guests
+              )
+                ? room.guests
+                : [];
+
+
+            return syncRoomGuestCount({
+              ...room,
+
+              guests:
+                guests.filter(
+                  (
+                    _guest,
+                    index
+                  ) =>
+                    index !==
+                    guestIndex
+                ),
+            });
+          }
+        )
+    );
+
+
+    setFormError("");
+  }
+
+
+  function updateAccompanyingGuest(
+    roomId,
+    guestIndex,
+    field,
+    value
+  ) {
+    setSelectedRooms(
+      (current) =>
+        current.map(
+          (room) => {
+            if (
+              Number(
+                room.room_id
+              ) !==
+              Number(
+                roomId
+              )
+            ) {
+              return room;
+            }
+
+
+            const guests =
+              Array.isArray(
+                room.guests
+              )
+                ? [
+                    ...room.guests,
+                  ]
+                : [];
+
+
+            const existing =
+              guests[
+                guestIndex
+              ];
+
+
+            if (
+              !existing
+            ) {
+              return room;
+            }
+
+
+            guests[
+              guestIndex
+            ] = {
+              ...existing,
+
+              [field]:
+                field ===
+                "extra_bed_used"
+                  ? value ===
+                    true
+                  : value,
+            };
+
+
+            /*
+            * Adult does not need stale child age.
+            */
+            if (
+              field ===
+                "guest_type" &&
+              value ===
+                "adult"
+            ) {
+              guests[
+                guestIndex
+              ].age = "";
+            }
+
+
+            return syncRoomGuestCount({
+              ...room,
+              guests,
+            });
+          }
+        )
+    );
+
+
+    setFormError("");
   }
 
 
@@ -2800,6 +3882,7 @@ function BookingDesk() {
           isEditMode,
           guest,
           matchedCustomer,
+          guestRequirementsPolicy,
         });
     }
 
@@ -2811,6 +3894,18 @@ function BookingDesk() {
           booking,
           nights,
           selectedRooms,
+
+          guestRequirementsPolicy,
+
+          reservationContact:
+            guest,
+
+          isEditMode,
+          isAddRoomMode,
+
+          groupPrimaryGuestAllocated,
+
+          editPrimaryGuestAllocatedElsewhere,
         });
     }
 
@@ -2930,16 +4025,29 @@ function BookingDesk() {
         isAddRoomMode
           ? ""
           : validateGuestStep({
-              isEditMode,
-              guest,
-              matchedCustomer,
-            })
+            isEditMode,
+            guest,
+            matchedCustomer,
+            guestRequirementsPolicy,
+          })
       ) ||
       validateStayRoomsStep({
         booking,
         nights,
         selectedRooms,
-      }) ||
+
+        guestRequirementsPolicy,
+
+        reservationContact:
+          guest,
+
+        isEditMode,
+        isAddRoomMode,
+
+        groupPrimaryGuestAllocated,
+
+        editPrimaryGuestAllocatedElsewhere,
+      })||
       validateReservationPaymentStep({
         booking,
         payment,
@@ -3024,8 +4132,9 @@ function BookingDesk() {
           check_out:
             booking.check_out,
 
-          total_guests:
-            room.total_guests,
+          ...buildRoomOccupancyPayload(
+            room
+          ),
 
           booking_status:
             booking.booking_status,
@@ -3176,8 +4285,9 @@ function BookingDesk() {
             check_out:
               booking.check_out,
 
-            total_guests:
-              room.total_guests,
+            ...buildRoomOccupancyPayload(
+              room
+            ),
 
             booking_status:
               booking.booking_status,
@@ -4168,6 +5278,41 @@ function BookingDesk() {
             }
             updateRoomGuests={
               updateRoomGuests
+            }
+            guestRequirementsPolicy={
+              guestRequirementsPolicy
+            }
+
+            primaryGuestName={
+              guest.guest_name
+            }
+
+            isAddRoomMode={
+              isAddRoomMode
+            }
+
+            groupPrimaryGuestAllocated={
+              groupPrimaryGuestAllocated
+            }
+
+            editPrimaryGuestAllocatedElsewhere={
+              editPrimaryGuestAllocatedElsewhere
+            }
+
+            updateRoomPrimaryGuest={
+              updateRoomPrimaryGuest
+            }
+
+            addAccompanyingGuest={
+              addAccompanyingGuest
+            }
+
+            removeAccompanyingGuest={
+              removeAccompanyingGuest
+            }
+
+            updateAccompanyingGuest={
+              updateAccompanyingGuest
             }
             roomTotals={
               roomTotals

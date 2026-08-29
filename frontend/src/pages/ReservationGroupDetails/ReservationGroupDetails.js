@@ -92,6 +92,9 @@ function formatStatus(
     pending:
       "Pending",
 
+    expected:
+      "Expected",
+
     confirmed:
       "Confirmed",
 
@@ -175,6 +178,13 @@ function ReservationGroupDetails() {
     setError,
   ] = useState(
     ""
+  );
+
+  const [
+    expandedBookingId,
+    setExpandedBookingId,
+  ] = useState(
+    null
   );
 
 
@@ -420,7 +430,7 @@ function ReservationGroupDetails() {
           <div className="bstat-info">
 
             <span className="bstat-label">
-              Guests
+               Active Guests
             </span>
 
             <strong className="bstat-value">
@@ -431,7 +441,7 @@ function ReservationGroupDetails() {
             </strong>
 
             <span className="bstat-change">
-              Active reservation guests
+              Expected + checked-in allocations
             </span>
 
           </div>
@@ -501,14 +511,14 @@ function ReservationGroupDetails() {
           <section className="booking-detail-section">
 
             <h4>
-              Primary Guest
+              Reservation Contact
             </h4>
 
 
             <div className="booking-detail-row">
 
               <span>
-                Guest
+                Contact Name
               </span>
 
               <strong>
@@ -766,7 +776,7 @@ function ReservationGroupDetails() {
 
         <div className="bookings-table-wrap">
 
-          <table className="bookings-table">
+          <table className="bookings-table reservation-group-bookings-table">
 
             <thead>
 
@@ -785,7 +795,7 @@ function ReservationGroupDetails() {
                 </th>
 
                 <th>
-                  Guests
+                  Occupancy
                 </th>
 
                 <th>
@@ -811,202 +821,449 @@ function ReservationGroupDetails() {
 
             <tbody>
 
-              {bookings.map(
-                (
-                  booking
-                ) => (
-                  <tr
+              {bookings.map((booking) => {
+                const roomGuests =
+                  Array.isArray(
+                    booking?.occupancy?.guests
+                  )
+                    ? booking.occupancy.guests
+                    : [];
+
+                const checkedInGuests =
+                  roomGuests.filter(
+                    (guest) =>
+                      String(
+                        guest.guest_status || ""
+                      )
+                        .trim()
+                        .toLowerCase() ===
+                      "checked_in"
+                  );
+
+                const expectedGuests =
+                  roomGuests.filter(
+                    (guest) =>
+                      String(
+                        guest.guest_status || ""
+                      )
+                        .trim()
+                        .toLowerCase() ===
+                      "expected"
+                  );
+
+                const roomCapacity =
+                  Number(
+                    booking.capacity ||
+                    0
+                  );
+
+                const expanded =
+                  expandedBookingId ===
+                  Number(
+                    booking.booking_id
+                  );
+
+                return (
+                  <React.Fragment
                     key={
-                      booking
-                        .booking_id
+                      booking.booking_id
                     }
                   >
+                    <tr>
 
-                    <td>
+                      <td>
+                        <div className="booking-id-cell">
 
-                      <div className="booking-id-cell">
+                          <strong>
+                            {booking.booking_code}
+                          </strong>
 
-                        <strong>
-                          {
-                            booking
-                              .booking_code
+                          <span>
+                            #{booking.booking_id}
+                          </span>
+
+                        </div>
+                      </td>
+
+
+                      <td>
+                        <div className="booking-room-cell">
+
+                          <strong>
+                            Room{" "}
+                            {booking.room_number || "—"}
+                          </strong>
+
+                          <span>
+                            {booking.room_type || "—"}
+                          </span>
+
+                        </div>
+                      </td>
+
+
+                      <td>
+                        <div className="booking-room-cell">
+
+                          <strong>
+                            {booking.stay_type === "day_use"
+                              ? "Day Use"
+                              : "Overnight"}
+                          </strong>
+
+                          <span>
+                            In ·{" "}
+                            {formatDateTime(
+                              booking.check_in
+                            )}
+                          </span>
+
+                          <span>
+                            Out ·{" "}
+                            {formatDateTime(
+                              booking.check_out
+                            )}
+                          </span>
+
+                        </div>
+                      </td>
+
+
+                      <td>
+                        <div className="booking-room-cell">
+
+                          <strong>
+                            {checkedInGuests.length}
+                            {" / "}
+                            {roomCapacity || "—"}
+                            {" staying"}
+                          </strong>
+
+                          <span>
+                            {expectedGuests.length}
+                            {" expected"}
+                          </span>
+
+                        </div>
+                      </td>
+
+
+                      <td>
+                        <div className="booking-amount-cell">
+
+                          <strong>
+                            {formatCurrency(
+                              booking.total_amount
+                            )}
+                          </strong>
+
+                          <span>
+                            Paid{" "}
+                            {formatCurrency(
+                              booking.amount_paid
+                            )}
+                          </span>
+
+                        </div>
+                      </td>
+
+
+                      <td>
+                        <span
+                          className={
+                            `booking-payment booking-payment--${
+                              String(
+                                booking.payment_status ||
+                                "unpaid"
+                              ).toLowerCase()
+                            }`
                           }
-                        </strong>
+                        >
+                          {formatPaymentStatus(
+                            booking.payment_status
+                          )}
+                        </span>
+                      </td>
 
-                        <span>
-                          #
-                          {
-                            booking
-                              .booking_id
+
+                      <td>
+                        <span
+                          className={
+                            `booking-status booking-status--${
+                              String(
+                                booking.booking_status ||
+                                "unknown"
+                              ).toLowerCase()
+                            }`
                           }
-                        </span>
-
-                      </div>
-
-                    </td>
-
-
-                    <td>
-
-                      <div className="booking-room-cell">
-
-                        <strong>
-                          Room{" "}
-                          {
-                            booking
-                              .room_number ||
-                            "—"
-                          }
-                        </strong>
-
-                        <span>
-                          {
-                            booking
-                              .room_type ||
-                            "—"
-                          }
-                        </span>
-
-                      </div>
-
-                    </td>
-
-
-                    <td>
-
-                      <div className="booking-room-cell">
-
-                        <strong>
-                          {booking.stay_type ===
-                          "day_use"
-                            ? "Day Use"
-                            : "Overnight"}
-                        </strong>
-
-                        <span>
-                          {formatDateTime(
-                            booking
-                              .check_in
-                          )}
-                          {" → "}
-                          {formatDateTime(
-                            booking
-                              .check_out
+                        >
+                          {formatStatus(
+                            booking.booking_status
                           )}
                         </span>
-
-                      </div>
-
-                    </td>
+                      </td>
 
 
-                    <td>
-                      {
-                        booking
-                          .total_guests
-                      }
-                    </td>
+                      <td>
+                        <div className="booking-actions">
+
+                          <button
+                            type="button"
+                            className="booking-btn-secondary"
+                            onClick={() =>
+                              navigate(
+                                `/booking-desk?edit=${booking.booking_id}`
+                              )
+                            }
+                            disabled={
+                              ![
+                                "pending",
+                                "confirmed",
+                              ].includes(
+                                String(
+                                  booking.booking_status ||
+                                  ""
+                                ).toLowerCase()
+                              )
+                            }
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            className="booking-btn-secondary"
+                            onClick={() =>
+                              setExpandedBookingId(
+                                expanded
+                                  ? null
+                                  : Number(
+                                      booking.booking_id
+                                    )
+                              )
+                            }
+                          >
+                            {expanded
+                              ? "Hide Guests"
+                              : `Guests (${roomGuests.length})`}
+                          </button>
+
+                        </div>
+                      </td>
+
+                    </tr>
 
 
-                    <td>
+                    {expanded && (
+                      <tr className="reservation-group-guests-row">
 
-                      <div className="booking-amount-cell">
+                        <td
+                          colSpan="8"
+                          className="reservation-group-guests-cell"
+                        >
 
-                        <strong>
-                          {formatCurrency(
-                            booking
-                              .total_amount
-                          )}
-                        </strong>
+                          <div className="reservation-group-info-grid">
 
-                        <span>
-                          Paid{" "}
-                          {formatCurrency(
-                            booking
-                              .amount_paid
-                          )}
-                        </span>
+                            {roomGuests.length === 0 ? (
+                              <section className="booking-detail-section">
 
-                      </div>
+                                <h4>
+                                  Room{" "}
+                                  {booking.room_number || "—"} Guests
+                                </h4>
 
-                    </td>
+                                <div className="booking-special-request">
+                                  No staying guest details recorded for this room.
+                                </div>
 
+                              </section>
+                            ) : (
+                              roomGuests.map(
+                                (
+                                  guest,
+                                  guestIndex
+                                ) => {
+                                  const guestType =
+                                    String(
+                                      guest.guest_type ||
+                                      "adult"
+                                    )
+                                      .trim()
+                                      .toLowerCase();
 
-                    <td>
+                                  return (
+                                    <section
+                                      className="booking-detail-section"
+                                      key={
+                                        guest.booking_guest_id ||
+                                        `${booking.booking_id}-${guestIndex}`
+                                      }
+                                    >
 
-                      <span
-                        className={
-                          `booking-payment booking-payment--${
-                            String(
-                              booking
-                                .payment_status ||
-                              "unpaid"
-                            ).toLowerCase()
-                          }`
-                        }
-                      >
-                        {formatPaymentStatus(
-                          booking
-                            .payment_status
-                        )}
-                      </span>
-
-                    </td>
-
-
-                    <td>
-
-                      <span
-                        className={
-                          `booking-status booking-status--${
-                            String(
-                              booking
-                                .booking_status ||
-                              "unknown"
-                            ).toLowerCase()
-                          }`
-                        }
-                      >
-                        {formatStatus(
-                          booking
-                            .booking_status
-                        )}
-                      </span>
-
-                    </td>
+                                      <h4>
+                                        {guest.full_name ||
+                                          `Guest ${guestIndex + 1}`}
+                                      </h4>
 
 
-                    <td>
+                                      <div className="booking-detail-row">
 
-                      <button
-                        type="button"
-                        className="booking-btn-secondary"
-                        onClick={() =>
-                          navigate(
-                            `/booking-desk?edit=${booking.booking_id}`
-                          )
-                        }
-                        disabled={
-                          ![
-                            "pending",
-                            "confirmed",
-                          ].includes(
-                            String(
-                              booking
-                                .booking_status ||
-                              ""
-                            ).toLowerCase()
-                          )
-                        }
-                      >
-                        Edit
-                      </button>
+                                        <span>
+                                          Type / Role
+                                        </span>
 
-                    </td>
+                                        <strong>
+                                          {guestType === "child"
+                                            ? "Child"
+                                            : "Adult"}
+                                          {" · "}
+                                          {String(
+                                            guest.guest_role ||
+                                            ""
+                                          )
+                                            .replaceAll(
+                                              "_",
+                                              " "
+                                            )
+                                            .replace(
+                                              /\b\w/g,
+                                              (character) =>
+                                                character.toUpperCase()
+                                            ) ||
+                                            "—"}
+                                        </strong>
 
-                  </tr>
-                )
-              )}
+                                      </div>
+
+
+                                      {guest.phone && (
+                                        <div className="booking-detail-row">
+
+                                          <span>
+                                            Mobile
+                                          </span>
+
+                                          <strong>
+                                            {guest.phone}
+                                          </strong>
+
+                                        </div>
+                                      )}
+
+
+                                      <div className="booking-detail-row">
+
+                                        <span>
+                                          Status
+                                        </span>
+
+                                        <strong>
+                                          {formatStatus(
+                                            guest.guest_status
+                                          )}
+                                        </strong>
+
+                                      </div>
+
+
+                                      {guestType === "child" && (
+                                        <div className="booking-detail-row">
+
+                                          <span>
+                                            Age
+                                          </span>
+
+                                          <strong>
+                                            {guest.age ?? "—"}
+                                          </strong>
+
+                                        </div>
+                                      )}
+
+
+                                      <div className="booking-detail-row">
+
+                                        <span>
+                                          ID
+                                        </span>
+
+                                        <strong>
+                                          {guest.id_proof_type &&
+                                          guest.id_proof_number
+                                            ? `${guest.id_proof_type} · ${guest.id_proof_number}`
+                                            : "Not recorded"}
+                                        </strong>
+
+                                      </div>
+
+
+                                      <div className="booking-detail-row">
+
+                                        <span>
+                                          Extra Bed
+                                        </span>
+
+                                        <strong>
+                                          {guest.extra_bed_used === true ||
+                                          Number(
+                                            guest.extra_bed_used
+                                          ) === 1
+                                            ? "Used"
+                                            : "No"}
+                                        </strong>
+
+                                      </div>
+
+
+                                      {guest.actual_check_in && (
+                                        <div className="booking-detail-row">
+
+                                          <span>
+                                            Checked In
+                                          </span>
+
+                                          <strong>
+                                            {formatDateTime(
+                                              guest.actual_check_in
+                                            )}
+                                          </strong>
+
+                                        </div>
+                                      )}
+
+
+                                      {guest.actual_check_out && (
+                                        <div className="booking-detail-row">
+
+                                          <span>
+                                            Checked Out
+                                          </span>
+
+                                          <strong>
+                                            {formatDateTime(
+                                              guest.actual_check_out
+                                            )}
+                                          </strong>
+
+                                        </div>
+                                      )}
+
+                                    </section>
+                                  );
+                                }
+                              )
+                            )}
+
+                          </div>
+
+                        </td>
+
+                      </tr>
+                    )}
+
+                  </React.Fragment>
+                );
+              })}
 
             </tbody>
 

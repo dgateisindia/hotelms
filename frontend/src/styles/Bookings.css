@@ -2357,6 +2357,146 @@
   min-width: 0;
 }
 
+/* Compact room-booking table only for Reservation Group page */
+.bookings-page .reservation-group-bookings-table {
+  min-width: 1040px;
+  table-layout: fixed;
+}
+
+.bookings-page .reservation-group-bookings-table th,
+.bookings-page .reservation-group-bookings-table td {
+  padding:
+    var(--space-3);
+}
+
+
+/* Controlled column widths */
+.bookings-page
+.reservation-group-bookings-table
+th:nth-child(1),
+.bookings-page
+.reservation-group-bookings-table
+td:nth-child(1) {
+  width: 10%;
+}
+
+.bookings-page
+.reservation-group-bookings-table
+th:nth-child(2),
+.bookings-page
+.reservation-group-bookings-table
+td:nth-child(2) {
+  width: 10%;
+}
+
+.bookings-page
+.reservation-group-bookings-table
+th:nth-child(3),
+.bookings-page
+.reservation-group-bookings-table
+td:nth-child(3) {
+  width: 21%;
+}
+
+.bookings-page
+.reservation-group-bookings-table
+th:nth-child(4),
+.bookings-page
+.reservation-group-bookings-table
+td:nth-child(4) {
+  width: 13%;
+}
+
+.bookings-page
+.reservation-group-bookings-table
+th:nth-child(5),
+.bookings-page
+.reservation-group-bookings-table
+td:nth-child(5) {
+  width: 12%;
+}
+
+.bookings-page
+.reservation-group-bookings-table
+th:nth-child(6),
+.bookings-page
+.reservation-group-bookings-table
+td:nth-child(6) {
+  width: 9%;
+}
+
+.bookings-page
+.reservation-group-bookings-table
+th:nth-child(7),
+.bookings-page
+.reservation-group-bookings-table
+td:nth-child(7) {
+  width: 10%;
+}
+
+.bookings-page
+.reservation-group-bookings-table
+th:nth-child(8),
+.bookings-page
+.reservation-group-bookings-table
+td:nth-child(8) {
+  width: 15%;
+}
+
+
+/* Keep action buttons compact instead of stretching the row */
+.bookings-page
+.reservation-group-bookings-table
+.booking-actions {
+  flex-wrap: wrap;
+}
+
+
+/* Expanded guest details row */
+.bookings-page
+.reservation-group-bookings-table
+.reservation-group-guests-cell {
+  padding: 0;
+  white-space: normal;
+  background:
+    var(--color-surface-muted);
+}
+
+
+/* Prevent the expanded row from inheriting table nowrap */
+.bookings-page
+.reservation-group-guests-cell
+.reservation-group-info-grid {
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap:
+    var(--space-3);
+
+  padding:
+    var(--space-4);
+}
+
+
+/* One guest should use the complete available width */
+.bookings-page
+.reservation-group-guests-cell
+.booking-detail-section:only-child {
+  grid-column:
+    1 / -1;
+}
+
+
+/* Long IDs / phone values must not expand the table */
+.bookings-page
+.reservation-group-guests-cell
+.booking-detail-row > strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 /* ============================================================
    RESPONSIVE
@@ -2405,6 +2545,7 @@
   }
 
   .bookings-page
+  .reservation-group-guests-cell
   .reservation-group-info-grid {
     grid-template-columns:
       1fr;

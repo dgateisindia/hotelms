@@ -13,6 +13,11 @@ const {
   serializeSettingValue,
 } = require("./hotelSettingsDefaults");
 
+const {
+  validateAllowedGuestIdProofTypes,
+} = require(
+  "./guestIdProofService"
+);
 
 /* ============================================================
    HOTEL SETTINGS SERVICE
@@ -2076,6 +2081,17 @@ function validateSetting(
       "child_age_rules"
   ) {
     validateChildAgeRules(
+      value
+    );
+  }
+
+  if (
+    section ===
+      "guest_requirements" &&
+    key ===
+      "allowed_id_proof_types"
+  ) {
+    validateAllowedGuestIdProofTypes(
       value
     );
   }

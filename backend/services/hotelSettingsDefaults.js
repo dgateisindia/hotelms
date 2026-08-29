@@ -106,6 +106,12 @@ const SYSTEM_INTEGRITY_RULES =
 
   });
 
+const {
+  DEFAULT_ALLOWED_GUEST_ID_PROOF_TYPES,
+} = require(
+  "./guestIdProofService"
+);
+
 
 /* ============================================================
    DEFAULT HOTEL SETTINGS
@@ -1176,6 +1182,19 @@ const DEFAULT_HOTEL_SETTINGS = {
       dataType: "boolean",
     },
 
+    /*
+    * ID proof types accepted by this hotel.
+    *
+    * This setting is included in the booking policy snapshot,
+    * so existing bookings retain the list that applied when
+    * they were created.
+    */
+    allowed_id_proof_types: {
+      value: [
+        ...DEFAULT_ALLOWED_GUEST_ID_PROOF_TYPES,
+      ],
+      dataType: "array",
+    },
 
     /* --------------------------------------------------------
       STAYING GUEST DETAILS

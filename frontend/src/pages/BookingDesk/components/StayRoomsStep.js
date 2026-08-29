@@ -123,6 +123,258 @@ function formatDuration(
   );
 }
 
+/* ============================================================
+   GUEST & OCCUPANCY HELPERS
+============================================================ */
+
+function getChildAgeRule(
+  policy,
+  value
+) {
+  const age =
+    Number(
+      value
+    );
+
+
+  if (
+    !Number.isInteger(
+      age
+    ) ||
+    age < 0
+  ) {
+    return null;
+  }
+
+
+  const rules =
+    Array.isArray(
+      policy?.child_age_rules
+    )
+      ? policy.child_age_rules
+      : [];
+
+
+  return (
+    rules.find(
+      (rule) =>
+        age >=
+          Number(
+            rule.min_age
+          ) &&
+        age <=
+          Number(
+            rule.max_age
+          )
+    ) ||
+    null
+  );
+}
+
+
+function formatChildChargePolicy(
+  rule
+) {
+  const charge =
+    rule?.charge ||
+    {};
+
+
+  if (
+    charge.method ===
+    "fixed_amount"
+  ) {
+    return `${formatCurrency(
+      Number(
+        charge.value ||
+        0
+      )
+    )} / night`;
+  }
+
+
+  if (
+    charge.method ===
+    "percentage"
+  ) {
+    return `${Number(
+      charge.value ||
+      0
+    )}% of room rate / night`;
+  }
+
+
+  return "No child occupancy charge";
+}
+
+
+function formatChildBedPolicy(
+  value
+) {
+  if (
+    value ===
+    "extra_bed_required"
+  ) {
+    return "Extra bed required";
+  }
+
+
+  if (
+    value ===
+    "extra_bed_optional"
+  ) {
+    return "Extra bed optional";
+  }
+
+
+  return "Share existing bed";
+}
+
+
+function guestCountForRoom(
+  room
+) {
+  if (
+    room?.roster_captured ===
+    true
+  ) {
+    return (
+      (
+        room
+          .primary_guest_staying ===
+        true
+          ? 1
+          : 0
+      ) +
+      (
+        Array.isArray(
+          room.guests
+        )
+          ? room.guests.length
+          : 0
+      )
+    );
+  }
+
+
+  return Number(
+    room?.total_guests ||
+    0
+  );
+}
+
+
+function guestUsesExtraBed(
+  guest,
+  policy
+) {
+  if (!guest) {
+    return false;
+  }
+
+
+  if (
+    guest.guest_type !==
+    "child"
+  ) {
+    return (
+      guest.extra_bed_used ===
+      true
+    );
+  }
+
+
+  const rule =
+    getChildAgeRule(
+      policy,
+      guest.age
+    );
+
+
+  if (
+    rule?.bed_policy ===
+    "extra_bed_required"
+  ) {
+    return true;
+  }
+
+
+  if (
+    rule?.bed_policy ===
+    "share_existing_bed"
+  ) {
+    return false;
+  }
+
+
+  return (
+    guest.extra_bed_used ===
+    true
+  );
+}
+
+
+function getRoomExtraBedUsage(
+  room,
+  policy
+) {
+  const guests =
+    Array.isArray(
+      room?.guests
+    )
+      ? room.guests
+      : [];
+
+
+  return guests.reduce(
+    (
+      total,
+      guest
+    ) =>
+      total +
+      (
+        guestUsesExtraBed(
+          guest,
+          policy
+        )
+          ? 1
+          : 0
+      ),
+    0
+  );
+}
+
+const LEGACY_ALLOWED_ID_PROOF_TYPES = [
+  "Aadhaar",
+  "Passport",
+  "Driving Licence",
+  "Voter ID",
+  "Other",
+];
+
+function getIdProofNumberPlaceholder(
+  type
+) {
+  switch (type) {
+    case "Aadhaar":
+      return "12-digit Aadhaar number";
+
+    case "Passport":
+      return "Passport number";
+
+    case "Driving Licence":
+      return "Driving Licence number";
+
+    case "Voter ID":
+      return "Voter ID number";
+
+    case "Other":
+      return "ID proof number";
+
+    default:
+      return "Select ID proof type first";
+  }
+}
 
 /* ============================================================
    COMPONENT
@@ -147,6 +399,17 @@ function StayRoomsStep({
   removeRoom,
   updateRoomGuests,
 
+  guestRequirementsPolicy,
+  primaryGuestName,
+  isAddRoomMode,
+  groupPrimaryGuestAllocated,
+  editPrimaryGuestAllocatedElsewhere,
+
+  updateRoomPrimaryGuest,
+  addAccompanyingGuest,
+  removeAccompanyingGuest,
+  updateAccompanyingGuest,
+
   roomTotals,
 
   dayUseEnabled,
@@ -164,6 +427,77 @@ function StayRoomsStep({
     booking.stay_type ===
     "day_use";
 
+  const guestPolicy =
+    guestRequirementsPolicy ||
+    {};
+
+  const policyIdProofTypes =
+    guestPolicy
+      .allowed_id_proof_types;
+
+  const allowedIdProofTypes =
+    policyIdProofTypes === undefined ||
+    policyIdProofTypes === null
+      ? LEGACY_ALLOWED_ID_PROOF_TYPES
+      : Array.isArray(
+          policyIdProofTypes
+        )
+        ? policyIdProofTypes
+        : [];
+
+
+  const allGuestNamesRequired =
+    guestPolicy
+      .all_guest_names_required ===
+    true;
+
+
+  const childAgeRequired =
+    guestPolicy
+      .child_age_required ===
+    true;
+
+
+  const otherAdultIdRequired =
+    guestPolicy
+      .other_adult_id_required ===
+    true;
+
+
+  const childIdRequired =
+    guestPolicy
+      .child_id_required ===
+    true;
+
+
+  const extraBedEnabled =
+    guestPolicy
+      .extra_bed_enabled ===
+    true;
+
+
+  const adultAgeFrom =
+    Number(
+      guestPolicy
+        .adult_age_from ||
+      18
+    );
+
+
+  const adultExtraBedRate =
+    Number(
+      guestPolicy
+        .adult_extra_bed_charge_per_night ||
+      0
+    );
+
+
+  const childExtraBedRate =
+    Number(
+      guestPolicy
+        .child_extra_bed_charge_per_night ||
+      0
+    );
 
   /*
    * Local UI values are used so selecting only
@@ -1049,6 +1383,24 @@ function StayRoomsStep({
                       guests
                     </span>
 
+                    {extraBedEnabled && (
+                      <span>
+                        Up to{" "}
+                        {Number(
+                          room.max_extra_beds ??
+                          0
+                        )}{" "}
+                        extra bed{
+                          Number(
+                            room.max_extra_beds ??
+                            0
+                          ) === 1
+                            ? ""
+                            : "s"
+                        }
+                      </span>
+                    )}
+
                   </div>
 
 
@@ -1108,7 +1460,7 @@ function StayRoomsStep({
 
 
       {/* ======================================================
-          SELECTED ROOMS
+          SELECTED ROOMS & OCCUPANTS
       ====================================================== */}
 
       {selectedRooms.length >
@@ -1116,122 +1468,1125 @@ function StayRoomsStep({
         <div className="booking-desk-selected">
 
           <h3>
-            Selected Rooms
+            Selected Rooms & Occupants
           </h3>
 
 
           {roomTotals.map(
             (
               room
-            ) => (
-              <div
-                className="booking-desk-selected__row"
-                key={
-                  room.room_id
-                }
-              >
-
-                <div className="booking-desk-selected__room">
-
-                  <strong>
-                    Room{" "}
-                    {
-                      room.room_number
-                    }
-                  </strong>
-
-                  <span>
-                    {
-                      room.room_type
-                    }
-                  </span>
-
-                </div>
+            ) => {
+              const rosterCaptured =
+                room
+                  .roster_captured ===
+                true;
 
 
-                <div className="booking-desk-selected__guests">
-
-                  <label
-                    htmlFor={`room-guests-${room.room_id}`}
-                  >
-                    Guests
-                  </label>
-
-                  <input
-                    id={`room-guests-${room.room_id}`}
-                    type="number"
-                    min="1"
-                    max={
-                      room.capacity
-                    }
-                    value={
-                      room.total_guests
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      updateRoomGuests(
-                        room.room_id,
-                        event.target.value
-                      )
-                    }
-                  />
-
-                  <span>
-                    max{" "}
-                    {
-                      room.capacity
-                    }
-                  </span>
-
-                </div>
+              const occupancyCount =
+                guestCountForRoom(
+                  room
+                );
 
 
-                <div className="booking-desk-selected__amount">
+              const capacity =
+                Number(
+                  room.capacity ||
+                  1
+                );
 
-                  <span>
-                    {isDayUse
-                      ? (
-                          dayUseDurationMinutes >
-                          0
-                            ? `Day Use · ${durationLabel}`
-                            : "Day Use"
-                        )
-                      : `${nights} night${
-                          nights === 1
+              const maxExtraBeds =
+                Math.max(
+                  0,
+                  Number(
+                    room.max_extra_beds ??
+                    0
+                  )
+                );
+
+
+              const localExtraBedsUsed =
+                getRoomExtraBedUsage(
+                  room,
+                  guestPolicy
+                );
+
+
+              const quotedExtraBedsUsed =
+                room.extra_beds_used !==
+                  null &&
+                room.extra_beds_used !==
+                  undefined
+                  ? Number(
+                      room.extra_beds_used
+                    )
+                  : null;
+
+
+              const displayedExtraBedsUsed =
+                Number.isFinite(
+                  quotedExtraBedsUsed
+                )
+                  ? quotedExtraBedsUsed
+                  : localExtraBedsUsed;
+
+
+              const extraBedLimitReached =
+                localExtraBedsUsed >=
+                maxExtraBeds;
+
+
+              const extraBedLimitExceeded =
+                localExtraBedsUsed >
+                maxExtraBeds;
+
+
+              const canAddGuest =
+                occupancyCount <
+                capacity;
+
+
+              const primaryLocked =
+                (
+                  isAddRoomMode &&
+                  groupPrimaryGuestAllocated
+                ) ||
+                (
+                  isEditMode &&
+                  editPrimaryGuestAllocatedElsewhere &&
+                  room
+                    .primary_guest_staying !==
+                    true
+                ) ||
+                (
+                  isEditMode &&
+                  room
+                    .primary_guest_staying ===
+                    true
+                );
+
+
+              const accompanyingGuests =
+                Array.isArray(
+                  room.guests
+                )
+                  ? room.guests
+                  : [];
+
+
+              const childCharge =
+                Number(
+                  room
+                    .child_charge_amount ||
+                  0
+                );
+
+
+              const extraBedCharge =
+                Number(
+                  room
+                    .extra_bed_charge_amount ||
+                  0
+                );
+
+
+              const guestCharge =
+                Number(
+                  room
+                    .guest_charge_amount ||
+                  0
+                );
+
+
+              return (
+                <section
+                  className="booking-desk-occupancy-card"
+                  key={
+                    room.room_id
+                  }
+                >
+
+                  {/* ==========================================
+                      ROOM HEADER
+                  ========================================== */}
+
+                  <div className="booking-desk-occupancy-card__header">
+
+                    <div>
+
+                      <strong>
+                        Room{" "}
+                        {
+                          room.room_number
+                        }
+                      </strong>
+
+                      <span>
+                        {
+                          room.room_type
+                        }
+                      </span>
+
+                    </div>
+
+
+                    <div className="booking-desk-occupancy-card__summary">
+
+                      <span>
+                        {occupancyCount} /{" "}
+                        {capacity} guests
+                      </span>
+
+                      {extraBedEnabled && (
+                        <span>
+                          Extra Beds{" "}
+                          {displayedExtraBedsUsed} /{" "}
+                          {maxExtraBeds}
+                        </span>
+                      )}
+
+                      <strong>
+                        {quoteLoading
+                          ? "Calculating..."
+                          : formatCurrency(
+                              room.total_amount
+                            )}
+                      </strong>
+
+                    </div>
+
+
+                    {!isEditMode && (
+                      <button
+                        type="button"
+                        className="booking-desk-selected__remove"
+                        aria-label={`Remove room ${room.room_number}`}
+                        onClick={() =>
+                          removeRoom(
+                            room.room_id
+                          )
+                        }
+                      >
+                        <IcoTrash />
+                      </button>
+                    )}
+
+                  </div>
+
+                  {extraBedEnabled &&
+                    extraBedLimitExceeded && (
+                      <div className="booking-desk-room-state booking-desk-room-state--error">
+
+                        Room{" "}
+                        {room.room_number} allows
+                        maximum{" "}
+                        {maxExtraBeds} extra bed{
+                          maxExtraBeds === 1
                             ? ""
                             : "s"
-                        }`}
-                  </span>
+                        }.
 
-                  <strong>
-                    {quoteLoading
-                      ? "Calculating..."
-                      : formatCurrency(
-                          room.total_amount
+                        The current guest allocation
+                        requires{" "}
+                        {localExtraBedsUsed}.
+
+                      </div>
+                    )}
+
+                  {!rosterCaptured ? (
+
+                    /* ========================================
+                       LEGACY BOOKING
+                    ======================================== */
+
+                    <div className="booking-desk-occupancy-legacy">
+
+                      <p>
+                        Detailed occupant names were not recorded
+                        when this reservation was originally created.
+                        The existing guest count is preserved without
+                        creating fake historical guest records.
+                      </p>
+
+
+                      <div className="booking-desk-selected__guests">
+
+                        <label
+                          htmlFor={`room-guests-${room.room_id}`}
+                        >
+                          Total Guests
+                        </label>
+
+                        <input
+                          id={`room-guests-${room.room_id}`}
+                          type="number"
+                          min="1"
+                          max={
+                            capacity
+                          }
+                          value={
+                            room.total_guests
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            updateRoomGuests(
+                              room.room_id,
+                              event.target.value
+                            )
+                          }
+                        />
+
+                        <span>
+                          max{" "}
+                          {capacity}
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                  ) : (
+
+                    <>
+                      {/* ======================================
+                          PRIMARY GUEST
+                      ====================================== */}
+
+                      <div className="booking-desk-occupancy-primary">
+
+                        <div>
+
+                          <label className="booking-desk-occupancy-check">
+
+                            <input
+                              type="checkbox"
+                              checked={
+                                room
+                                  .primary_guest_staying ===
+                                true
+                              }
+                              disabled={
+                                primaryLocked
+                              }
+                              onChange={(
+                                event
+                              ) =>
+                                updateRoomPrimaryGuest(
+                                  room.room_id,
+                                  event.target.checked
+                                )
+                              }
+                            />
+
+                            <span>
+                              Primary Guest stays in this room
+                            </span>
+
+                          </label>
+
+
+                          {room
+                            .primary_guest_staying ===
+                            true && (
+                            <strong>
+                              {primaryGuestName ||
+                                "Primary Guest"}
+                            </strong>
+                          )}
+
+                        </div>
+
+
+                        {isAddRoomMode &&
+                          groupPrimaryGuestAllocated && (
+                            <small>
+                              Primary Guest is already allocated
+                              to another room in this reservation.
+                            </small>
+                          )}
+
+
+                        {isEditMode &&
+                          editPrimaryGuestAllocatedElsewhere && (
+                            <small>
+                              Primary Guest belongs to another
+                              room in this reservation group.
+                            </small>
+                          )}
+
+
+                        {!isEditMode &&
+                          !isAddRoomMode && (
+                            <small>
+                              A reservation group can have only
+                              one Primary Guest allocation.
+                            </small>
+                          )}
+
+                      </div>
+
+
+                      {/* ======================================
+                          ACCOMPANYING GUESTS
+                      ====================================== */}
+
+                      <div className="booking-desk-occupancy-guests">
+
+                        <div className="booking-desk-occupancy-guests__heading">
+
+                          <div>
+
+                            <strong>
+                              Accompanying Guests
+                            </strong>
+
+                            <span>
+                              Adult / Child details are stored
+                              against this room reservation.
+                            </span>
+
+                          </div>
+
+
+                          <button
+                            type="button"
+                            className="booking-desk-btn booking-desk-btn--secondary"
+                            disabled={
+                              !canAddGuest
+                            }
+                            onClick={() =>
+                              addAccompanyingGuest(
+                                room.room_id
+                              )
+                            }
+                          >
+                            + Add Guest
+                          </button>
+
+                        </div>
+
+
+                        {accompanyingGuests.length ===
+                          0 ? (
+                          <div className="booking-desk-room-state">
+                            No accompanying guests in this room.
+                          </div>
+                        ) : (
+                          accompanyingGuests.map(
+                            (
+                              occupant,
+                              guestIndex
+                            ) => {
+                              const isChild =
+                                occupant
+                                  .guest_type ===
+                                "child";
+
+
+                              const childRule =
+                                isChild
+                                  ? getChildAgeRule(
+                                      guestPolicy,
+                                      occupant.age
+                                    )
+                                  : null;
+
+
+                              const bedPolicy =
+                                childRule
+                                  ?.bed_policy ||
+                                null;
+
+
+                              const childRequiresExtraBed =
+                                isChild &&
+                                bedPolicy ===
+                                  "extra_bed_required";
+
+
+                              const childSharesExistingBed =
+                                isChild &&
+                                bedPolicy ===
+                                  "share_existing_bed";
+
+                              const occupantUsesExtraBed =
+                                guestUsesExtraBed(
+                                  occupant,
+                                  guestPolicy
+                                );
+
+
+                              const optionalExtraBedBlocked =
+                                !occupantUsesExtraBed &&
+                                extraBedLimitReached;
+
+
+                              const idRequired =
+                                isChild
+                                  ? childIdRequired
+                                  : otherAdultIdRequired;
+
+
+                              const showIdFields =
+                                idRequired ||
+                                Boolean(
+                                  occupant
+                                    .id_proof_type
+                                ) ||
+                                Boolean(
+                                  occupant
+                                    .id_proof_number
+                                );
+
+
+                              const cannotRemove =
+                                room
+                                  .primary_guest_staying !==
+                                  true &&
+                                accompanyingGuests
+                                  .length <=
+                                  1;
+
+
+                              return (
+                                <div
+                                  className="booking-desk-occupant"
+                                  key={
+                                    occupant
+                                      .booking_guest_id ||
+                                    `${room.room_id}-${guestIndex}`
+                                  }
+                                >
+
+                                  <div className="booking-desk-occupant__header">
+
+                                    <strong>
+                                      Guest{" "}
+                                      {guestIndex +
+                                        1}
+                                    </strong>
+
+
+                                    <button
+                                      type="button"
+                                      className="booking-desk-selected__remove"
+                                      disabled={
+                                        cannotRemove
+                                      }
+                                      aria-label={`Remove guest ${guestIndex + 1}`}
+                                      onClick={() =>
+                                        removeAccompanyingGuest(
+                                          room.room_id,
+                                          guestIndex
+                                        )
+                                      }
+                                    >
+                                      <IcoTrash />
+                                    </button>
+
+                                  </div>
+
+
+                                  <div className="booking-desk-occupant__grid">
+
+                                    {/* ========================
+                                        TYPE
+                                    ======================== */}
+
+                                    <div className="booking-desk-field">
+
+                                      <label>
+                                        Guest Type
+                                        <span>*</span>
+                                      </label>
+
+                                      <select
+                                        value={
+                                          occupant
+                                            .guest_type
+                                        }
+                                        onChange={(
+                                          event
+                                        ) => {
+                                          const nextType =
+                                            event
+                                              .target
+                                              .value;
+
+
+                                          updateAccompanyingGuest(
+                                            room.room_id,
+                                            guestIndex,
+                                            "guest_type",
+                                            nextType
+                                          );
+
+
+                                          if (
+                                            nextType ===
+                                            "child"
+                                          ) {
+                                            updateAccompanyingGuest(
+                                              room.room_id,
+                                              guestIndex,
+                                              "extra_bed_used",
+                                              false
+                                            );
+                                          }
+                                        }}
+                                      >
+                                        <option value="adult">
+                                          Adult ({adultAgeFrom}+)
+                                        </option>
+
+                                        <option value="child">
+                                          Child
+                                        </option>
+                                      </select>
+
+                                    </div>
+
+
+                                    {/* ========================
+                                        NAME
+                                    ======================== */}
+
+                                    <div className="booking-desk-field">
+
+                                      <label>
+                                        Full Name
+
+                                        {allGuestNamesRequired && (
+                                          <span>*</span>
+                                        )}
+                                      </label>
+
+                                      <input
+                                        type="text"
+                                        maxLength="150"
+                                        value={
+                                          occupant
+                                            .full_name ||
+                                          ""
+                                        }
+                                        placeholder={
+                                          allGuestNamesRequired
+                                            ? "Guest full name"
+                                            : "Guest name (optional)"
+                                        }
+                                        onChange={(
+                                          event
+                                        ) =>
+                                          updateAccompanyingGuest(
+                                            room.room_id,
+                                            guestIndex,
+                                            "full_name",
+                                            event
+                                              .target
+                                              .value
+                                          )
+                                        }
+                                      />
+
+                                    </div>
+
+                                    <div className="booking-desk-field">
+
+                                      <label>
+                                        Mobile Number
+                                      </label>
+
+                                      <input
+                                        type="tel"
+                                        maxLength="30"
+                                        placeholder="Guest mobile number (optional)"
+                                        value={
+                                          occupant.phone ||
+                                          ""
+                                        }
+                                        onChange={(event) =>
+                                          updateAccompanyingGuest(
+                                            room.room_id,
+                                            guestIndex,
+                                            "phone",
+                                            event.target.value
+                                          )
+                                        }
+                                      />
+
+                                    </div>
+
+
+                                    {/* ========================
+                                        CHILD AGE
+                                    ======================== */}
+
+                                    {isChild &&
+                                      childAgeRequired && (
+                                        <div className="booking-desk-field">
+
+                                          <label>
+                                            Child Age
+                                            <span>*</span>
+                                          </label>
+
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max={
+                                              Math.max(
+                                                0,
+                                                adultAgeFrom -
+                                                  1
+                                              )
+                                            }
+                                            step="1"
+                                            value={
+                                              occupant.age
+                                            }
+                                            onChange={(
+                                              event
+                                            ) => {
+                                              const nextAge =
+                                                event
+                                                  .target
+                                                  .value;
+
+
+                                              updateAccompanyingGuest(
+                                                room.room_id,
+                                                guestIndex,
+                                                "age",
+                                                nextAge
+                                              );
+
+
+                                              const nextRule =
+                                                getChildAgeRule(
+                                                  guestPolicy,
+                                                  nextAge
+                                                );
+
+
+                                              if (
+                                                nextRule
+                                                  ?.bed_policy ===
+                                                "extra_bed_required"
+                                              ) {
+                                                updateAccompanyingGuest(
+                                                  room.room_id,
+                                                  guestIndex,
+                                                  "extra_bed_used",
+                                                  true
+                                                );
+                                              }
+
+
+                                              if (
+                                                nextRule
+                                                  ?.bed_policy ===
+                                                "share_existing_bed"
+                                              ) {
+                                                updateAccompanyingGuest(
+                                                  room.room_id,
+                                                  guestIndex,
+                                                  "extra_bed_used",
+                                                  false
+                                                );
+                                              }
+                                            }}
+                                          />
+
+                                        </div>
+                                      )}
+
+
+                                    {/* ========================
+                                        ID
+                                    ======================== */}
+
+                                    {showIdFields && (
+                                      <>
+                                        <div className="booking-desk-field">
+
+                                          <label>
+                                            ID Proof Type
+
+                                            {idRequired && (
+                                              <span>*</span>
+                                            )}
+                                          </label>
+
+                                          <select
+                                            value={
+                                              occupant.id_proof_type ||
+                                              ""
+                                            }
+                                            onChange={(event) => {
+                                              const nextType =
+                                                event.target.value;
+
+                                              updateAccompanyingGuest(
+                                                room.room_id,
+                                                guestIndex,
+                                                "id_proof_type",
+                                                nextType
+                                              );
+
+                                              updateAccompanyingGuest(
+                                                room.room_id,
+                                                guestIndex,
+                                                "id_proof_number",
+                                                ""
+                                              );
+                                            }}
+                                          >
+                                            <option value="">
+                                              Select ID proof type
+                                            </option>
+
+                                            {allowedIdProofTypes.map(
+                                              (type) => (
+                                                <option
+                                                  key={type}
+                                                  value={type}
+                                                >
+                                                  {type}
+                                                </option>
+                                              )
+                                            )}
+                                          </select>
+
+                                        </div>
+
+
+                                        <div className="booking-desk-field">
+
+                                          <label>
+                                            ID Proof Number
+
+                                            {idRequired && (
+                                              <span>*</span>
+                                            )}
+                                          </label>
+
+                                          <input
+                                            type="text"
+                                            maxLength="100"
+                                            value={
+                                              occupant.id_proof_number ||
+                                              ""
+                                            }
+                                            disabled={
+                                              !occupant.id_proof_type
+                                            }
+                                            inputMode={
+                                              occupant.id_proof_type ===
+                                              "Aadhaar"
+                                                ? "numeric"
+                                                : "text"
+                                            }
+                                            placeholder={
+                                              getIdProofNumberPlaceholder(
+                                                occupant.id_proof_type
+                                              )
+                                            }
+                                            onChange={(event) =>
+                                              updateAccompanyingGuest(
+                                                room.room_id,
+                                                guestIndex,
+                                                "id_proof_number",
+                                                event.target.value
+                                              )
+                                            }
+                                          />
+
+                                        </div>
+                                      </>
+                                    )}
+
+                                  </div>
+
+
+                                  {/* ==========================
+                                      CHILD POLICY INFO
+                                  ========================== */}
+
+                                  {isChild &&
+                                    childAgeRequired && (
+                                      <div className="booking-desk-occupant__policy">
+
+                                        {!childRule ? (
+                                          <span>
+                                            Enter the child age to apply
+                                            the correct occupancy and bed policy.
+                                          </span>
+                                        ) : (
+                                          <>
+                                            <span>
+                                              Age{" "}
+                                              {
+                                                childRule.min_age
+                                              }
+                                              –
+                                              {
+                                                childRule.max_age
+                                              }
+                                            </span>
+
+                                            <span>
+                                              {formatChildChargePolicy(
+                                                childRule
+                                              )}
+                                            </span>
+
+                                            <span>
+                                              {formatChildBedPolicy(
+                                                childRule
+                                                  .bed_policy
+                                              )}
+                                            </span>
+                                          </>
+                                        )}
+
+                                      </div>
+                                    )}
+
+
+                                  {/* ==========================
+                                      EXTRA BED
+                                  ========================== */}
+
+                                  {extraBedEnabled && (
+                                    <div className="booking-desk-extra-bed">
+
+                                      {isChild &&
+                                      childAgeRequired &&
+                                      !childRule ? (
+                                        <small>
+                                          Extra-bed selection becomes available
+                                          after the child age is entered.
+                                        </small>
+                                      ) : childSharesExistingBed ? (
+                                        <small>
+                                          This child shares the existing bed
+                                          under the hotel policy.
+                                        </small>
+                                      ) : (
+                                        <label className="booking-desk-occupancy-check">
+
+                                          <input
+                                            type="checkbox"
+                                            checked={
+                                              childRequiresExtraBed
+                                                ? true
+                                                : occupant
+                                                    .extra_bed_used ===
+                                                  true
+                                            }
+                                            disabled={
+                                              childRequiresExtraBed ||
+                                              optionalExtraBedBlocked
+                                            }
+                                            onChange={(
+                                              event
+                                            ) =>
+                                              updateAccompanyingGuest(
+                                                room.room_id,
+                                                guestIndex,
+                                                "extra_bed_used",
+                                                event
+                                                  .target
+                                                  .checked
+                                              )
+                                            }
+                                          />
+
+                                          <span>
+                                            {childRequiresExtraBed
+                                              ? "Extra bed required"
+                                              : "Extra bed used"}
+                                          </span>
+
+                                        </label>
+                                      )}
+
+                                      {optionalExtraBedBlocked &&
+                                        !childSharesExistingBed &&
+                                        !(
+                                          isChild &&
+                                          childAgeRequired &&
+                                          !childRule
+                                        ) && (
+                                          <small>
+                                            Room extra-bed limit reached
+                                            ({localExtraBedsUsed} / {maxExtraBeds}).
+                                          </small>
+                                        )}
+
+                                      {!isChild && (
+                                        <small>
+                                          Adult extra bed:{" "}
+                                          {formatCurrency(
+                                            adultExtraBedRate
+                                          )}{" "}
+                                          / night when actually used.
+                                        </small>
+                                      )}
+
+
+                                      {isChild &&
+                                        childRule &&
+                                        !childSharesExistingBed && (
+                                          <small>
+                                            Child extra bed:{" "}
+                                            {formatCurrency(
+                                              childExtraBedRate
+                                            )}{" "}
+                                            / night when applicable.
+                                          </small>
+                                        )}
+
+                                    </div>
+                                  )}
+
+                                </div>
+                              );
+                            }
+                          )
                         )}
-                  </strong>
 
-                </div>
+                      </div>
+
+                    </>
+                  )}
 
 
-                {!isEditMode && (
-                  <button
-                    type="button"
-                    className="booking-desk-selected__remove"
-                    aria-label={`Remove room ${room.room_number}`}
-                    onClick={() =>
-                      removeRoom(
-                        room.room_id
-                      )
-                    }
-                  >
-                    <IcoTrash />
-                  </button>
-                )}
+                  {/* ==========================================
+                      BACKEND PRICE BREAKDOWN
+                  ========================================== */}
 
-              </div>
-            )
+                  <div className="booking-desk-occupancy-price">
+
+                    <div>
+
+                      <span>
+                        {isDayUse
+                          ? dayUseDurationMinutes >
+                            0
+                            ? `Day Use · ${durationLabel}`
+                            : "Day Use"
+                          : `${nights} night${
+                              nights ===
+                              1
+                                ? ""
+                                : "s"
+                            }`}
+                      </span>
+
+                    </div>
+
+
+                    {!quoteLoading &&
+                      Number(
+                        room.room_charge ||
+                        0
+                      ) >
+                        0 && (
+                        <div>
+
+                          <span>
+                            Room Charge
+                          </span>
+
+                          <strong>
+                            {formatCurrency(
+                              room.room_charge
+                            )}
+                          </strong>
+
+                        </div>
+                      )}
+
+
+                    {!quoteLoading &&
+                      childCharge >
+                        0 && (
+                        <div>
+
+                          <span>
+                            Child Occupancy
+                          </span>
+
+                          <strong>
+                            +{formatCurrency(
+                              childCharge
+                            )}
+                          </strong>
+
+                        </div>
+                      )}
+
+
+                    {!quoteLoading &&
+                      extraBedCharge >
+                        0 && (
+                        <div>
+
+                          <span>
+                            Extra Bed
+                          </span>
+
+                          <strong>
+                            +{formatCurrency(
+                              extraBedCharge
+                            )}
+                          </strong>
+
+                        </div>
+                      )}
+
+
+                    {!quoteLoading &&
+                      guestCharge >
+                        0 && (
+                        <div>
+
+                          <span>
+                            Total Guest Charges
+                          </span>
+
+                          <strong>
+                            {formatCurrency(
+                              guestCharge
+                            )}
+                          </strong>
+
+                        </div>
+                      )}
+
+
+                    <div className="booking-desk-occupancy-price__total">
+
+                      <span>
+                        Room Total
+                      </span>
+
+                      <strong>
+                        {quoteLoading
+                          ? "Calculating..."
+                          : formatCurrency(
+                              room.total_amount
+                            )}
+                      </strong>
+
+                    </div>
+
+                  </div>
+
+                </section>
+              );
+            }
           )}
 
         </div>

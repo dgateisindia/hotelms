@@ -21,6 +21,8 @@ const {
 
 const {
   saveBookingPolicySnapshotWithConnection,
+
+  getBookingPolicySnapshotWithConnection,
 } = require(
   "../services/hotelSettingsService"
 );
@@ -51,6 +53,22 @@ const {
 } = require("../services/bookingCustomerService");
 
 const {
+  loadPrimaryCustomerWithConnection,
+
+  insertBookingGuestsWithConnection,
+
+  replaceBookingGuestsWithConnection,
+
+  getBookingGuestsWithConnection,
+
+  getReservationGroupGuestsWithConnection,
+
+  countGroupPrimaryGuestsWithConnection,
+} = require(
+  "../services/bookingGuestService"
+);
+
+const {
   lockSourceRequest,
   approveSourceRequest,
   syncSourceRequestRoom,
@@ -66,6 +84,13 @@ const {
   checkoutBooking:
     checkoutBookingLifecycle,
 } = require("../services/bookingLifecycleService");
+
+const {
+  checkInBookingGuest:
+    checkInBookingGuestLifecycle,
+} = require(
+  "../services/bookingGuestLifecycleService"
+);
 
 /* ============================================================
    RESPONSE / LOG HELPERS
@@ -120,6 +145,338 @@ function throwHttp(
   throw error;
 }
 
+
+function usesDetailedGuestRoster(
+  items
+) {
+  return (
+    Array.isArray(items) &&
+    items.some(
+      (item) =>
+        item
+          ?.guestRosterProvided ===
+        true
+    )
+  );
+}
+
+function serializeBookingGuest(
+  guest
+) {
+  return {
+    booking_guest_id:
+      guest.bookingGuestId,
+
+    customer_id:
+      guest.customerId,
+
+    guest_role:
+      guest.guestRole,
+
+    guest_type:
+      guest.guestType,
+
+    full_name:
+      guest.fullName,
+
+    phone:
+      guest.phone || null,
+
+    age:
+      guest.age,
+
+    id_proof_type:
+      guest.idProofType,
+
+    id_proof_number:
+      guest.idProofNumber,
+
+    extra_bed_used:
+      guest.extraBedUsed,
+
+    child_charge_amount:
+      Number(
+        guest.childChargeAmount ||
+        0
+      ),
+
+    extra_bed_charge_amount:
+      Number(
+        guest.extraBedChargeAmount ||
+        0
+      ),
+
+    /* ========================================================
+       INDIVIDUAL GUEST LIFECYCLE
+    ======================================================== */
+
+    guest_status:
+      guest.guestStatus ||
+      "expected",
+
+    actual_check_in:
+      guest.actualCheckIn ||
+      null,
+
+    actual_check_out:
+      guest.actualCheckOut ||
+      null,
+
+    checked_in_by_admin_id:
+      guest.checkedInByAdminId ??
+      null,
+
+    checked_out_by_admin_id:
+      guest.checkedOutByAdminId ??
+      null,
+
+    created_by_admin_id:
+      guest.createdByAdminId ??
+      null,
+
+    updated_by_admin_id:
+      guest.updatedByAdminId ??
+      null,
+
+    created_at:
+      guest.createdAt ||
+      null,
+
+    updated_at:
+      guest.updatedAt ||
+      null,
+  };
+}
+
+
+function buildBookingOccupancy(
+  booking,
+  guests
+) {
+  const records =
+    Array.isArray(
+      guests
+    )
+      ? guests.map(
+          serializeBookingGuest
+        )
+      : [];
+
+
+  const primaryGuest =
+    records.find(
+      (guest) =>
+        guest.guest_role ===
+        "primary"
+    ) ||
+    null;
+
+
+  const accompanyingGuests =
+    records.filter(
+      (guest) =>
+        guest.guest_role ===
+        "accompanying"
+    );
+
+
+  const childChargeAmount =
+    records.reduce(
+      (
+        total,
+        guest
+      ) =>
+        total +
+        Number(
+          guest.child_charge_amount ||
+          0
+        ),
+      0
+    );
+
+
+  const extraBedChargeAmount =
+    records.reduce(
+      (
+        total,
+        guest
+      ) =>
+        total +
+        Number(
+          guest.extra_bed_charge_amount ||
+          0
+        ),
+      0
+    );
+
+
+  return {
+    roster_captured:
+      records.length > 0,
+
+    roster_status:
+      records.length > 0
+        ? "captured"
+        : "legacy_not_captured",
+
+    total_guests:
+      Number(
+        booking?.total_guests ||
+        0
+      ),
+
+    saved_guest_rows:
+      records.length,
+
+    primary_guest_staying:
+      Boolean(
+        primaryGuest
+      ),
+
+    primary_guest:
+      primaryGuest,
+
+    accompanying_guests:
+      accompanyingGuests,
+
+    guests:
+      records,
+
+    child_charge_amount:
+      Number(
+        childChargeAmount
+          .toFixed(2)
+      ),
+
+    extra_bed_charge_amount:
+      Number(
+        extraBedChargeAmount
+          .toFixed(2)
+      ),
+
+    guest_charge_amount:
+      Number(
+        (
+          childChargeAmount +
+          extraBedChargeAmount
+        ).toFixed(2)
+      ),
+  };
+}
+
+async function resolveReservationEditGuestContext(
+  connection,
+  {
+    hotelId,
+    bookingId,
+    existing,
+    item,
+  }
+) {
+  if (
+    item?.guestRosterProvided !==
+    true
+  ) {
+    return null;
+  }
+
+
+  const reservationGroupId =
+    Number(
+      existing
+        ?.reservation_group_id
+    );
+
+
+  if (
+    !Number.isSafeInteger(
+      reservationGroupId
+    ) ||
+    reservationGroupId <= 0
+  ) {
+    throwHttp(
+      500,
+      "RESERVATION_GROUP_MISSING",
+      "The reservation group could not be resolved for guest allocation."
+    );
+  }
+
+
+  const currentGuests =
+    await getBookingGuestsWithConnection(
+      connection,
+      {
+        hotelId,
+        bookingId,
+      }
+    );
+
+
+  const currentHasPrimary =
+    currentGuests.some(
+      (guest) =>
+        guest.guestRole ===
+        "primary"
+    );
+
+
+  const otherPrimaryCount =
+    await countGroupPrimaryGuestsWithConnection(
+      connection,
+      {
+        hotelId,
+
+        reservationGroupId,
+
+        excludeBookingId:
+          bookingId,
+      }
+    );
+
+
+  if (
+    otherPrimaryCount > 1 ||
+    (
+      currentHasPrimary &&
+      otherPrimaryCount > 0
+    )
+  ) {
+    throwHttp(
+      409,
+      "RESERVATION_GROUP_PRIMARY_GUEST_INVALID",
+      "This reservation group contains an invalid Primary Guest allocation and requires review."
+    );
+  }
+
+
+  const primaryMode =
+    otherPrimaryCount > 0
+      ? "none"
+      : "zero_or_one";
+
+
+  const primaryCustomer =
+    await loadPrimaryCustomerWithConnection(
+      connection,
+      {
+        hotelId,
+
+        customerId:
+          Number(
+            existing.customer_id
+          ),
+
+        forUpdate:
+          false,
+      }
+    );
+
+
+  return {
+    primaryMode,
+    primaryCustomer,
+  };
+}
 
 /* ============================================================
    TRUSTED ADMIN / HOTEL CONTEXT
@@ -347,6 +704,12 @@ async function insertBooking(
       pricing.totalAmount
     );
 
+  const authoritativeTotalGuests =
+    Number(
+      pricing.totalGuests ??
+      item.totalGuests
+    );
+
   if (
     ![
       "overnight",
@@ -433,7 +796,7 @@ async function insertBooking(
         temporaryCode,
         item.checkIn,
         item.checkOut,
-        item.totalGuests,
+        authoritativeTotalGuests,
         item.bookingStatus,
         totalAmount,
         item.specialRequest,
@@ -520,12 +883,52 @@ async function insertBooking(
     roomCharge:
       pricing.roomCharge,
 
+    childChargeAmount:
+      Number(
+        pricing
+          .childChargeAmount ||
+        0
+      ),
+
+    extraBedChargeAmount:
+      Number(
+        pricing
+          .extraBedChargeAmount ||
+        0
+      ),
+
+    guestChargeAmount:
+      Number(
+        pricing
+          .guestChargeAmount ||
+        0
+      ),
+
+    totalGuests:
+      authoritativeTotalGuests,
+
+    maxExtraBeds:
+      Number(
+        pricing.maxExtraBeds ??
+        room?.max_extra_beds ??
+        0
+      ),
+
+    extraBedsUsed:
+      pricing.extraBedsUsed ??
+      null,
+
+    guestRosterProvided:
+      pricing
+        .guestRosterProvided ===
+      true,
+
     totalAmount,
 
     paymentStatus:
       "unpaid",
+      
   };
-
 }
 
 /* ============================================================
@@ -706,6 +1109,61 @@ async function createBookingForHotel({
     items
   );
 
+  /*
+  * Customer is resolved inside the same booking transaction.
+  *
+  * When detailed occupancy is supplied, Guest & Occupancy
+  * pricing uses the authoritative customer record for the
+  * Primary Guest.
+  */
+  const customerResult =
+    await findOrCreateCustomer(
+      connection,
+      hotelId,
+      customerValidation.value
+    );
+
+
+  let guestContext =
+    null;
+
+
+  if (
+    usesDetailedGuestRoster(
+      items
+    )
+  ) {
+    const primaryCustomer =
+      await loadPrimaryCustomerWithConnection(
+        connection,
+        {
+          hotelId,
+
+          customerId:
+            customerResult
+              .customerId,
+
+          forUpdate:
+            true,
+        }
+      );
+
+
+    /*
+    * Reservation Contact does not have to stay in the hotel.
+    *
+    * A new reservation may allocate the contact as a staying
+    * Primary Guest to zero or one selected room.
+    */
+    guestContext = {
+      primaryMode:
+        "zero_or_one",
+
+      primaryCustomer,
+    };
+  }
+
+
   const pricingResult =
     await priceBookingItemsWithConnection(
       connection,
@@ -713,14 +1171,8 @@ async function createBookingForHotel({
         hotelId,
         items,
         roomMap,
+        guestContext,
       }
-    );
-
-  const customerResult =
-    await findOrCreateCustomer(
-      connection,
-      hotelId,
-      customerValidation.value
     );
 
 
@@ -796,6 +1248,55 @@ async function createBookingForHotel({
         }
       );
 
+    let guestSaveResult =
+      null;
+
+
+    if (
+      pricing
+        .guestRosterProvided ===
+        true
+    ) {
+      const rosterGuests =
+        pricing
+          ?.guestRoster
+          ?.guests;
+
+
+      if (
+        !Array.isArray(
+          rosterGuests
+        )
+      ) {
+        throwHttp(
+          500,
+          "BOOKING_GUEST_ROSTER_MISSING",
+          "The validated guest roster is invalid."
+        );
+      }
+
+
+      guestSaveResult =
+        await insertBookingGuestsWithConnection(
+          connection,
+          {
+            hotelId,
+
+            bookingId:
+              created.bookingId,
+
+            customerId:
+              customerResult
+                .customerId,
+
+            adminId,
+
+            guests:
+              rosterGuests,
+          }
+        );
+    }
+
     const policySnapshot =
       await saveBookingPolicySnapshotWithConnection(
         connection,
@@ -813,6 +1314,18 @@ async function createBookingForHotel({
       policySnapshotId:
         policySnapshot
           .snapshotId,
+
+      guestRosterSaved:
+        Number(
+          guestSaveResult
+            ?.guestCount ||
+          0
+        ) > 0,
+
+      bookingGuestIds:
+        guestSaveResult
+          ?.bookingGuestIds ||
+        [],
 
       checkIn:
         item.checkIn,
@@ -1166,6 +1679,76 @@ async function createBookingsInExistingReservationGroup({
     items
   );
 
+  let guestContext =
+    null;
+
+
+  if (
+    usesDetailedGuestRoster(
+      items
+    )
+  ) {
+    /*
+    * reservation_groups row is already FOR UPDATE above,
+    * therefore concurrent Add Room requests for the same
+    * group are serialized before Primary Guest allocation.
+    */
+    const primaryGuestCount =
+      await countGroupPrimaryGuestsWithConnection(
+        connection,
+        {
+          hotelId,
+          reservationGroupId,
+        }
+      );
+
+
+    if (
+      primaryGuestCount > 1
+    ) {
+      throwHttp(
+        409,
+        "RESERVATION_GROUP_PRIMARY_GUEST_INVALID",
+        "This reservation group contains multiple Primary Guest allocations and requires review."
+      );
+    }
+
+
+    const primaryCustomer =
+      await loadPrimaryCustomerWithConnection(
+        connection,
+        {
+          hotelId,
+
+          customerId:
+            Number(
+              group.customer_id
+            ),
+
+          forUpdate:
+            true,
+        }
+      );
+
+
+    guestContext = {
+      /*
+      * Existing modern group:
+      * Primary already belongs to another room → none.
+      *
+      * Legacy group:
+      * No historical occupant records exist → zero_or_one,
+      * because we must not invent where the Primary Guest
+      * historically stayed.
+      */
+      primaryMode:
+        primaryGuestCount === 1
+          ? "none"
+          : "zero_or_one",
+
+      primaryCustomer,
+    };
+  }
 
   /* ==========================================================
      CURRENT AUTHORITATIVE PRICING
@@ -1181,6 +1764,7 @@ async function createBookingsInExistingReservationGroup({
         hotelId,
         items,
         roomMap,
+        guestContext,
       }
     );
 
@@ -1245,6 +1829,55 @@ async function createBookingsInExistingReservationGroup({
         }
       );
 
+    let guestSaveResult =
+      null;
+
+
+    if (
+      pricing
+        .guestRosterProvided ===
+        true
+    ) {
+      const rosterGuests =
+        pricing
+          ?.guestRoster
+          ?.guests;
+
+
+      if (
+        !Array.isArray(
+          rosterGuests
+        )
+      ) {
+        throwHttp(
+          500,
+          "BOOKING_GUEST_ROSTER_MISSING",
+          "The validated guest roster is invalid."
+        );
+      }
+
+
+      guestSaveResult =
+        await insertBookingGuestsWithConnection(
+          connection,
+          {
+            hotelId,
+
+            bookingId:
+              created.bookingId,
+
+            customerId:
+              Number(
+                group.customer_id
+              ),
+
+            adminId,
+
+            guests:
+              rosterGuests,
+          }
+        );
+    }
 
     const policySnapshot =
       await saveBookingPolicySnapshotWithConnection(
@@ -1264,6 +1897,18 @@ async function createBookingsInExistingReservationGroup({
       policySnapshotId:
         policySnapshot
           .snapshotId,
+
+      guestRosterSaved:
+        Number(
+          guestSaveResult
+            ?.guestCount ||
+          0
+        ) > 0,
+
+      bookingGuestIds:
+        guestSaveResult
+          ?.bookingGuestIds ||
+        [],
 
       checkIn:
         item.checkIn,
@@ -1390,6 +2035,23 @@ exports.getBookings = async (
             r.room_number,
             r.room_type,
             r.floor_number,
+            r.capacity,
+            r.max_extra_beds,
+
+            COALESCE(
+              guest_count.expected_guest_count,
+              0
+            ) AS expected_guest_count,
+
+            COALESCE(
+              guest_count.checked_in_guest_count,
+              0
+            ) AS checked_in_guest_count,
+
+            COALESCE(
+              guest_count.active_guest_count,
+              0
+            ) AS active_guest_count,
 
             COALESCE(
               pay.gross_paid,
@@ -1481,6 +2143,49 @@ exports.getBookings = async (
               b.hotel_id
            AND r.room_id =
               b.room_id
+
+          LEFT JOIN (
+            SELECT
+              hotel_id,
+              booking_id,
+
+              SUM(
+                CASE
+                  WHEN guest_status = 'expected'
+                  THEN 1
+                  ELSE 0
+                END
+              ) AS expected_guest_count,
+
+              SUM(
+                CASE
+                  WHEN guest_status = 'checked_in'
+                  THEN 1
+                  ELSE 0
+                END
+              ) AS checked_in_guest_count,
+
+              SUM(
+                CASE
+                  WHEN guest_status IN (
+                    'expected',
+                    'checked_in'
+                  )
+                  THEN 1
+                  ELSE 0
+                END
+              ) AS active_guest_count
+
+            FROM booking_guests
+
+            GROUP BY
+              hotel_id,
+              booking_id
+          ) guest_count
+            ON guest_count.hotel_id =
+              b.hotel_id
+          AND guest_count.booking_id =
+              b.booking_id
 
           LEFT JOIN (
             SELECT
@@ -1657,6 +2362,7 @@ exports.getBooking = async (
             r.room_type,
             r.floor_number,
             r.capacity,
+            r.max_extra_beds,
             r.status AS room_status,
 
             COALESCE(
@@ -1944,14 +2650,78 @@ exports.getBooking = async (
           booking.customer_id,
         ]
       );
+    
+    const bookingGuests =
+      await getBookingGuestsWithConnection(
+        db,
+        {
+          hotelId:
+            context.hotelId,
 
+          bookingId,
+        }
+      );
+
+
+    const occupancy =
+      buildBookingOccupancy(
+        booking,
+        bookingGuests
+      );
+
+
+    /*
+    * Edit Booking Desk must use the same immutable
+    * booking-time Guest & Occupancy policy that backend
+    * repricing uses.
+    *
+    * Do not substitute today's hotel settings.
+    */
+    const bookingPolicySnapshot =
+      await getBookingPolicySnapshotWithConnection(
+        db,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+        }
+      );
 
     return res
       .status(200)
       .json({
         ...booking,
 
+        occupancy,
+
+        booking_policy_snapshot:
+          bookingPolicySnapshot
+            ? {
+                snapshot_id:
+                  bookingPolicySnapshot
+                    .snapshotId,
+
+                created_at:
+                  bookingPolicySnapshot
+                    .createdAt,
+
+                guest_requirements:
+                  bookingPolicySnapshot
+                    .policySnapshot
+                    ?.guest_requirements ||
+                  null,
+
+                day_use:
+                  bookingPolicySnapshot
+                    .policySnapshot
+                    ?.day_use ||
+                  null,
+              }
+            : null,
+
         payments,
+
         room_history:
           roomHistory,
 
@@ -2104,6 +2874,7 @@ exports.getReservationGroupDetails = async (
             r.room_type,
             r.floor_number,
             r.capacity,
+            r.max_extra_beds,
             r.status AS room_status,
 
             b.booked_rate_per_night,
@@ -2268,6 +3039,73 @@ exports.getReservationGroupDetails = async (
         ]
       );
 
+
+    const groupGuests =
+      await getReservationGroupGuestsWithConnection(
+        db,
+        {
+          hotelId:
+            context.hotelId,
+
+          reservationGroupId,
+        }
+      );
+
+
+    const guestsByBookingId =
+      new Map();
+
+
+    for (
+      const guest of
+      groupGuests
+    ) {
+      const bookingId =
+        Number(
+          guest.bookingId
+        );
+
+
+      if (
+        !guestsByBookingId.has(
+          bookingId
+        )
+      ) {
+        guestsByBookingId.set(
+          bookingId,
+          []
+        );
+      }
+
+
+      guestsByBookingId
+        .get(
+          bookingId
+        )
+        .push(
+          guest
+        );
+    }
+
+
+    const bookingsWithOccupancy =
+      bookings.map(
+        (booking) => ({
+          ...booking,
+
+          occupancy:
+            buildBookingOccupancy(
+              booking,
+
+              guestsByBookingId.get(
+                Number(
+                  booking.booking_id
+                )
+              ) ||
+              []
+            ),
+        })
+      );
 
     /* ========================================================
        GROUP SUMMARY
@@ -2549,7 +3387,8 @@ exports.getReservationGroupDetails = async (
           summary:
             normalizedSummary,
 
-          bookings,
+          bookings:
+            bookingsWithOccupancy,
 
           created_by_admin_id:
             group.created_by_admin_id,
@@ -2803,6 +3642,7 @@ async function resolveReservationEditPricing(
     existing,
     item,
     room,
+    guestContext = null,
   }
 ) {
   const roomChanged =
@@ -2844,7 +3684,9 @@ async function resolveReservationEditPricing(
 
   if (
     existing.stay_type ===
-    "day_use"
+      "day_use" ||
+    item.guestRosterProvided ===
+      true
   ) {
     const pricingResult =
       await priceBookingItemsFromSnapshotWithConnection(
@@ -2864,6 +3706,8 @@ async function resolveReservationEditPricing(
                 pricingRoom,
               ],
             ]),
+          
+          guestContext,
         }
       );
 
@@ -2969,6 +3813,70 @@ exports.quoteBookingPrice = async (
   const items =
     validation.value;
 
+  let guestContext =
+    null;
+
+
+  if (
+    usesDetailedGuestRoster(
+      items
+    )
+  ) {
+    /*
+    * An empty room roster is valid.
+    *
+    * Reservation Contact details are needed for guest pricing
+    * only when the contact is actually marked as staying.
+    */
+    const primaryGuestRequested =
+      items.some(
+        (item) =>
+          item
+            ?.guestRosterProvided ===
+            true &&
+          item
+            ?.primaryGuestStaying ===
+            true
+      );
+
+
+    let primaryCustomer =
+      null;
+
+
+    if (
+      primaryGuestRequested
+    ) {
+      const customerValidation =
+        validateCustomer(
+          req.body
+        );
+
+
+      if (
+        customerValidation.error
+      ) {
+        return sendError(
+          res,
+          400,
+          "INVALID_CUSTOMER_DETAILS",
+          customerValidation.error
+        );
+      }
+
+
+      primaryCustomer =
+        customerValidation.value;
+    }
+
+
+    guestContext = {
+      primaryMode:
+        "zero_or_one",
+
+      primaryCustomer,
+    };
+  }
 
   const connection =
     await db.getConnection();
@@ -3000,6 +3908,7 @@ exports.quoteBookingPrice = async (
 
           items,
           roomMap,
+          guestContext,
         }
       );
 
@@ -3061,12 +3970,46 @@ exports.quoteBookingPrice = async (
                   .ratePerNight,
 
               room_charge:
-                pricing
-                  .roomCharge,
+                pricing.roomCharge,
+
+              total_guests:
+                pricing.totalGuests ??
+                item.totalGuests,
+
+              max_extra_beds:
+                Number(
+                  pricing.maxExtraBeds ??
+                  room?.max_extra_beds ??
+                  0
+                ),
+
+              extra_beds_used:
+                pricing.extraBedsUsed ??
+                null,
+
+              child_charge_amount:
+                Number(
+                  pricing
+                    .childChargeAmount ||
+                  0
+                ),
+
+              extra_bed_charge_amount:
+                Number(
+                  pricing
+                    .extraBedChargeAmount ||
+                  0
+                ),
+
+              guest_charge_amount:
+                Number(
+                  pricing
+                    .guestChargeAmount ||
+                  0
+                ),
 
               total_amount:
-                pricing
-                  .totalAmount,
+                pricing.totalAmount,
 
               /*
                * Present only for slab-based Day Use pricing.
@@ -3200,6 +4143,562 @@ exports.quoteBookingPrice = async (
   }
 };
 
+/* ============================================================
+   QUOTE ROOM(S) FOR EXISTING RESERVATION GROUP
+
+   Read-only preview for Add Room.
+
+   Important:
+   - Existing reservation group/customer is reused.
+   - Uses CURRENT hotel policy because the new room is booked now.
+   - Existing Primary Guest allocation is respected.
+   - Does NOT create booking / payment / guest / snapshot.
+   - Does NOT lock room rows.
+============================================================ */
+
+exports.quoteReservationGroupRooms = async (
+  req,
+  res
+) => {
+  const context =
+    getAdminContext(req);
+
+
+  const reservationGroupId =
+    parsePositiveInteger(
+      req.params.groupId
+    );
+
+
+  if (!context) {
+    return sendError(
+      res,
+      403,
+      "HOTEL_CONTEXT_MISSING",
+      "Your Admin account is not linked to a valid hotel."
+    );
+  }
+
+
+  if (!reservationGroupId) {
+    return sendError(
+      res,
+      400,
+      "INVALID_RESERVATION_GROUP_ID",
+      "The reservation group ID is invalid."
+    );
+  }
+
+
+  const validation =
+    validateBookingItems(
+      req.body,
+      {
+        allowedStatuses:
+          RESERVATION_EDIT_STATUSES,
+      }
+    );
+
+
+  if (
+    validation.error
+  ) {
+    return sendError(
+      res,
+      400,
+      "INVALID_BOOKING_DETAILS",
+      validation.error
+    );
+  }
+
+
+  const items =
+    validation.value;
+
+
+  const connection =
+    await db.getConnection();
+
+
+  try {
+    await connection
+      .beginTransaction();
+
+
+    /* ========================================================
+       RESERVATION GROUP
+    ======================================================== */
+
+    const [[group]] =
+      await connection.query(
+        `
+          SELECT
+            reservation_group_id,
+            group_code,
+            customer_id
+
+          FROM reservation_groups
+
+          WHERE hotel_id = ?
+            AND reservation_group_id = ?
+
+          LIMIT 1
+        `,
+        [
+          context.hotelId,
+          reservationGroupId,
+        ]
+      );
+
+
+    if (!group) {
+      throwHttp(
+        404,
+        "RESERVATION_GROUP_NOT_FOUND",
+        "The reservation group was not found in your hotel."
+      );
+    }
+
+
+    /* ========================================================
+       EXISTING GROUP BOOKINGS
+    ======================================================== */
+
+    const [existingBookings] =
+      await connection.query(
+        `
+          SELECT
+            booking_id,
+            stay_type,
+            booking_status
+
+          FROM bookings
+
+          WHERE hotel_id = ?
+            AND reservation_group_id = ?
+
+          ORDER BY booking_id ASC
+        `,
+        [
+          context.hotelId,
+          reservationGroupId,
+        ]
+      );
+
+
+    if (
+      existingBookings.length ===
+      0
+    ) {
+      throwHttp(
+        409,
+        "RESERVATION_GROUP_EMPTY",
+        "This reservation group does not contain any booking records."
+      );
+    }
+
+
+    const groupIsOpen =
+      existingBookings.some(
+        (booking) =>
+          [
+            "pending",
+            "confirmed",
+            "checked_in",
+          ].includes(
+            booking.booking_status
+          )
+      );
+
+
+    if (!groupIsOpen) {
+      throwHttp(
+        409,
+        "RESERVATION_GROUP_CLOSED",
+        "New rooms cannot be added to a completed or fully cancelled reservation group."
+      );
+    }
+
+
+    const groupStayTypes =
+      new Set(
+        existingBookings
+          .filter(
+            (booking) =>
+              booking.booking_status !==
+              "cancelled"
+          )
+          .map(
+            (booking) =>
+              booking.stay_type
+          )
+      );
+
+
+    if (
+      groupStayTypes.size !==
+      1
+    ) {
+      throwHttp(
+        409,
+        "RESERVATION_GROUP_STAY_TYPE_INCONSISTENT",
+        "This reservation group contains inconsistent stay types and requires review before another room can be added."
+      );
+    }
+
+
+    const groupStayType =
+      [
+        ...groupStayTypes,
+      ][0];
+
+
+    if (
+      items.some(
+        (item) =>
+          item.stayType !==
+          groupStayType
+      )
+    ) {
+      throwHttp(
+        409,
+        "RESERVATION_GROUP_STAY_TYPE_MISMATCH",
+        groupStayType ===
+          "day_use"
+          ? "Only Day Use / Short Stay rooms can be added to this reservation group."
+          : "Only Overnight Stay rooms can be added to this reservation group."
+      );
+    }
+
+
+    /* ========================================================
+       ROOM PRICING DATA
+    ======================================================== */
+
+    const roomMap =
+      await getRoomsForPricing(
+        connection,
+        context.hotelId,
+        items
+      );
+
+
+    /* ========================================================
+       EXISTING PRIMARY GUEST ALLOCATION
+    ======================================================== */
+
+    let guestContext =
+      null;
+
+
+    let primaryGuestCount =
+      0;
+
+
+    if (
+      usesDetailedGuestRoster(
+        items
+      )
+    ) {
+      primaryGuestCount =
+        await countGroupPrimaryGuestsWithConnection(
+          connection,
+          {
+            hotelId:
+              context.hotelId,
+
+            reservationGroupId,
+          }
+        );
+
+
+      if (
+        primaryGuestCount > 1
+      ) {
+        throwHttp(
+          409,
+          "RESERVATION_GROUP_PRIMARY_GUEST_INVALID",
+          "This reservation group contains multiple Primary Guest allocations and requires review."
+        );
+      }
+
+
+      const primaryCustomer =
+        await loadPrimaryCustomerWithConnection(
+          connection,
+          {
+            hotelId:
+              context.hotelId,
+
+            customerId:
+              Number(
+                group.customer_id
+              ),
+
+            forUpdate:
+              false,
+          }
+        );
+
+
+      guestContext = {
+        primaryMode:
+          primaryGuestCount === 1
+            ? "none"
+            : "zero_or_one",
+
+        primaryCustomer,
+      };
+    }
+
+
+    /* ========================================================
+       CURRENT POLICY PRICING
+    ======================================================== */
+
+    const pricingResult =
+      await priceBookingItemsWithConnection(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          items,
+          roomMap,
+          guestContext,
+        }
+      );
+
+
+    const quotes =
+      pricingResult
+        .prices
+        .map(
+          (
+            pricing,
+            index
+          ) => {
+            const item =
+              items[index];
+
+
+            const room =
+              roomMap.get(
+                item.roomId
+              );
+
+
+            return {
+              room_id:
+                item.roomId,
+
+              room_number:
+                room?.room_number,
+
+              room_type:
+                room?.room_type,
+
+              stay_type:
+                pricing.stayType,
+
+              pricing_mode:
+                pricing.pricingMode,
+
+              check_in:
+                item.checkIn,
+
+              check_out:
+                item.checkOut,
+
+              nights:
+                pricing.nights,
+
+              duration_minutes:
+                pricing.durationMinutes,
+
+              rate_per_night:
+                pricing.ratePerNight,
+
+              room_charge:
+                pricing.roomCharge,
+
+              total_guests:
+                pricing.totalGuests ??
+                item.totalGuests,
+
+              max_extra_beds:
+                Number(
+                  pricing.maxExtraBeds ??
+                  room?.max_extra_beds ??
+                  0
+                ),
+
+              extra_beds_used:
+                pricing.extraBedsUsed ??
+                null,
+
+              child_charge_amount:
+                Number(
+                  pricing
+                    .childChargeAmount ||
+                  0
+                ),
+
+              extra_bed_charge_amount:
+                Number(
+                  pricing
+                    .extraBedChargeAmount ||
+                  0
+                ),
+
+              guest_charge_amount:
+                Number(
+                  pricing
+                    .guestChargeAmount ||
+                  0
+                ),
+
+              total_amount:
+                pricing.totalAmount,
+
+              matched_up_to_hours:
+                pricing
+                  .matchedUpToHours ??
+                null,
+
+              applied_value:
+                pricing
+                  .appliedValue ??
+                null,
+
+              exact_hours:
+                pricing
+                  .exactHours ??
+                null,
+
+              hourly_rate_type:
+                pricing
+                  .hourlyRateType ??
+                null,
+
+              hourly_rate_value:
+                pricing
+                  .hourlyRateValue ??
+                null,
+
+              maximum_charge_percent:
+                pricing
+                  .maximumChargePercent ??
+                null,
+            };
+          }
+        );
+
+
+    const grandTotal =
+      Number(
+        quotes
+          .reduce(
+            (
+              total,
+              quote
+            ) =>
+              total +
+              Number(
+                quote.total_amount ||
+                0
+              ),
+            0
+          )
+          .toFixed(2)
+      );
+
+
+    await connection
+      .commit();
+
+
+    return res
+      .status(200)
+      .json({
+        success: true,
+
+        data: {
+          reservation_group_id:
+            reservationGroupId,
+
+          group_code:
+            group.group_code,
+
+          customer_id:
+            Number(
+              group.customer_id
+            ),
+
+          stay_type:
+            groupStayType,
+
+          room_count:
+            quotes.length,
+
+          total_amount:
+            grandTotal,
+
+          primary_guest_already_allocated:
+            primaryGuestCount ===
+            1,
+
+          day_use_enabled:
+            pricingResult
+              .policySnapshot
+              ?.day_use
+              ?.enabled ===
+            true,
+
+          pricing_source:
+            "current_hotel_policy",
+
+          rooms:
+            quotes,
+        },
+      });
+  } catch (error) {
+    await connection
+      .rollback()
+      .catch(
+        () => {}
+      );
+
+
+    logBookingError(
+      "QUOTE_RESERVATION_GROUP_ROOMS",
+      error
+    );
+
+
+    if (
+      error?.status &&
+      error?.code
+    ) {
+      return sendError(
+        res,
+        error.status,
+        error.code,
+        error.message
+      );
+    }
+
+
+    return sendError(
+      res,
+      500,
+      "RESERVATION_GROUP_ROOM_QUOTE_FAILED",
+      "The added room price could not be calculated. Please try again."
+    );
+  } finally {
+    connection.release();
+  }
+};
 
 /* ============================================================
    QUOTE EXISTING RESERVATION EDIT
@@ -3263,6 +4762,7 @@ exports.quoteBookingEditPrice = async (
         `
           SELECT
             booking_id,
+            reservation_group_id,
             stay_type,
             customer_id,
             room_id,
@@ -3361,6 +4861,13 @@ exports.quoteBookingEditPrice = async (
           total_guests:
             req.body.total_guests,
 
+          primary_guest_staying:
+            req.body
+              .primary_guest_staying,
+
+          guests:
+            req.body.guests,
+
           booking_status:
             req.body.booking_status,
 
@@ -3388,6 +4895,18 @@ exports.quoteBookingEditPrice = async (
     const [item] =
       validation.value;
 
+    const guestContext =
+      await resolveReservationEditGuestContext(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+          existing,
+          item,
+        }
+      );
 
     const roomMap =
       await getRoomsForPricing(
@@ -3422,6 +4941,7 @@ exports.quoteBookingEditPrice = async (
           existing,
           item,
           room,
+          guestContext,
         }
       );
 
@@ -3572,6 +5092,42 @@ exports.quoteBookingEditPrice = async (
 
           room_charge:
             pricing.roomCharge,
+
+          total_guests:
+            pricing.totalGuests ??
+            item.totalGuests,
+
+          max_extra_beds:
+            Number(
+              pricing.maxExtraBeds ??
+              room?.max_extra_beds ??
+              0
+            ),
+
+          extra_beds_used:
+            pricing.extraBedsUsed ??
+            null,
+
+          child_charge_amount:
+            Number(
+              pricing
+                .childChargeAmount ||
+              0
+            ),
+
+          extra_bed_charge_amount:
+            Number(
+              pricing
+                .extraBedChargeAmount ||
+              0
+            ),
+
+          guest_charge_amount:
+            Number(
+              pricing
+                .guestChargeAmount ||
+              0
+            ),
 
           total_amount:
             newTotal,
@@ -4033,12 +5589,85 @@ exports.updateBooking = async (
     await connection
       .beginTransaction();
 
+    const [[bookingLocator]] =
+      await connection.query(
+        `
+          SELECT
+            reservation_group_id
+
+          FROM bookings
+
+          WHERE hotel_id = ?
+            AND booking_id = ?
+
+          LIMIT 1
+        `,
+        [
+          context.hotelId,
+          bookingId,
+        ]
+      );
+
+
+    if (!bookingLocator) {
+      throwHttp(
+        404,
+        "BOOKING_NOT_FOUND",
+        "The booking was not found in your hotel."
+      );
+    }
+
+
+    const detailedGuestEditRequested =
+      req.body
+        ?.primary_guest_staying !==
+        undefined ||
+      req.body?.guests !==
+        undefined;
+
+
+    if (
+      detailedGuestEditRequested
+    ) {
+      const [[lockedGroup]] =
+        await connection.query(
+          `
+            SELECT
+              reservation_group_id
+
+            FROM reservation_groups
+
+            WHERE hotel_id = ?
+              AND reservation_group_id = ?
+
+            LIMIT 1
+
+            FOR UPDATE
+          `,
+          [
+            context.hotelId,
+            
+            bookingLocator
+              .reservation_group_id,
+          ]
+        );
+
+
+      if (!lockedGroup) {
+        throwHttp(
+          409,
+          "RESERVATION_GROUP_NOT_FOUND",
+          "The reservation group could not be locked for guest allocation."
+        );
+      }
+    }
 
     const [[existing]] =
       await connection.query(
         `
           SELECT
             booking_id,
+            reservation_group_id,
             source_request_id,
             stay_type,
             customer_id,
@@ -4149,6 +5778,13 @@ exports.updateBooking = async (
           total_guests:
             req.body.total_guests,
 
+          primary_guest_staying:
+            req.body
+              .primary_guest_staying,
+
+          guests:
+            req.body.guests,
+
           booking_status:
             req.body.booking_status,
 
@@ -4176,6 +5812,18 @@ exports.updateBooking = async (
     const [item] =
       validation.value;
 
+    const guestContext =
+      await resolveReservationEditGuestContext(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+          existing,
+          item,
+        }
+      );
 
     const roomMap =
       await lockRooms(
@@ -4208,6 +5856,7 @@ exports.updateBooking = async (
           existing,
           item,
           room,
+          guestContext,
         }
       );
 
@@ -4247,6 +5896,11 @@ exports.updateBooking = async (
         pricing.totalAmount
       );
     
+    const authoritativeTotalGuests =
+      Number(
+        pricing.totalGuests ??
+        item.totalGuests
+      );
 
     const paymentState =
       await getLockedPaymentState(
@@ -4379,7 +6033,7 @@ exports.updateBooking = async (
         context.adminId,
         item.checkIn,
         item.checkOut,
-        item.totalGuests,
+        authoritativeTotalGuests,
         item.bookingStatus,
         finalPaymentState.paymentStatus,
         newTotalAmount,
@@ -4389,6 +6043,55 @@ exports.updateBooking = async (
       ]
     );
 
+    let guestSaveResult =
+      null;
+
+    if (
+      pricing
+        .guestRosterProvided ===
+        true
+    ) {
+      const rosterGuests =
+        pricing
+          ?.guestRoster
+          ?.guests;
+
+
+      if (
+        !Array.isArray(
+          rosterGuests
+        )
+      ) {
+        throwHttp(
+          500,
+          "BOOKING_GUEST_ROSTER_MISSING",
+          "The validated guest roster is invalid."
+        );
+      }
+
+
+      guestSaveResult =
+        await replaceBookingGuestsWithConnection(
+          connection,
+          {
+            hotelId:
+              context.hotelId,
+
+            bookingId,
+
+            customerId:
+              Number(
+                existing.customer_id
+              ),
+
+            adminId:
+              context.adminId,
+
+            guests:
+              rosterGuests,
+          }
+        );
+    }
 
     /*
      * Before check-in this is still the initial reservation,
@@ -4528,6 +6231,59 @@ exports.updateBooking = async (
             ratePerNight,
 
           nights,
+
+          total_guests:
+            authoritativeTotalGuests,
+
+          max_extra_beds:
+            Number(
+              pricing.maxExtraBeds ??
+              room?.max_extra_beds ??
+              0
+            ),
+
+          extra_beds_used:
+            pricing.extraBedsUsed ??
+            null,
+
+          room_charge:
+            Number(
+              pricing.roomCharge ||
+              0
+            ),
+
+          child_charge_amount:
+            Number(
+              pricing
+                .childChargeAmount ||
+              0
+            ),
+
+          extra_bed_charge_amount:
+            Number(
+              pricing
+                .extraBedChargeAmount ||
+              0
+            ),
+
+          guest_charge_amount:
+            Number(
+              pricing
+                .guestChargeAmount ||
+              0
+            ),
+
+          guest_roster_saved:
+            Number(
+              guestSaveResult
+                ?.guestCount ||
+              0
+            ) > 0,
+
+          booking_guest_ids:
+            guestSaveResult
+              ?.bookingGuestIds ||
+            [],
 
           total_amount:
             newTotalAmount,
@@ -4734,6 +6490,238 @@ exports.checkInBooking = async (
       res,
       500,
       "BOOKING_CHECK_IN_FAILED",
+      "The guest could not be checked in. Please try again."
+    );
+  } finally {
+    connection.release();
+  }
+};
+
+/* ============================================================
+   CHECK IN INDIVIDUAL GUEST
+
+   Supports:
+   - New arriving guest
+   - Existing expected guest
+   - First guest activates the room booking
+   - Later guests may check into the same occupied room
+============================================================ */
+
+exports.checkInBookingGuest = async (
+  req,
+  res
+) => {
+  const context =
+    getAdminContext(req);
+
+
+  const bookingId =
+    parsePositiveInteger(
+      req.params.id
+    );
+
+
+  if (!context) {
+    return sendError(
+      res,
+      403,
+      "HOTEL_CONTEXT_MISSING",
+      "Your Admin account is not linked to a valid hotel."
+    );
+  }
+
+
+  if (!bookingId) {
+    return sendError(
+      res,
+      400,
+      "INVALID_BOOKING_ID",
+      "The booking ID is invalid."
+    );
+  }
+
+
+  const connection =
+    await db.getConnection();
+
+
+  try {
+    await connection
+      .beginTransaction();
+
+
+    const result =
+      await checkInBookingGuestLifecycle(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          adminId:
+            context.adminId,
+
+          bookingId,
+
+          /*
+           * Existing expected guest:
+           * send booking_guest_id.
+           *
+           * New arriving guest:
+           * leave booking_guest_id empty
+           * and send guest_role + guest.
+           */
+          bookingGuestId:
+            req.body
+              ?.booking_guest_id,
+
+          guestRole:
+            req.body
+              ?.guest_role,
+
+          guest:
+            req.body
+              ?.guest,
+        }
+      );
+
+
+    await connection
+      .commit();
+
+
+    return res
+      .status(200)
+      .json({
+        success: true,
+
+        message:
+          result.roomActivated
+            ? "Guest checked in and room stay activated successfully."
+            : "Guest checked in successfully.",
+
+        data: {
+          booking_id:
+            result.bookingId,
+
+          booking_code:
+            result.bookingCode,
+
+          room_id:
+            result.roomId,
+
+          room_number:
+            result.roomNumber,
+
+          room_type:
+            result.roomType,
+
+          room_activated:
+            result.roomActivated,
+
+          existing_guest:
+            result.existingGuest,
+
+          booking_guest_id:
+            result.bookingGuestId,
+
+          guest_role:
+            result.guestRole,
+
+          guest_type:
+            result.guestType,
+
+          full_name:
+            result.fullName,
+
+          guest_status:
+            result.guestStatus,
+
+          actual_guest_check_in:
+            result.actualGuestCheckIn,
+
+          total_guests:
+            result.totalGuests,
+
+          child_charge_amount:
+            result.childChargeAmount,
+
+          extra_bed_charge_amount:
+            result.extraBedChargeAmount,
+
+          added_guest_charge:
+            result.addedGuestCharge,
+
+          previous_total_amount:
+            result.previousTotalAmount ??
+            result.totalAmount,
+
+          total_amount:
+            result.totalAmount,
+
+          amount_paid:
+            result.amountPaid,
+
+          outstanding_amount:
+            result.outstandingAmount,
+
+          payment_status:
+            result.paymentStatus,
+
+          booking_status:
+            result.bookingStatus,
+
+          room_status:
+            result.roomStatus,
+
+          policy_snapshot_id:
+            result.policySnapshotId ??
+            null,
+        },
+      });
+  } catch (error) {
+    await connection
+      .rollback()
+      .catch(
+        () => {}
+      );
+
+
+    logBookingError(
+      "CHECK_IN_BOOKING_GUEST",
+      error
+    );
+
+
+    if (
+      error?.status &&
+      error?.code
+    ) {
+      return sendError(
+        res,
+        error.status,
+        error.code,
+        error.message
+      );
+    }
+
+
+    if (
+      error?.code ===
+      "ER_DUP_ENTRY"
+    ) {
+      return sendError(
+        res,
+        409,
+        "GUEST_CHECK_IN_CONFLICT",
+        "This guest allocation conflicts with an existing reservation guest record."
+      );
+    }
+
+
+    return sendError(
+      res,
+      500,
+      "BOOKING_GUEST_CHECK_IN_FAILED",
       "The guest could not be checked in. Please try again."
     );
   } finally {

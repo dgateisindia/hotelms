@@ -105,6 +105,7 @@ async function loadRooms(
           room_type,
           floor_number,
           capacity,
+          max_extra_beds,
           status,
           price_per_night
 

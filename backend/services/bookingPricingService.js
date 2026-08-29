@@ -3,6 +3,10 @@ const {
   getBookingPolicySnapshotWithConnection,
 } = require("./hotelSettingsService");
 
+const {
+  prepareGuestRosters,
+  calculateGuestCharges,
+} = require("./bookingGuestService");
 
 /* ============================================================
    BOOKING PRICING SERVICE
@@ -15,8 +19,10 @@ const {
    Important:
    - Client total_amount is never trusted.
    - Early Check-In is calculated later from ACTUAL arrival.
-   - Child / Extra Bed charges will be connected when guest
-     roster data is connected to booking.
+   - Guest roster pricing is derived from the same hotel-policy
+     state used for the room booking.
+   - Child occupancy and actual extra-bed charges are included
+     in the authoritative booking total.
 ============================================================ */
 
 
@@ -68,8 +74,452 @@ function validRoomRate(
     );
   }
 
-
   return money(rate);
+}
+
+/* ============================================================
+   ROOM EXTRA-BED CAPACITY
+
+   Physical room limit is independent from:
+   - guest capacity
+   - hotel-wide extra-bed pricing
+
+   The roster has already been normalized by bookingGuestService,
+   so required child beds and explicit adult/child bed usage are
+   represented by guest.extraBedUsed here.
+============================================================ */
+
+function resolveRoomExtraBedLimit(
+  room
+) {
+  const maxExtraBeds =
+    Number(
+      room?.max_extra_beds
+    );
+
+  const capacity =
+    Number(
+      room?.capacity
+    );
+
+
+  if (
+    !Number.isSafeInteger(
+      maxExtraBeds
+    ) ||
+    maxExtraBeds < 0 ||
+    !Number.isSafeInteger(
+      capacity
+    ) ||
+    capacity < 1 ||
+    maxExtraBeds >
+      capacity
+  ) {
+    throw pricingError(
+      500,
+      "INVALID_ROOM_EXTRA_BED_LIMIT",
+      `Room ${
+        room?.room_number ||
+        "—"
+      } has an invalid extra-bed capacity configuration.`
+    );
+  }
+
+
+  return maxExtraBeds;
+}
+
+
+function validateRoomExtraBedUsage({
+  room,
+  roster,
+}) {
+  const maxExtraBeds =
+    resolveRoomExtraBedLimit(
+      room
+    );
+
+
+  /*
+   * Legacy booking:
+   * physical limit is known, but historical usage
+   * must never be invented.
+   */
+  if (!roster) {
+    return {
+      maxExtraBeds,
+
+      extraBedsUsed:
+        null,
+    };
+  }
+
+
+  const guests =
+    Array.isArray(
+      roster.guests
+    )
+      ? roster.guests
+      : [];
+
+
+  const extraBedsUsed =
+    guests.reduce(
+      (
+        total,
+        guest
+      ) =>
+        total +
+        (
+          guest?.extraBedUsed ===
+          true
+            ? 1
+            : 0
+        ),
+      0
+    );
+
+
+  if (
+    extraBedsUsed >
+    maxExtraBeds
+  ) {
+    const roomNumber =
+      room?.room_number ||
+      "selected room";
+
+
+    const message =
+      maxExtraBeds === 0
+        ? `Room ${roomNumber} does not allow extra beds.`
+        : `Room ${roomNumber} allows a maximum of ${maxExtraBeds} extra bed${
+            maxExtraBeds === 1
+              ? ""
+              : "s"
+          }.`;
+
+
+    throw pricingError(
+      400,
+      "ROOM_EXTRA_BED_LIMIT_EXCEEDED",
+      message
+    );
+  }
+
+
+  return {
+    maxExtraBeds,
+
+    extraBedsUsed,
+  };
+}
+
+/* ============================================================
+   GUEST PRICING CONTEXT
+
+   Guest rosters are normalized against the SAME policy state
+   used to calculate the room price.
+
+   This is important because:
+   - New booking uses current policy.
+   - Existing booking edit uses immutable booking snapshot.
+============================================================ */
+
+function resolveGuestPricingRosters({
+  items,
+  roomMap,
+  policyState,
+  guestContext,
+}) {
+  const rosterCount =
+    items.filter(
+      (item) =>
+        item?.guestRosterProvided ===
+        true
+    ).length;
+
+
+  /*
+   * Legacy bookings / transitional API calls.
+   *
+   * No roster means old pricing remains exactly unchanged.
+   */
+  if (
+    rosterCount === 0
+  ) {
+    return {
+      rosters: null,
+      guestPolicy: null,
+    };
+  }
+
+
+  /*
+   * Never allow partially migrated multi-room requests.
+   *
+   * Either every room carries its occupant roster,
+   * or none of them do.
+   */
+  if (
+    rosterCount !==
+    items.length
+  ) {
+    throw pricingError(
+      400,
+      "INCOMPLETE_GUEST_ROSTER",
+      "Guest details must be provided for every room in the reservation."
+    );
+  }
+
+
+  if (
+    !guestContext ||
+    typeof guestContext !==
+      "object" ||
+    Array.isArray(
+      guestContext
+    )
+  ) {
+    throw pricingError(
+      500,
+      "GUEST_PRICING_CONTEXT_MISSING",
+      "Guest pricing context was not provided."
+    );
+  }
+
+
+  const primaryMode =
+    String(
+      guestContext.primaryMode ||
+      ""
+    ).trim();
+
+
+  if (!primaryMode) {
+    throw pricingError(
+      500,
+      "PRIMARY_GUEST_MODE_MISSING",
+      "Primary guest allocation mode was not provided for pricing."
+    );
+  }
+
+
+  const guestPolicy =
+    policyState
+      ?.policySnapshot
+      ?.guest_requirements;
+
+
+  if (
+    !guestPolicy ||
+    typeof guestPolicy !==
+      "object"
+  ) {
+    throw pricingError(
+      500,
+      "GUEST_POLICY_MISSING",
+      "The hotel's Guest & Occupancy policy could not be resolved."
+    );
+  }
+
+
+  const prepared =
+    prepareGuestRosters({
+      rooms:
+        items,
+
+      roomMap,
+
+      guestPolicy,
+
+      primaryCustomer:
+        guestContext
+          .primaryCustomer ||
+        null,
+
+      primaryMode,
+    });
+
+
+  if (
+    !Array.isArray(
+      prepared.rooms
+    ) ||
+    prepared.rooms.length !==
+      items.length
+  ) {
+    throw pricingError(
+      500,
+      "GUEST_ROSTER_PREPARATION_FAILED",
+      "The room guest roster could not be prepared for pricing."
+    );
+  }
+
+
+  return {
+    rosters:
+      prepared.rooms,
+
+    guestPolicy:
+      prepared.policy,
+
+    totalGuests:
+      prepared.totalGuests,
+
+    primaryCount:
+      prepared.primaryCount,
+  };
+}
+
+
+/* ============================================================
+   ADD GUEST CHARGES TO ROOM PRICE
+============================================================ */
+
+function applyGuestChargesToPrice({
+  item,
+  room,
+  basePrice,
+  roster,
+  guestPolicy,
+}) {
+  const extraBedUsage =
+    validateRoomExtraBedUsage({
+      room,
+      roster,
+    });
+
+
+  /*
+   * Legacy booking without occupant details.
+   *
+   * Room's physical limit is still known, but we do not
+   * invent historical extra-bed usage.
+   */
+  if (!roster) {
+    return {
+      ...basePrice,
+
+      guestRosterProvided:
+        false,
+
+      maxExtraBeds:
+        extraBedUsage
+          .maxExtraBeds,
+
+      extraBedsUsed:
+        null,
+
+      childChargeAmount:
+        0,
+
+      extraBedChargeAmount:
+        0,
+
+      guestChargeAmount:
+        0,
+    };
+  }
+
+
+  const guestCharges =
+    calculateGuestCharges({
+      roster,
+
+      stayType:
+        item.stayType,
+
+      nights:
+        basePrice.nights,
+
+      ratePerNight:
+        basePrice.ratePerNight,
+
+      guestPolicy,
+    });
+
+
+  const childChargeAmount =
+    money(
+      guestCharges
+        .childChargeTotal
+    );
+
+
+  const extraBedChargeAmount =
+    money(
+      guestCharges
+        .extraBedChargeTotal
+    );
+
+
+  const guestChargeAmount =
+    money(
+      guestCharges
+        .totalGuestCharges
+    );
+
+
+  const totalAmount =
+    money(
+      Number(
+        basePrice.totalAmount ||
+        0
+      ) +
+      guestChargeAmount
+    );
+
+
+  return {
+    ...basePrice,
+
+    guestRosterProvided:
+      true,
+
+    totalGuests:
+      roster.totalGuests,
+
+    maxExtraBeds:
+      extraBedUsage
+        .maxExtraBeds,
+
+    extraBedsUsed:
+      extraBedUsage
+        .extraBedsUsed,
+
+    childChargeAmount,
+
+    extraBedChargeAmount,
+
+    guestChargeAmount,
+
+    totalAmount,
+
+    guestRoster: {
+      roomId:
+        roster.roomId,
+
+      roomNumber:
+        roster.roomNumber,
+
+      primaryGuestStaying:
+        roster.primaryGuestStaying,
+
+      totalGuests:
+        roster.totalGuests,
+
+      maxExtraBeds:
+        extraBedUsage
+          .maxExtraBeds,
+
+      extraBedsUsed:
+        extraBedUsage
+          .extraBedsUsed,
+
+      guests:
+        guestCharges.guests,
+    },
+  };
 }
 
 
@@ -519,6 +969,7 @@ function priceBookingItemsAgainstPolicyState({
   items,
   roomMap,
   policyState,
+  guestContext = null,
 }) {
   if (
     !Array.isArray(items) ||
@@ -552,8 +1003,20 @@ function priceBookingItemsAgainstPolicyState({
     {};
 
 
+  const guestPricing =
+    resolveGuestPricingRosters({
+      items,
+      roomMap,
+      policyState,
+      guestContext,
+    });
+
+
   return items.map(
-    (item) => {
+    (
+      item,
+      index
+    ) => {
       const room =
         roomMap?.get(
           item.roomId
@@ -569,36 +1032,58 @@ function priceBookingItemsAgainstPolicyState({
       }
 
 
+      let basePrice;
+
+
       if (
         item.stayType ===
         "day_use"
       ) {
-        return calculateDayUsePrice({
-          item,
-          room,
+        basePrice =
+          calculateDayUsePrice({
+            item,
+            room,
 
-          policy:
-            dayUsePolicy,
-        });
-      }
-
-
-      if (
+            policy:
+              dayUsePolicy,
+          });
+      } else if (
         item.stayType ===
         "overnight"
       ) {
-        return calculateOvernightPrice({
-          item,
-          room,
-        });
+        basePrice =
+          calculateOvernightPrice({
+            item,
+            room,
+          });
+      } else {
+        throw pricingError(
+          400,
+          "INVALID_STAY_TYPE",
+          "The booking stay type is invalid."
+        );
       }
 
 
-      throw pricingError(
-        400,
-        "INVALID_STAY_TYPE",
-        "The booking stay type is invalid."
-      );
+      return applyGuestChargesToPrice({
+        item,
+
+        room,
+
+        basePrice,
+
+        roster:
+          guestPricing.rosters
+            ? guestPricing
+                .rosters[
+                  index
+                ]
+            : null,
+
+        guestPolicy:
+          guestPricing
+            .guestPolicy,
+      });
     }
   );
 }
@@ -615,6 +1100,7 @@ async function priceBookingItemsWithConnection(
     hotelId,
     items,
     roomMap,
+    guestContext = null,
   }
 ) {
   const hId =
@@ -650,6 +1136,7 @@ async function priceBookingItemsWithConnection(
       items,
       roomMap,
       policyState,
+      guestContext,
     });
 
 
@@ -695,6 +1182,7 @@ async function priceBookingItemsFromSnapshotWithConnection(
     bookingId,
     items,
     roomMap,
+    guestContext = null,
   }
 ) {
   const hId =
@@ -765,14 +1253,13 @@ async function priceBookingItemsFromSnapshotWithConnection(
         .policySnapshot,
   };
 
-
   const prices =
     priceBookingItemsAgainstPolicyState({
       items,
       roomMap,
       policyState,
+      guestContext,
     });
-
 
   return {
     prices,

@@ -163,6 +163,64 @@ function parseCapacity(value) {
   return totalCapacity;
 }
 
+function parseMaxExtraBeds(
+  value,
+  capacity
+) {
+  /*
+   * null means:
+   * field was not supplied.
+   *
+   * CREATE:
+   * backend will use 0.
+   *
+   * UPDATE:
+   * existing DB value will be preserved.
+   */
+  if (
+    value === undefined ||
+    value === null ||
+    String(value).trim() === ""
+  ) {
+    return {
+      value: null,
+      error: "",
+    };
+  }
+
+  const parsedValue =
+    Number(value);
+
+  if (
+    !Number.isSafeInteger(
+      parsedValue
+    ) ||
+    parsedValue < 0
+  ) {
+    return {
+      value: null,
+      error:
+        "Maximum extra beds must be a whole number greater than or equal to 0.",
+    };
+  }
+
+  if (
+    parsedValue >
+    capacity
+  ) {
+    return {
+      value: null,
+      error:
+        "Maximum extra beds cannot exceed the room guest capacity.",
+    };
+  }
+
+  return {
+    value: parsedValue,
+    error: "",
+  };
+}
+
 function parsePrice(value) {
   if (
     value === undefined ||
@@ -255,6 +313,22 @@ function validateRoomPayload(body) {
     };
   }
 
+  const maxExtraBedsResult =
+    parseMaxExtraBeds(
+      source.maxExtraBeds ??
+        source.max_extra_beds,
+      capacity
+    );
+
+  if (
+    maxExtraBedsResult.error
+  ) {
+    return {
+      error:
+        maxExtraBedsResult.error,
+    };
+  }
+
   const price =
     parsePrice(source.price);
 
@@ -286,6 +360,8 @@ function validateRoomPayload(body) {
       roomType,
       floor: floorResult.value,
       capacity,
+      maxExtraBeds:
+        maxExtraBedsResult.value,
       price,
       status,
     },
@@ -395,10 +471,11 @@ exports.createRoom = async (
             room_type,
             floor_number,
             capacity,
+            max_extra_beds,
             price_per_night,
             status
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           hotelId,
@@ -406,6 +483,8 @@ exports.createRoom = async (
           room.roomType,
           room.floor,
           room.capacity,
+          room.maxExtraBeds ??
+            0,
           room.price,
           room.status,
         ]
@@ -481,6 +560,7 @@ exports.getRooms = async (
             floor_number,
             price_per_night,
             capacity,
+            max_extra_beds,
             status,
             created_at
 
@@ -570,6 +650,11 @@ exports.updateRoom = async (
             room_type = ?,
             floor_number = ?,
             capacity = ?,
+            max_extra_beds =
+              COALESCE(
+                ?,
+                max_extra_beds
+              ),
             price_per_night = ?,
             status = ?
 
@@ -581,6 +666,7 @@ exports.updateRoom = async (
           room.roomType,
           room.floor,
           room.capacity,
+          room.maxExtraBeds,
           room.price,
           room.status,
           roomId,
@@ -854,6 +940,7 @@ exports.getAvailableRooms = async (
           r.floor_number,
           r.price_per_night,
           r.capacity,
+          r.max_extra_beds,
           r.status,
           r.created_at
 
@@ -967,6 +1054,7 @@ exports.getAvailableRooms = async (
           r.floor_number,
           r.price_per_night,
           r.capacity,
+          r.max_extra_beds,
           r.status,
           r.created_at
 
