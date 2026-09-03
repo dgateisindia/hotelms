@@ -56,6 +56,13 @@ const {
 );
 
 const {
+  refundCancellationOverpayment:
+    refundCancellationOverpaymentService,
+} = require(
+  "../services/bookingPayments/cancellationRefundService"
+);
+
+const {
   collectReservationGroupPayment:
     collectReservationGroupPaymentService,
 } = require(
@@ -8469,6 +8476,127 @@ exports.refundNoShowOverpayment = async (
   }
 };
 
+/* ============================================================
+   REFUND CANCELLATION OVERPAYMENT
+
+   Backend calculates the exact refundable amount.
+   Client only chooses refund method/reference/notes.
+============================================================ */
+
+exports.refundCancellationOverpayment = async (
+  req,
+  res
+) => {
+  const context =
+    getAdminContext(req);
+
+  const bookingId =
+    parsePositiveInteger(
+      req.params.id
+    );
+
+  if (!context) {
+    return sendError(
+      res,
+      403,
+      "HOTEL_CONTEXT_MISSING",
+      "Your Admin account is not linked to a valid hotel."
+    );
+  }
+
+  if (!bookingId) {
+    return sendError(
+      res,
+      400,
+      "INVALID_BOOKING_ID",
+      "The booking ID is invalid."
+    );
+  }
+
+  const connection =
+    await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const result =
+      await refundCancellationOverpaymentService(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          adminId:
+            context.adminId,
+
+          bookingId,
+
+          method:
+            req.body?.refund_method,
+
+          transactionId:
+            req.body?.transaction_id,
+
+          notes:
+            req.body?.notes,
+        }
+      );
+
+    await connection.commit();
+
+    return res
+      .status(201)
+      .json({
+        success: true,
+
+        message:
+          "Cancellation refund processed successfully.",
+
+        data:
+          result,
+      });
+  } catch (error) {
+    await connection.rollback();
+
+    logBookingError(
+      "REFUND_CANCELLATION_OVERPAYMENT",
+      error
+    );
+
+    if (
+      error?.status &&
+      error?.code
+    ) {
+      return sendError(
+        res,
+        error.status,
+        error.code,
+        error.message
+      );
+    }
+
+    if (
+      error?.code ===
+      "ER_DUP_ENTRY"
+    ) {
+      return sendError(
+        res,
+        409,
+        "DUPLICATE_TRANSACTION_REFERENCE",
+        "This refund transaction reference has already been used."
+      );
+    }
+
+    return sendError(
+      res,
+      500,
+      "CANCELLATION_REFUND_FAILED",
+      "The cancellation refund could not be processed. Please try again."
+    );
+  } finally {
+    connection.release();
+  }
+};
 
 /* ============================================================
    CHECKOUT RESERVATION GROUP

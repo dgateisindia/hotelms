@@ -5,6 +5,8 @@ import apiClient from "../../services/apiClient";
 import ExtendStayDialog from "./components/ExtendStayDialog";
 import CollectPaymentDialog from "./components/CollectPaymentDialog";
 import NoShowRefundDialog from "./components/NoShowRefundDialog";
+import CancellationDialog from "./components/CancellationDialog";
+import FinancialSettlementReviewDialog from "./components/FinancialSettlementReviewDialog";
 import ManageGuestsDialog from "./components/ManageGuestsDialog";
 import AppAlert from "../../components/common/AppAlert";
 
@@ -700,16 +702,11 @@ function BookingActionDialog({
     return null;
   }
 
-
   const isDelete =
     action.type === "delete";
 
   const isCheckout =
     action.type === "checkout";
-
-  const isCancel =
-    action.type === "cancel";
-
 
   let title =
     "Booking Action";
@@ -722,7 +719,6 @@ function BookingActionDialog({
 
   let buttonClass =
     "booking-btn-primary";
-
 
   if (isDelete) {
     title =
@@ -767,28 +763,7 @@ function BookingActionDialog({
         to Cleaning status.
       </>
     );
-  } else if (isCancel) {
-    title =
-      "Cancel Booking?";
-
-    buttonLabel =
-      "Cancel Booking";
-
-    buttonClass =
-      "booking-btn-warning";
-
-    description = (
-      <>
-        Booking{" "}
-        <strong>
-          {action.booking.booking_code}
-        </strong>{" "}
-        will remain in history but its status will be
-        changed to Cancelled.
-      </>
-    );
   }
-
 
   return (
     <div
@@ -810,7 +785,6 @@ function BookingActionDialog({
         aria-modal="true"
         aria-labelledby="booking-action-title"
       >
-
         <div
           className={
             isDelete
@@ -819,19 +793,16 @@ function BookingActionDialog({
           }
           aria-hidden="true"
         >
-          {isDelete ? <IcoWarn /> : isCheckout ? <IcoCheck /> : <IcoCancel />}
+          {isDelete
+            ? <IcoWarn />
+            : <IcoCheck />}
         </div>
-
 
         <h3 id="booking-action-title">
           {title}
         </h3>
 
-
-        <p>
-          {description}
-        </p>
-
+        <p>{description}</p>
 
         {error && (
           <div className="booking-dialog-error">
@@ -839,24 +810,21 @@ function BookingActionDialog({
           </div>
         )}
 
-
         <div className="booking-confirm-actions">
-
           <button
             type="button"
             className="booking-btn-secondary"
             onClick={onClose}
             disabled={processing}
           >
-            {isCheckout ? "Not Now" : "Keep Booking"}
+            {isCheckout
+              ? "Not Now"
+              : "Keep Booking"}
           </button>
-
 
           <button
             type="button"
-            className={
-              buttonClass
-            }
+            className={buttonClass}
             onClick={onConfirm}
             disabled={processing}
           >
@@ -864,9 +832,7 @@ function BookingActionDialog({
               ? "Processing..."
               : buttonLabel}
           </button>
-
         </div>
-
       </div>
     </div>
   );
@@ -890,10 +856,25 @@ function BookingViewDialog({
     return null;
   }
 
+  const status =
+    normalizeText(
+      booking?.booking_status
+    );
+
   const isNoShow =
-    booking
-      ?.booking_status ===
-    "no_show";
+    status === "no_show";
+
+  const isCancellation =
+    status === "cancelled";
+
+  const isLifecycleSettlement =
+    isNoShow ||
+    isCancellation;
+
+  const settlementLabel =
+    isCancellation
+      ? "Cancellation"
+      : "No Show";
 
 
   const financialReviewRequired =
@@ -1153,7 +1134,7 @@ function BookingViewDialog({
 
               <div className="booking-detail-row">
                 <span>
-                  {isNoShow
+                  {isLifecycleSettlement
                     ? "Original Booking Amount"
                     : "Booking Amount"}
                 </span>
@@ -1165,12 +1146,11 @@ function BookingViewDialog({
                 </strong>
               </div>
 
-
-              {isNoShow && (
+              {isLifecycleSettlement && (
                 <>
                   <div className="booking-detail-row">
                     <span>
-                      No Show Charge
+                      {settlementLabel} Charge
                     </span>
 
                     <strong>
@@ -1179,7 +1159,6 @@ function BookingViewDialog({
                       )}
                     </strong>
                   </div>
-
 
                   <div className="booking-detail-row">
                     <span>
@@ -1190,12 +1169,10 @@ function BookingViewDialog({
                       {financialReviewRequired
                         ? "Pending Review"
                         : formatCurrency(
-                            booking
-                              .final_payable_amount
+                            booking.final_payable_amount
                           )}
                     </strong>
                   </div>
-
 
                   {financialReviewRequired && (
                     <div className="booking-detail-row">
@@ -1268,7 +1245,7 @@ function BookingViewDialog({
                 </strong>
               </div>
 
-              {isNoShow &&
+              {isLifecycleSettlement &&
                 !financialReviewRequired &&
                 Number(
                   booking.overpaid_amount || 0
@@ -1294,7 +1271,46 @@ function BookingViewDialog({
               </div>
 
             </section>
+            
+            {isCancellation && (
+              <section className="booking-detail-section">
+                <h4>
+                  Cancellation Details
+                </h4>
 
+                <div className="booking-detail-row">
+                  <span>Source</span>
+
+                  <strong>
+                    {booking.cancellation_source ===
+                    "hotel"
+                      ? "Hotel Initiated"
+                      : "Customer Requested"}
+                  </strong>
+                </div>
+
+                <div className="booking-detail-row">
+                  <span>
+                    Cancelled On
+                  </span>
+
+                  <strong>
+                    {formatDateTime(
+                      booking.cancelled_at
+                    )}
+                  </strong>
+                </div>
+
+                <div className="booking-detail-row">
+                  <span>Reason</span>
+
+                  <strong>
+                    {booking.cancellation_reason ||
+                      "—"}
+                  </strong>
+                </div>
+              </section>
+            )}
 
             {booking.special_request && (
               <section className="booking-detail-section">
@@ -1506,6 +1522,45 @@ function Bookings() {
     actionError,
     setActionError,
   ] = useState("");
+
+  const [
+    cancellationBooking,
+    setCancellationBooking,
+  ] = useState(null);
+
+  const [
+    cancellationSource,
+    setCancellationSource,
+  ] = useState("customer");
+
+  const [
+    cancellationReason,
+    setCancellationReason,
+  ] = useState("");
+
+  const [
+    cancellationProcessing,
+    setCancellationProcessing,
+  ] = useState(false);
+
+  const [
+    cancellationError,
+    setCancellationError,
+  ] = useState("");
+
+  const [
+    cancellationSuccess,
+    setCancellationSuccess,
+  ] = useState("");
+
+  const [financialReviewBooking, setFinancialReviewBooking] = useState(null);
+  const [financialReviewData, setFinancialReviewData] = useState(null);
+  const [financialReviewFinalPayable, setFinancialReviewFinalPayable] = useState("");
+  const [financialReviewNotes, setFinancialReviewNotes] = useState("");
+  const [financialReviewLoading, setFinancialReviewLoading] = useState(false);
+  const [financialReviewProcessing, setFinancialReviewProcessing] = useState(false);
+  const [financialReviewError, setFinancialReviewError] = useState("");
+  const [financialReviewSuccess, setFinancialReviewSuccess] = useState("");
 
   const [
     extendBooking,
@@ -1994,6 +2049,243 @@ function Bookings() {
     setManageGuestsBooking(null);
   }
 
+  /* ==========================================================
+    CANCELLATION
+  ========================================================== */
+
+  function openCancellation(
+    booking
+  ) {
+    setCancellationBooking(
+      booking
+    );
+
+    setCancellationSource(
+      "customer"
+    );
+
+    setCancellationReason(
+      ""
+    );
+
+    setCancellationError(
+      ""
+    );
+  }
+
+  function closeCancellation() {
+    if (
+      cancellationProcessing
+    ) {
+      return;
+    }
+
+    setCancellationBooking(
+      null
+    );
+
+    setCancellationSource(
+      "customer"
+    );
+
+    setCancellationReason(
+      ""
+    );
+
+    setCancellationError(
+      ""
+    );
+  }
+
+  async function confirmCancellation() {
+    if (!cancellationBooking) {
+      return;
+    }
+
+    setCancellationProcessing(
+      true
+    );
+
+    setCancellationError(
+      ""
+    );
+
+    setCancellationSuccess(
+      ""
+    );
+
+    try {
+      const response =
+        await apiClient.put(
+          `/bookings/${cancellationBooking.booking_id}/cancel`,
+          {
+            cancellation_source:
+              cancellationSource,
+
+            cancellation_reason:
+              cancellationReason
+                .trim() ||
+              null,
+          }
+        );
+
+      setCancellationBooking(
+        null
+      );
+
+      setCancellationSource(
+        "customer"
+      );
+
+      setCancellationReason(
+        ""
+      );
+
+      setCancellationError(
+        ""
+      );
+
+      setCancellationSuccess(
+        response.data?.message ||
+          "Booking cancelled successfully."
+      );
+
+      await loadBookings();
+    } catch (
+      cancellationRequestError
+    ) {
+      setCancellationError(
+        getApiMessage(
+          cancellationRequestError,
+          "The booking could not be cancelled."
+        )
+      );
+    } finally {
+      setCancellationProcessing(
+        false
+      );
+    }
+  }
+
+  /* ==========================================================
+    FINANCIAL SETTLEMENT REVIEW
+  ========================================================== */
+
+  async function openFinancialSettlementReview(booking) {
+    setFinancialReviewBooking(booking);
+    setFinancialReviewData(null);
+    setFinancialReviewFinalPayable("");
+    setFinancialReviewNotes("");
+    setFinancialReviewError("");
+    setFinancialReviewLoading(true);
+
+    try {
+      const response = await apiClient.get(
+        `/bookings/${booking.booking_id}/financial-settlement-review`
+      );
+
+      const review = response.data?.data || null;
+
+      setFinancialReviewData(review);
+
+      setFinancialReviewFinalPayable(
+        review?.final_payable_amount === null ||
+        review?.final_payable_amount === undefined
+          ? ""
+          : String(review.final_payable_amount)
+      );
+    } catch (reviewLoadError) {
+      setFinancialReviewError(
+        getApiMessage(
+          reviewLoadError,
+          "The financial settlement review could not be loaded."
+        )
+      );
+    } finally {
+      setFinancialReviewLoading(false);
+    }
+  }
+
+  function closeFinancialSettlementReview() {
+    if (financialReviewProcessing) return;
+
+    setFinancialReviewBooking(null);
+    setFinancialReviewData(null);
+    setFinancialReviewFinalPayable("");
+    setFinancialReviewNotes("");
+    setFinancialReviewError("");
+  }
+
+  async function confirmFinancialSettlementReview() {
+    if (!financialReviewBooking || !financialReviewData) return;
+
+    const finalPayable = Number(financialReviewFinalPayable);
+    const originalTotal = Number(
+      financialReviewData.original_total_amount || 0
+    );
+    const notes = financialReviewNotes.trim();
+
+    if (
+      !Number.isFinite(finalPayable) ||
+      finalPayable < 0 ||
+      finalPayable > originalTotal + 0.009
+    ) {
+      setFinancialReviewError(
+        "Enter a valid final payable amount within the original booking amount."
+      );
+      return;
+    }
+
+    if (!notes) {
+      setFinancialReviewError(
+        "Enter review notes explaining the final settlement amount."
+      );
+      return;
+    }
+
+    if (notes.length > 500) {
+      setFinancialReviewError(
+        "Financial review notes cannot exceed 500 characters."
+      );
+      return;
+    }
+
+    setFinancialReviewProcessing(true);
+    setFinancialReviewError("");
+    setFinancialReviewSuccess("");
+
+    try {
+      const response = await apiClient.post(
+        `/bookings/${financialReviewBooking.booking_id}/financial-settlement-review/finalize`,
+        {
+          final_payable_amount: finalPayable,
+          review_notes: notes,
+        }
+      );
+
+      setFinancialReviewBooking(null);
+      setFinancialReviewData(null);
+      setFinancialReviewFinalPayable("");
+      setFinancialReviewNotes("");
+      setFinancialReviewError("");
+
+      setFinancialReviewSuccess(
+        response.data?.message ||
+          "Financial settlement review finalized successfully."
+      );
+
+      await loadBookings();
+    } catch (reviewFinalizeError) {
+      setFinancialReviewError(
+        getApiMessage(
+          reviewFinalizeError,
+          "The financial settlement review could not be finalized."
+        )
+      );
+    } finally {
+      setFinancialReviewProcessing(false);
+    }
+  }
 
   /* ==========================================================
      CANCEL / DELETE
@@ -2036,10 +2328,6 @@ function Bookings() {
       if (action.type === "checkout") {
         await apiClient.post(
           `/bookings/${action.booking.booking_id}/checkout`
-        );
-      } else if (action.type === "cancel") {
-        await apiClient.put(
-          `/bookings/${action.booking.booking_id}/cancel`
         );
       } else if (action.type === "delete") {
         await apiClient.delete(
@@ -2277,9 +2565,14 @@ function Bookings() {
             paymentMethod,
 
           payment_stage:
-            paymentBooking
-              .booking_status ===
-              "no_show"
+            [
+              "no_show",
+              "cancelled",
+            ].includes(
+              normalizeText(
+                paymentBooking.booking_status
+              )
+            )
               ? "other"
               : amount + 0.009 >=
                   outstanding
@@ -2340,31 +2633,82 @@ function Bookings() {
   }
 
   /* ==========================================================
-    NO-SHOW REFUND
+    LIFECYCLE SETTLEMENT REFUND
   ========================================================== */
 
-  function openNoShowRefund(booking) {
-    setRefundBooking(booking);
-    setRefundMethod("cash");
-    setRefundTransactionId("");
-    setRefundNotes("");
-    setRefundError("");
+  function openLifecycleRefund(
+    booking
+  ) {
+    setRefundBooking(
+      booking
+    );
+
+    setRefundMethod(
+      "cash"
+    );
+
+    setRefundTransactionId(
+      ""
+    );
+
+    setRefundNotes(
+      ""
+    );
+
+    setRefundError(
+      ""
+    );
   }
 
+  function closeLifecycleRefund() {
+    if (refundProcessing) {
+      return;
+    }
 
-  function closeNoShowRefund() {
-    if (refundProcessing) return;
+    setRefundBooking(
+      null
+    );
 
-    setRefundBooking(null);
-    setRefundMethod("cash");
-    setRefundTransactionId("");
-    setRefundNotes("");
-    setRefundError("");
+    setRefundMethod(
+      "cash"
+    );
+
+    setRefundTransactionId(
+      ""
+    );
+
+    setRefundNotes(
+      ""
+    );
+
+    setRefundError(
+      ""
+    );
   }
 
+  async function confirmLifecycleRefund() {
+    if (!refundBooking) {
+      return;
+    }
 
-  async function confirmNoShowRefund() {
-    if (!refundBooking) return;
+    const status =
+      normalizeText(
+        refundBooking.booking_status
+      );
+
+    const refundPath =
+      status === "cancelled"
+        ? "cancellation-refund"
+        : status === "no_show"
+          ? "no-show-refund"
+          : null;
+
+    if (!refundPath) {
+      setRefundError(
+        "This booking is not eligible for a lifecycle settlement refund."
+      );
+      return;
+    }
 
     const transactionId =
       refundTransactionId.trim();
@@ -2384,20 +2728,23 @@ function Bookings() {
     setRefundSuccess("");
 
     try {
-      const response = await apiClient.post(
-        `/bookings/${refundBooking.booking_id}/no-show-refund`,
-        {
-          refund_method: refundMethod,
+      const response =
+        await apiClient.post(
+          `/bookings/${refundBooking.booking_id}/${refundPath}`,
+          {
+            refund_method:
+              refundMethod,
 
-          transaction_id:
-            refundMethod === "cash"
-              ? null
-              : transactionId,
+            transaction_id:
+              refundMethod === "cash"
+                ? null
+                : transactionId,
 
-          notes:
-            refundNotes.trim() || null,
-        }
-      );
+            notes:
+              refundNotes.trim() ||
+              null,
+          }
+        );
 
       setRefundBooking(null);
       setRefundMethod("cash");
@@ -2407,7 +2754,11 @@ function Bookings() {
 
       setRefundSuccess(
         response.data?.message ||
-          "No Show refund processed successfully."
+          (
+            status === "cancelled"
+              ? "Cancellation refund processed successfully."
+              : "No Show refund processed successfully."
+          )
       );
 
       await loadBookings();
@@ -2415,7 +2766,9 @@ function Bookings() {
       setRefundError(
         getApiMessage(
           requestError,
-          "The No Show refund could not be processed."
+          status === "cancelled"
+            ? "The cancellation refund could not be processed."
+            : "The No Show refund could not be processed."
         )
       );
     } finally {
@@ -2435,6 +2788,22 @@ function Bookings() {
         message={refundSuccess}
         onClose={() =>
           setRefundSuccess("")
+        }
+      />
+
+      <AppAlert
+        type="success"
+        message={cancellationSuccess}
+        onClose={() =>
+          setCancellationSuccess("")
+        }
+      />
+
+      <AppAlert
+        type="success"
+        message={financialReviewSuccess}
+        onClose={() =>
+          setFinancialReviewSuccess("")
         }
       />
 
@@ -2819,25 +3188,28 @@ function Bookings() {
                           booking.overpaid_amount || 0
                         );
 
-                      const canRefundNoShow =
-                        status === "no_show" &&
+                      const isLifecycleSettlement =
+                        status === "no_show" ||
+                        status === "cancelled";
+
+                      const canReviewFinancialSettlement =
+                        isLifecycleSettlement &&
+                        financialReviewRequired;
+
+                      const canRefundLifecycle =
+                        isLifecycleSettlement &&
                         !financialReviewRequired &&
                         overpaidAmount > 0.009;
 
-
                       const canCollectPayment =
                         (
-                          status ===
-                            "checked_in" ||
-
+                          status === "checked_in" ||
                           (
-                            status ===
-                              "no_show" &&
+                            isLifecycleSettlement &&
                             !financialReviewRequired
                           )
                         ) &&
-                        outstandingAmount >
-                          0.009;
+                        outstandingAmount > 0.009;
 
                       const canExtendStay =
                         status ===
@@ -3046,6 +3418,20 @@ function Bookings() {
                               >
                                 <IcoEye />
                               </button>
+
+                              {canReviewFinancialSettlement && (
+                                <button
+                                  type="button"
+                                  className="booking-action-button booking-action-button--edit"
+                                  onClick={() =>
+                                    void openFinancialSettlementReview(booking)
+                                  }
+                                  title="Review financial settlement"
+                                  aria-label={`Review financial settlement for ${booking.booking_code}`}
+                                >
+                                  <IcoWarn />
+                                </button>
+                              )}
                               
                               {canManageGuests && (
                                 <button
@@ -3075,13 +3461,27 @@ function Bookings() {
                                 </button>
                               )}
 
-                              {canRefundNoShow && (
+                              {canRefundLifecycle && (
                                 <button
                                   type="button"
                                   className="booking-action-button booking-action-button--cancel"
-                                  onClick={() => openNoShowRefund(booking)}
-                                  title={`Refund ${formatCurrency(overpaidAmount)} No-Show overpayment`}
-                                  aria-label={`Refund No Show overpayment for ${booking.booking_code}`}
+                                  onClick={() =>
+                                    openLifecycleRefund(
+                                      booking
+                                    )
+                                  }
+                                  title={`Refund ${formatCurrency(
+                                    overpaidAmount
+                                  )} ${
+                                    status === "cancelled"
+                                      ? "Cancellation"
+                                      : "No-Show"
+                                  } overpayment`}
+                                  aria-label={`Refund ${
+                                    status === "cancelled"
+                                      ? "Cancellation"
+                                      : "No Show"
+                                  } overpayment for ${booking.booking_code}`}
                                 >
                                   <IcoRupee />
                                 </button>
@@ -3155,8 +3555,7 @@ function Bookings() {
                                   type="button"
                                   className="booking-action-button booking-action-button--cancel"
                                   onClick={() =>
-                                    requestAction(
-                                      "cancel",
+                                    openCancellation(
                                       booking
                                     )
                                   }
@@ -3376,6 +3775,52 @@ function Bookings() {
         onConfirm={() => void confirmAction()}
       />
 
+      <CancellationDialog
+        booking={
+          cancellationBooking
+        }
+        source={
+          cancellationSource
+        }
+        reason={
+          cancellationReason
+        }
+        processing={
+          cancellationProcessing
+        }
+        error={
+          cancellationError
+        }
+        onChangeSource={
+          setCancellationSource
+        }
+        onChangeReason={
+          setCancellationReason
+        }
+        onClose={
+          closeCancellation
+        }
+        onConfirm={() =>
+          void confirmCancellation()
+        }
+      />
+
+      <FinancialSettlementReviewDialog
+        booking={financialReviewBooking}
+        review={financialReviewData}
+        finalPayable={financialReviewFinalPayable}
+        reviewNotes={financialReviewNotes}
+        loading={financialReviewLoading}
+        processing={financialReviewProcessing}
+        error={financialReviewError}
+        onChangeFinalPayable={setFinancialReviewFinalPayable}
+        onChangeReviewNotes={setFinancialReviewNotes}
+        onClose={closeFinancialSettlementReview}
+        onConfirm={() =>
+          void confirmFinancialSettlementReview()
+        }
+      />
+
       <ExtendStayDialog
         booking={
           extendBooking
@@ -3471,9 +3916,11 @@ function Bookings() {
         }
         onChangeNotes={setRefundNotes}
 
-        onClose={closeNoShowRefund}
+        onClose={
+          closeLifecycleRefund
+        }
         onConfirm={() =>
-          void confirmNoShowRefund()
+          void confirmLifecycleRefund()
         }
       />
 

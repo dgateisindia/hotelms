@@ -1,63 +1,114 @@
 import React from "react";
 
+function formatCurrency(value) {
+  const amount = Number(value || 0);
 
-function formatCurrency(
-  value
-) {
-  const amount =
-    Number(value || 0);
-
-
-  return new Intl.NumberFormat(
-    "en-IN",
-    {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }
-  ).format(
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(
     Number.isFinite(amount)
       ? amount
       : 0
   );
 }
 
-
 function CollectPaymentDialog({
   booking,
-
   amount,
   method,
   transactionId,
   notes,
-
   processing,
   error,
-
   onChangeAmount,
   onChangeMethod,
   onChangeTransactionId,
   onChangeNotes,
-
   onClose,
   onConfirm,
 }) {
-  if (!booking) {
-    return null;
-  }
+  if (!booking) return null;
 
+  const status = String(
+    booking.booking_status || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const isNoShow =
+    status === "no_show";
+
+  const isCancellation =
+    status === "cancelled";
+
+  const isLifecycleSettlement =
+    isNoShow ||
+    isCancellation;
+
+  const settlementLabel =
+    isCancellation
+      ? "Cancellation"
+      : isNoShow
+        ? "No-Show"
+        : null;
+
+  const originalTotal =
+    Number(
+      booking.total_amount || 0
+    );
+
+  const finalPayable =
+    isLifecycleSettlement
+      ? Number(
+          booking.final_payable_amount || 0
+        )
+      : originalTotal;
+
+  const netPaid =
+    Number(
+      booking.amount_paid || 0
+    );
 
   const outstanding =
     Number(
-      booking.outstanding_amount ||
-      0
+      booking.outstanding_amount || 0
     );
 
+  const financialReviewRequired =
+    Number(
+      booking.financial_review_required || 0
+    ) === 1;
+
+  const enteredAmount =
+    Number(amount);
 
   const isCash =
     method === "cash";
 
+  const transactionReference =
+    String(
+      transactionId || ""
+    ).trim();
+
+  const validAmount =
+    Number.isFinite(
+      enteredAmount
+    ) &&
+    enteredAmount > 0 &&
+    enteredAmount <=
+      outstanding + 0.009;
+
+  const canSubmit =
+    !processing &&
+    !financialReviewRequired &&
+    validAmount &&
+    (
+      isCash ||
+      transactionReference
+    );
 
   return (
     <div
@@ -79,96 +130,116 @@ function CollectPaymentDialog({
         aria-modal="true"
         aria-labelledby="collect-payment-title"
       >
-
         <h3 id="collect-payment-title">
-          Collect Payment
+          {isLifecycleSettlement
+            ? `Collect ${settlementLabel} Charge`
+            : "Collect Payment"}
         </h3>
-
 
         <p>
           Record payment for{" "}
-
           <strong>
             {booking.booking_code}
           </strong>
-
           {" "}—{" "}
-
           <strong>
             {booking.full_name ||
               "Guest"}
           </strong>.
         </p>
 
-
         <div className="booking-detail-section">
-
           <div className="booking-detail-row">
-
             <span>
-              Booking Total
+              {isLifecycleSettlement
+                ? "Original Booking Amount"
+                : "Booking Total"}
             </span>
 
             <strong>
               {formatCurrency(
-                booking.total_amount
+                originalTotal
               )}
             </strong>
-
           </div>
 
+          {isLifecycleSettlement && (
+            <div className="booking-detail-row">
+              <span>
+                Final {settlementLabel} Payable
+              </span>
+
+              <strong>
+                {financialReviewRequired
+                  ? "Pending Review"
+                  : formatCurrency(
+                      finalPayable
+                    )}
+              </strong>
+            </div>
+          )}
+
+          {isCancellation &&
+            booking.cancellation_source && (
+            <div className="booking-detail-row">
+              <span>
+                Cancellation Source
+              </span>
+
+              <strong>
+                {booking.cancellation_source ===
+                "hotel"
+                  ? "Hotel Initiated"
+                  : "Customer Requested"}
+              </strong>
+            </div>
+          )}
 
           <div className="booking-detail-row">
-
             <span>
-              Already Paid
+              Net Paid
             </span>
 
             <strong>
               {formatCurrency(
-                booking.amount_paid
+                netPaid
               )}
             </strong>
-
           </div>
 
-
           <div className="booking-detail-row">
-
             <span>
               Balance Due
             </span>
 
             <strong>
-              {formatCurrency(
-                outstanding
-              )}
+              {financialReviewRequired
+                ? "Pending Review"
+                : formatCurrency(
+                    outstanding
+                  )}
             </strong>
-
           </div>
 
-
           <div className="booking-detail-row">
-
             <span>
               Amount
             </span>
 
             <div className="booking-search">
-
               <input
                 type="number"
                 min="0.01"
                 step="0.01"
                 max={
-                  outstanding >
-                  0
+                  outstanding > 0
                     ? outstanding
                     : undefined
                 }
                 value={amount}
                 disabled={
-                  processing
+                  processing ||
+                  financialReviewRequired
                 }
                 onChange={(event) =>
                   onChangeAmount(
@@ -178,25 +249,18 @@ function CollectPaymentDialog({
                 placeholder="Enter amount"
                 aria-label="Payment amount"
               />
-
             </div>
-
           </div>
 
-
           <div className="booking-detail-row">
-
             <span>
               Payment Method
             </span>
 
             <div className="booking-filter-control">
-
               <select
                 value={method}
-                disabled={
-                  processing
-                }
+                disabled={processing}
                 onChange={(event) =>
                   onChangeMethod(
                     event.target.value
@@ -204,7 +268,6 @@ function CollectPaymentDialog({
                 }
                 aria-label="Payment method"
               >
-
                 <option value="cash">
                   Cash
                 </option>
@@ -220,77 +283,71 @@ function CollectPaymentDialog({
                 <option value="bank_transfer">
                   Bank Transfer
                 </option>
-
               </select>
-
             </div>
-
           </div>
-
 
           {!isCash && (
             <div className="booking-detail-row">
-
               <span>
-                Transaction ID
+                Transaction ID *
               </span>
 
               <div className="booking-search">
-
                 <input
                   type="text"
-                  value={
-                    transactionId
-                  }
-                  disabled={
-                    processing
-                  }
+                  value={transactionId}
+                  disabled={processing}
+                  maxLength={255}
+                  placeholder="Enter transaction reference"
+                  aria-label="Transaction ID"
                   onChange={(event) =>
                     onChangeTransactionId(
                       event.target.value
                     )
                   }
-                  placeholder="Enter transaction reference"
-                  maxLength={255}
-                  aria-label="Transaction ID"
                 />
-
               </div>
-
             </div>
           )}
 
-
           <div className="booking-detail-row">
-
             <span>
               Notes
             </span>
 
             <div className="booking-search">
-
               <input
                 type="text"
                 value={notes}
-                disabled={
-                  processing
-                }
+                disabled={processing}
+                maxLength={500}
+                placeholder="Optional payment note"
+                aria-label="Payment notes"
                 onChange={(event) =>
                   onChangeNotes(
                     event.target.value
                   )
                 }
-                placeholder="Optional payment note"
-                maxLength={500}
-                aria-label="Payment notes"
               />
-
             </div>
-
           </div>
-
         </div>
 
+        {isLifecycleSettlement && (
+          <p>
+            Payment is collected against the finalized{" "}
+            {settlementLabel} settlement, not against the
+            original booking amount.
+          </p>
+        )}
+
+        {financialReviewRequired && (
+          <div className="booking-dialog-error">
+            Financial review must be completed before
+            payment can be collected.
+          </div>
+        )}
 
         {error && (
           <div className="booking-dialog-error">
@@ -298,54 +355,34 @@ function CollectPaymentDialog({
           </div>
         )}
 
-
         <div className="booking-confirm-actions">
-
           <button
             type="button"
             className="booking-btn-secondary"
-            disabled={
-              processing
-            }
-            onClick={
-              onClose
-            }
+            disabled={processing}
+            onClick={onClose}
           >
             Cancel
           </button>
 
-
           <button
             type="button"
             className="booking-btn-primary"
-            disabled={
-              processing ||
-              !amount ||
-              Number(amount) <=
-                0 ||
-              (
-                !isCash &&
-                !String(
-                  transactionId ||
-                  ""
-                ).trim()
-              )
-            }
-            onClick={
-              onConfirm
-            }
+            disabled={!canSubmit}
+            onClick={onConfirm}
           >
             {processing
               ? "Recording..."
-              : "Collect Payment"}
+              : isLifecycleSettlement
+                ? `Collect ${formatCurrency(
+                    enteredAmount || 0
+                  )}`
+                : "Collect Payment"}
           </button>
-
         </div>
-
       </div>
     </div>
   );
 }
-
 
 export default CollectPaymentDialog;

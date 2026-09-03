@@ -26,6 +26,7 @@ const {
   checkoutReservationGroup,
   collectBookingPayment,
   refundNoShowOverpayment,
+  refundCancellationOverpayment,
   checkoutBooking,
   cancelBooking,
   deleteBooking,
@@ -33,6 +34,13 @@ const {
   "../controllers/bookingController"
 );
 
+
+const {
+  getFinancialSettlementReview,
+  finalizeFinancialSettlementReview,
+} = require(
+  "../controllers/bookingFinancialSettlementController"
+);
 
 /* ============================================================
    BOOKING STATISTICS
@@ -216,6 +224,29 @@ router.post(
 router.post(
   "/:id/no-show-refund",
   refundNoShowOverpayment
+);
+
+/* ============================================================
+   REFUND CANCELLATION OVERPAYMENT
+============================================================ */
+
+router.post(
+  "/:id/cancellation-refund",
+  refundCancellationOverpayment
+);
+
+/* ============================================================
+   FINANCIAL SETTLEMENT REVIEW
+============================================================ */
+
+router.get(
+  "/:id/financial-settlement-review",
+  getFinancialSettlementReview
+);
+
+router.post(
+  "/:id/financial-settlement-review/finalize",
+  finalizeFinancialSettlementReview
 );
 
 /* ============================================================

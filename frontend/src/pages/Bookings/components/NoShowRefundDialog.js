@@ -1,6 +1,5 @@
 import React from "react";
 
-
 function formatCurrency(value) {
   const amount = Number(value || 0);
 
@@ -9,34 +8,52 @@ function formatCurrency(value) {
     currency: "INR",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(Number.isFinite(amount) ? amount : 0);
+  }).format(
+    Number.isFinite(amount)
+      ? amount
+      : 0
+  );
 }
 
+function formatSource(value) {
+  return value === "hotel"
+    ? "Hotel Initiated"
+    : "Customer Requested";
+}
 
 function NoShowRefundDialog({
   booking,
-
   method,
   transactionId,
   notes,
-
   processing,
   error,
-
   onChangeMethod,
   onChangeTransactionId,
   onChangeNotes,
-
   onClose,
   onConfirm,
 }) {
-  if (!booking) {
-    return null;
-  }
+  if (!booking) return null;
 
+  const status = String(
+    booking.booking_status || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const isCancellation =
+    status === "cancelled";
+
+  const settlementLabel =
+    isCancellation
+      ? "Cancellation"
+      : "No-Show";
 
   const originalAmount =
-    Number(booking.total_amount || 0);
+    Number(
+      booking.total_amount || 0
+    );
 
   const finalPayable =
     Number(
@@ -44,7 +61,9 @@ function NoShowRefundDialog({
     );
 
   const netPaid =
-    Number(booking.amount_paid || 0);
+    Number(
+      booking.amount_paid || 0
+    );
 
   const refundDue =
     Number(
@@ -60,7 +79,9 @@ function NoShowRefundDialog({
     method === "cash";
 
   const transactionReference =
-    String(transactionId || "").trim();
+    String(
+      transactionId || ""
+    ).trim();
 
   const canSubmit =
     !processing &&
@@ -71,14 +92,14 @@ function NoShowRefundDialog({
       transactionReference
     );
 
-
   return (
     <div
       className="booking-modal-overlay"
       role="presentation"
       onMouseDown={(event) => {
         if (
-          event.target === event.currentTarget &&
+          event.target ===
+            event.currentTarget &&
           !processing
         ) {
           onClose();
@@ -89,12 +110,11 @@ function NoShowRefundDialog({
         className="booking-confirm-modal"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="no-show-refund-title"
+        aria-labelledby="lifecycle-refund-title"
       >
-        <h3 id="no-show-refund-title">
-          Process No-Show Refund
+        <h3 id="lifecycle-refund-title">
+          Process {settlementLabel} Refund
         </h3>
-
 
         <p>
           Refund overpayment for{" "}
@@ -103,10 +123,10 @@ function NoShowRefundDialog({
           </strong>
           {" "}—{" "}
           <strong>
-            {booking.full_name || "Guest"}
+            {booking.full_name ||
+              "Guest"}
           </strong>.
         </p>
-
 
         <div className="booking-detail-section">
           <div className="booking-detail-row">
@@ -121,10 +141,24 @@ function NoShowRefundDialog({
             </strong>
           </div>
 
+          {isCancellation && (
+            <div className="booking-detail-row">
+              <span>
+                Cancellation Source
+              </span>
+
+              <strong>
+                {formatSource(
+                  booking
+                    .cancellation_source
+                )}
+              </strong>
+            </div>
+          )}
 
           <div className="booking-detail-row">
             <span>
-              Final No-Show Payable
+              Final {settlementLabel} Payable
             </span>
 
             <strong>
@@ -135,7 +169,6 @@ function NoShowRefundDialog({
                   )}
             </strong>
           </div>
-
 
           <div className="booking-detail-row">
             <span>
@@ -148,7 +181,6 @@ function NoShowRefundDialog({
               )}
             </strong>
           </div>
-
 
           <div className="booking-detail-row">
             <span>
@@ -163,7 +195,6 @@ function NoShowRefundDialog({
                   )}
             </strong>
           </div>
-
 
           <div className="booking-detail-row">
             <span>
@@ -200,7 +231,6 @@ function NoShowRefundDialog({
             </div>
           </div>
 
-
           {!isCash && (
             <div className="booking-detail-row">
               <span>
@@ -212,19 +242,18 @@ function NoShowRefundDialog({
                   type="text"
                   value={transactionId}
                   disabled={processing}
+                  maxLength={255}
+                  placeholder="Enter refund transaction reference"
+                  aria-label="Refund transaction ID"
                   onChange={(event) =>
                     onChangeTransactionId(
                       event.target.value
                     )
                   }
-                  placeholder="Enter refund transaction reference"
-                  maxLength={255}
-                  aria-label="Refund transaction ID"
                 />
               </div>
             </div>
           )}
-
 
           <div className="booking-detail-row">
             <span>
@@ -236,26 +265,24 @@ function NoShowRefundDialog({
                 type="text"
                 value={notes}
                 disabled={processing}
+                maxLength={500}
+                placeholder="Optional refund note"
+                aria-label="Refund notes"
                 onChange={(event) =>
                   onChangeNotes(
                     event.target.value
                   )
                 }
-                placeholder="Optional refund note"
-                maxLength={500}
-                aria-label="Refund notes"
               />
             </div>
           </div>
         </div>
 
-
         <p>
-          The refund amount is calculated automatically
-          from the finalized No-Show settlement and cannot
-          be edited.
+          Refund amount is calculated automatically
+          from the finalized {settlementLabel} settlement
+          and cannot be edited.
         </p>
-
 
         {financialReviewRequired && (
           <div className="booking-dialog-error">
@@ -264,13 +291,11 @@ function NoShowRefundDialog({
           </div>
         )}
 
-
         {error && (
           <div className="booking-dialog-error">
             {error}
           </div>
         )}
-
 
         <div className="booking-confirm-actions">
           <button
@@ -281,7 +306,6 @@ function NoShowRefundDialog({
           >
             Cancel
           </button>
-
 
           <button
             type="button"
@@ -300,6 +324,5 @@ function NoShowRefundDialog({
     </div>
   );
 }
-
 
 export default NoShowRefundDialog;
