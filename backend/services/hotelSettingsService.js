@@ -1410,6 +1410,36 @@ function validateGuestRequirementPolicy(
     adultAge
   );
 
+  const childAgeRequired =
+    settings?.child_age_required === true;
+
+  if (childRules.length > 0) {
+    if (!childAgeRequired) {
+      throw serviceError(
+        400,
+        "CHILD_AGE_REQUIRED_FOR_SLABS",
+        "Child age must be required when child age-based pricing rules are configured."
+      );
+    }
+
+    const finalMaxAge =
+      Number(
+        childRules[
+          childRules.length - 1
+        ]?.max_age
+      );
+
+    if (
+      finalMaxAge !==
+      adultAge - 1
+    ) {
+      throw serviceError(
+        400,
+        "CHILD_AGE_RULES_INCOMPLETE",
+        `Child age rules must cover every age from 0 to ${adultAge - 1}.`
+      );
+    }
+  }
 
   const extraBedEnabled =
     settings
@@ -2492,10 +2522,12 @@ async function sectionSnapshot(
 /* ============================================================
    VALIDATE RELATED GUEST REQUIREMENT CHANGES
 
-   Guest age settings are related:
+   Guest age / bed settings are related:
 
-   - adult_age_from
-   - child_age_rules
+  - adult_age_from
+  - child_age_required
+  - child_age_rules
+  - extra_bed_enabled
 
    They must always be validated as one final policy state,
    including normal update, restore and reset actions.
@@ -2519,6 +2551,7 @@ async function validateGuestRequirementChangesWithConnection(
           "guest_requirements" &&
         [
           "adult_age_from",
+          "child_age_required",
           "child_age_rules",
           "extra_bed_enabled",
         ].includes(

@@ -24,17 +24,13 @@ function GuestStep({
 
         <div>
 
-          <span className="booking-desk-eyebrow">
-            Step 1
-          </span>
+          <span className="booking-desk-eyebrow">Step 1</span>
 
-          <h2>
-            Guest & Identity
-          </h2>
+          <h2>Reservation Contact</h2>
 
           <p>
-            Search the guest by phone number and record
-            the identity details required for the stay.
+            Enter the reservation contact details.
+            This person does not have to be a staying guest.
           </p>
 
         </div>
@@ -161,7 +157,7 @@ function GuestStep({
         <div className="booking-desk-field">
 
           <label htmlFor="booking-name">
-            Guest Name
+            Contact Name
             <span>*</span>
           </label>
 

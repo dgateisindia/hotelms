@@ -301,6 +301,14 @@ function normalizeGuestPolicy(
     );
   }
 
+  const childAgeRequired =
+    source.child_age_required ===
+    true;
+
+  const extraBedEnabled =
+    source.extra_bed_enabled ===
+    true;
+
   const rules =
     Array.isArray(
       source.child_age_rules
@@ -378,6 +386,17 @@ function normalizeGuestPolicy(
           );
         }
 
+        if (
+          chargeMethod === "none" &&
+          chargeValue !== 0
+        ) {
+          throw guestError(
+            500,
+            "INVALID_GUEST_POLICY",
+            `The hotel's child age rule ${index + 1} must use charge value 0 when the charge method is none.`
+          );
+        }
+
         return {
           minAge,
           maxAge,
@@ -387,6 +406,71 @@ function normalizeGuestPolicy(
         };
       }
     );
+    
+    if (
+      childAgeRules.length > 0
+    ) {
+      if (!childAgeRequired) {
+        throw guestError(
+          500,
+          "INVALID_GUEST_POLICY",
+          "Child age must be required when child age-based pricing rules are configured."
+        );
+      }
+
+      let expectedMinAge = 0;
+
+      childAgeRules.forEach(
+        (rule, index) => {
+          if (
+            rule.minAge !==
+            expectedMinAge
+          ) {
+            throw guestError(
+              500,
+              "INVALID_GUEST_POLICY",
+              `The booking's child age rule ${index + 1} must start at age ${expectedMinAge}.`
+            );
+          }
+
+          expectedMinAge =
+            rule.maxAge + 1;
+        }
+      );
+
+      if (
+        expectedMinAge !==
+        adultAgeFrom
+      ) {
+        throw guestError(
+          500,
+          "INVALID_GUEST_POLICY",
+          `The booking's child age rules must cover every child age from 0 to ${adultAgeFrom - 1}.`
+        );
+      }
+
+      if (!extraBedEnabled) {
+        const invalidBedRule =
+          childAgeRules.find(
+            (rule) =>
+              [
+                "extra_bed_optional",
+                "extra_bed_required",
+              ].includes(
+                rule.bedPolicy
+              )
+          );
+
+        if (invalidBedRule) {
+          throw guestError(
+            500,
+            "INVALID_GUEST_POLICY",
+            "The booking's child age policy requires or allows an extra bed while extra beds are disabled."
+          );
+        }
+      }
+    }
+  
 
   const adultExtraBedChargePerNight =
     Number(
@@ -454,10 +538,7 @@ function normalizeGuestPolicy(
         .other_adult_id_required ===
       true,
 
-    childAgeRequired:
-      source
-        .child_age_required ===
-      true,
+    childAgeRequired,
 
     childIdRequired:
       source
@@ -468,10 +549,7 @@ function normalizeGuestPolicy(
 
     childAgeRules,
 
-    extraBedEnabled:
-      source
-        .extra_bed_enabled ===
-      true,
+    extraBedEnabled,
 
     adultExtraBedChargePerNight:
       money(
@@ -1837,6 +1915,563 @@ async function insertCheckedInGuestWithConnection(
   };
 }
 
+/* ============================================================
+   RESOLVE ACTUAL GUEST CHECKOUT TIME
+
+   Checkout timestamps always come from the database clock.
+
+   A caller performing a complete room checkout may supply one
+   already-resolved DB timestamp so booking + every guest share
+   exactly the same actual checkout time.
+============================================================ */
+
+async function resolveGuestCheckoutTime(
+  connection,
+  actualCheckOut = null
+) {
+  if (
+    actualCheckOut !== null &&
+    actualCheckOut !== undefined
+  ) {
+    return actualCheckOut;
+  }
+
+
+  const [[clock]] =
+    await connection.query(
+      `
+        SELECT
+          NOW() AS checkout_time
+      `
+    );
+
+
+  if (!clock?.checkout_time) {
+    throw guestError(
+      500,
+      "GUEST_CHECKOUT_TIME_MISSING",
+      "The actual guest checkout time could not be resolved."
+    );
+  }
+
+
+  return clock.checkout_time;
+}
+
+
+/* ============================================================
+   CHECK OUT ONE ACTUAL GUEST
+
+   This updates only the staying guest lifecycle.
+
+   Important:
+   - Does NOT close the room booking.
+   - Does NOT release the room.
+   - Does NOT change financial totals.
+   - Formal room checkout remains a separate operation.
+
+   This allows:
+   Guest A leaves
+   Guest B remains
+   → room booking stays checked_in.
+============================================================ */
+
+async function checkoutBookingGuestWithConnection(
+  connection,
+  {
+    hotelId,
+    bookingId,
+    bookingGuestId,
+    adminId,
+    actualCheckOut = null,
+  }
+) {
+  const hId =
+    positiveId(
+      hotelId,
+      "Hotel ID"
+    );
+
+
+  const bId =
+    positiveId(
+      bookingId,
+      "Booking ID"
+    );
+
+
+  const guestId =
+    positiveId(
+      bookingGuestId,
+      "Booking guest ID"
+    );
+
+
+  const aId =
+    positiveId(
+      adminId,
+      "Admin ID"
+    );
+
+
+  const [[guest]] =
+    await connection.query(
+      `
+        SELECT
+          booking_guest_id,
+          guest_role,
+          guest_type,
+          full_name,
+          guest_status,
+          actual_check_in,
+          actual_check_out
+
+        FROM booking_guests
+
+        WHERE hotel_id = ?
+          AND booking_id = ?
+          AND booking_guest_id = ?
+
+        LIMIT 1
+
+        FOR UPDATE
+      `,
+      [
+        hId,
+        bId,
+        guestId,
+      ]
+    );
+
+
+  if (!guest) {
+    throw guestError(
+      404,
+      "BOOKING_GUEST_NOT_FOUND",
+      "The selected guest was not found in this room reservation."
+    );
+  }
+
+
+  if (
+    guest.guest_status ===
+    "checked_out"
+  ) {
+    throw guestError(
+      409,
+      "GUEST_ALREADY_CHECKED_OUT",
+      "This guest has already been checked out."
+    );
+  }
+
+
+  if (
+    guest.guest_status ===
+    "expected"
+  ) {
+    throw guestError(
+      409,
+      "GUEST_NOT_CHECKED_IN",
+      "An expected guest who never checked in cannot be checked out."
+    );
+  }
+
+
+  if (
+    guest.guest_status ===
+    "cancelled"
+  ) {
+    throw guestError(
+      409,
+      "CANCELLED_GUEST_CANNOT_CHECK_OUT",
+      "A cancelled guest allocation cannot be checked out."
+    );
+  }
+
+
+  if (
+    guest.guest_status !==
+    "checked_in"
+  ) {
+    throw guestError(
+      409,
+      "GUEST_CHECKOUT_NOT_ALLOWED",
+      "This guest cannot be checked out from the current status."
+    );
+  }
+
+
+  if (
+    !guest.actual_check_in
+  ) {
+    throw guestError(
+      409,
+      "GUEST_CHECK_IN_TIME_MISSING",
+      "This guest is marked checked in but has no actual check-in time."
+    );
+  }
+
+
+  if (
+    guest.actual_check_out
+  ) {
+    throw guestError(
+      409,
+      "ACTUAL_GUEST_CHECKOUT_ALREADY_RECORDED",
+      "An actual checkout time is already recorded for this guest."
+    );
+  }
+
+
+  const checkoutTime =
+    await resolveGuestCheckoutTime(
+      connection,
+      actualCheckOut
+    );
+
+
+  const [updateResult] =
+    await connection.query(
+      `
+        UPDATE booking_guests
+
+        SET
+          guest_status =
+            'checked_out',
+
+          actual_check_out = ?,
+
+          checked_out_by_admin_id = ?,
+          updated_by_admin_id = ?
+
+        WHERE hotel_id = ?
+          AND booking_id = ?
+          AND booking_guest_id = ?
+          AND guest_status =
+            'checked_in'
+      `,
+      [
+        checkoutTime,
+        aId,
+        aId,
+        hId,
+        bId,
+        guestId,
+      ]
+    );
+
+
+  if (
+    Number(
+      updateResult.affectedRows ||
+      0
+    ) !== 1
+  ) {
+    throw guestError(
+      409,
+      "GUEST_CHECKOUT_STATE_CHANGED",
+      "The guest checkout state changed before the operation could be completed."
+    );
+  }
+
+
+  const [[counts]] =
+    await connection.query(
+      `
+        SELECT
+          COALESCE(
+            SUM(
+              guest_status =
+                'checked_in'
+            ),
+            0
+          ) AS checked_in_count,
+
+          COALESCE(
+            SUM(
+              guest_status =
+                'expected'
+            ),
+            0
+          ) AS expected_count
+
+        FROM booking_guests
+
+        WHERE hotel_id = ?
+          AND booking_id = ?
+      `,
+      [
+        hId,
+        bId,
+      ]
+    );
+
+
+  return {
+    bookingId:
+      bId,
+
+    bookingGuestId:
+      guestId,
+
+    guestRole:
+      guest.guest_role,
+
+    guestType:
+      guest.guest_type,
+
+    fullName:
+      guest.full_name,
+
+    guestStatus:
+      "checked_out",
+
+    actualCheckOut:
+      checkoutTime,
+
+    checkedInGuestsRemaining:
+      Number(
+        counts?.checked_in_count ||
+        0
+      ),
+
+    expectedGuestsRemaining:
+      Number(
+        counts?.expected_count ||
+        0
+      ),
+  };
+}
+
+
+/* ============================================================
+   CLOSE ALL GUEST STATES FOR FORMAL ROOM CHECKOUT
+
+   Formal room checkout closes the occupant lifecycle too.
+
+   checked_in
+     → checked_out
+     → receives actual_check_out + admin attribution
+
+   expected
+     → cancelled
+     → never receives a fake actual checkout
+
+   already checked_out / cancelled
+     → preserved unchanged
+
+   This function does NOT change:
+   - booking status
+   - room status
+   - room history
+   - payment ledger
+
+   Those remain booking lifecycle responsibilities.
+============================================================ */
+
+async function closeBookingGuestsForRoomCheckoutWithConnection(
+  connection,
+  {
+    hotelId,
+    bookingId,
+    adminId,
+    actualCheckOut = null,
+  }
+) {
+  const hId =
+    positiveId(
+      hotelId,
+      "Hotel ID"
+    );
+
+
+  const bId =
+    positiveId(
+      bookingId,
+      "Booking ID"
+    );
+
+
+  const aId =
+    positiveId(
+      adminId,
+      "Admin ID"
+    );
+
+
+  const checkoutTime =
+    await resolveGuestCheckoutTime(
+      connection,
+      actualCheckOut
+    );
+
+
+  const [guests] =
+    await connection.query(
+      `
+        SELECT
+          booking_guest_id,
+          guest_status,
+          actual_check_in,
+          actual_check_out
+
+        FROM booking_guests
+
+        WHERE hotel_id = ?
+          AND booking_id = ?
+
+        ORDER BY
+          booking_guest_id ASC
+
+        FOR UPDATE
+      `,
+      [
+        hId,
+        bId,
+      ]
+    );
+
+
+  const invalidCheckedInGuest =
+    guests.find(
+      (guest) =>
+        guest.guest_status ===
+          "checked_in" &&
+        !guest.actual_check_in
+    );
+
+
+  if (
+    invalidCheckedInGuest
+  ) {
+    throw guestError(
+      409,
+      "GUEST_CHECK_IN_TIME_MISSING",
+      "A checked-in guest has no actual check-in time. Review the guest lifecycle before checking out this room."
+    );
+  }
+
+
+  const inconsistentCheckoutGuest =
+    guests.find(
+      (guest) =>
+        guest.guest_status ===
+          "checked_in" &&
+        guest.actual_check_out
+    );
+
+
+  if (
+    inconsistentCheckoutGuest
+  ) {
+    throw guestError(
+      409,
+      "GUEST_CHECKOUT_STATE_INVALID",
+      "A checked-in guest already has an actual checkout time. Review the guest lifecycle before checking out this room."
+    );
+  }
+
+
+  const checkedInCount =
+    guests.filter(
+      (guest) =>
+        guest.guest_status ===
+        "checked_in"
+    ).length;
+
+
+  const expectedCount =
+    guests.filter(
+      (guest) =>
+        guest.guest_status ===
+        "expected"
+    ).length;
+
+
+  if (
+    checkedInCount > 0
+  ) {
+    await connection.query(
+      `
+        UPDATE booking_guests
+
+        SET
+          guest_status =
+            'checked_out',
+
+          actual_check_out = ?,
+
+          checked_out_by_admin_id = ?,
+          updated_by_admin_id = ?
+
+        WHERE hotel_id = ?
+          AND booking_id = ?
+          AND guest_status =
+            'checked_in'
+      `,
+      [
+        checkoutTime,
+        aId,
+        aId,
+        hId,
+        bId,
+      ]
+    );
+  }
+
+
+  if (
+    expectedCount > 0
+  ) {
+    await connection.query(
+      `
+        UPDATE booking_guests
+
+        SET
+          guest_status =
+            'cancelled',
+
+          actual_check_out = NULL,
+          checked_out_by_admin_id = NULL,
+          updated_by_admin_id = ?
+
+        WHERE hotel_id = ?
+          AND booking_id = ?
+          AND guest_status =
+            'expected'
+      `,
+      [
+        aId,
+        hId,
+        bId,
+      ]
+    );
+  }
+
+
+  return {
+    bookingId:
+      bId,
+
+    actualCheckOut:
+      checkoutTime,
+
+    guestCount:
+      guests.length,
+
+    checkedOutGuestCount:
+      checkedInCount,
+
+    cancelledExpectedGuestCount:
+      expectedCount,
+
+    alreadyClosedGuestCount:
+      guests.length -
+      checkedInCount -
+      expectedCount,
+  };
+}
+
 async function replaceBookingGuestsWithConnection(
   connection,
   values
@@ -2259,6 +2894,10 @@ module.exports = {
   insertBookingGuestsWithConnection,
 
   insertCheckedInGuestWithConnection,
+
+  checkoutBookingGuestWithConnection,
+
+  closeBookingGuestsForRoomCheckoutWithConnection,
 
   replaceBookingGuestsWithConnection,
 

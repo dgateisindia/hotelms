@@ -43,8 +43,11 @@ function calculatePaymentStatus(
   netPaid
 ) {
   const total =
-    Number(
-      totalAmount || 0
+    Math.max(
+      0,
+      Number(
+        totalAmount || 0
+      )
     );
 
 
@@ -55,6 +58,17 @@ function calculatePaymentStatus(
         netPaid || 0
       )
     );
+
+
+  /*
+   * Zero-payable bookings are financially settled even when
+   * no money was collected.
+   */
+  if (
+    total <= 0.009
+  ) {
+    return "paid";
+  }
 
 
   if (
@@ -174,6 +188,189 @@ async function getLockedPaymentState(
   };
 }
 
+async function resolveLockedPaymentTarget(
+  connection,
+  {
+    hotelId,
+    booking,
+  }
+) {
+  const originalTotalAmount =
+    Number(
+      booking?.total_amount
+    );
+
+
+  if (
+    !Number.isFinite(
+      originalTotalAmount
+    ) ||
+    originalTotalAmount < 0
+  ) {
+    throwHttp(
+      500,
+      "INVALID_BOOKING_TOTAL",
+      "The booking total is invalid."
+    );
+  }
+
+
+  /*
+   * Lifecycle settlements that replace the normal contractual
+   * payable target.
+   *
+   * Normal active reservations continue using total_amount.
+   */
+  const settlementConfig = {
+    no_show: {
+      type:
+        "no_show",
+
+      label:
+        "No Show",
+
+      codePrefix:
+        "NO_SHOW",
+    },
+
+    cancelled: {
+      type:
+        "cancellation",
+
+      label:
+        "Cancellation",
+
+      codePrefix:
+        "CANCELLATION",
+    },
+  };
+
+
+  const config =
+    settlementConfig[
+      booking.booking_status
+    ];
+
+
+  if (!config) {
+    return {
+      originalTotalAmount,
+
+      payableAmount:
+        originalTotalAmount,
+
+      settlementId:
+        null,
+
+      settlementType:
+        null,
+    };
+  }
+
+
+  /*
+   * Booking row must already be locked.
+   *
+   * Lock order:
+   * booking
+   *   ->
+   * financial settlement
+   */
+  const [[settlement]] =
+    await connection.query(
+      `
+        SELECT
+          settlement_id,
+          settlement_status,
+          final_payable_amount
+
+        FROM booking_financial_settlements
+
+        WHERE hotel_id = ?
+          AND booking_id = ?
+          AND settlement_type = ?
+
+        LIMIT 1
+
+        FOR UPDATE
+      `,
+      [
+        hotelId,
+        booking.booking_id,
+        config.type,
+      ]
+    );
+
+
+  if (!settlement) {
+    throwHttp(
+      409,
+      `${config.codePrefix}_SETTLEMENT_MISSING`,
+      `The ${config.label} financial settlement is not available yet.`
+    );
+  }
+
+
+  if (
+    settlement.settlement_status !==
+      "finalized" ||
+    settlement.final_payable_amount ===
+      null ||
+    settlement.final_payable_amount ===
+      undefined
+  ) {
+    throwHttp(
+      409,
+      `${config.codePrefix}_FINANCIAL_REVIEW_REQUIRED`,
+      `This ${config.label} requires financial review before payment can be collected.`
+    );
+  }
+
+
+  const payableAmount =
+    Number(
+      settlement
+        .final_payable_amount
+    );
+
+
+  if (
+    !Number.isFinite(
+      payableAmount
+    ) ||
+    payableAmount < 0 ||
+    payableAmount >
+      originalTotalAmount +
+        0.009
+  ) {
+    throwHttp(
+      500,
+      `INVALID_${config.codePrefix}_PAYABLE`,
+      `The ${config.label} final payable amount is invalid.`
+    );
+  }
+
+
+  return {
+    originalTotalAmount,
+
+    payableAmount:
+      Number(
+        payableAmount
+          .toFixed(2)
+      ),
+
+    settlementId:
+      Number(
+        settlement
+          .settlement_id
+      ),
+
+    settlementType:
+      config.type,
+  };
+}
+
 
 /* ============================================================
    SYNC BOOKING PAYMENT STATUS
@@ -188,6 +385,8 @@ async function syncBookingPaymentStatus(
     await connection.query(
       `
         SELECT
+          booking_id,
+          booking_status,
           total_amount
 
         FROM bookings
@@ -215,14 +414,23 @@ async function syncBookingPaymentStatus(
   }
 
 
+  const paymentTarget =
+    await resolveLockedPaymentTarget(
+      connection,
+      {
+        hotelId,
+        booking,
+      }
+    );
+
+
   const state =
     await getLockedPaymentState(
       connection,
       hotelId,
       bookingId,
-      Number(
-        booking.total_amount
-      )
+      paymentTarget
+        .payableAmount
     );
 
 
@@ -243,7 +451,17 @@ async function syncBookingPaymentStatus(
   );
 
 
-  return state;
+  return {
+    ...state,
+
+    originalTotalAmount:
+      paymentTarget
+        .originalTotalAmount,
+
+    payableAmount:
+      paymentTarget
+        .payableAmount,
+  };
 }
 
 
@@ -465,9 +683,11 @@ async function applyInitialPayment(
    checked_in -> during-stay / checkout payment
 
    Important:
-   - payment amount cannot exceed outstanding balance
-   - non-cash payment requires transaction ID
-   - successful payment row is the financial source of truth
+    * - payment amount cannot exceed outstanding balance
+    * - normal non-cash payment requires transaction ID
+    * - group-payment child allocations use group_payment_id
+    *   and keep the external transaction ID on the group receipt
+    * - successful payment rows remain the booking-level ledger
 ============================================================ */
 
 async function collectBookingPayment(
@@ -483,6 +703,8 @@ async function collectBookingPayment(
     stage,
     transactionId,
     notes,
+
+    groupPaymentId = null,
   }
 ) {
   /* ==========================================================
@@ -530,6 +752,8 @@ async function collectBookingPayment(
     new Set([
       "confirmed",
       "checked_in",
+      "no_show",
+      "cancelled",
     ]);
 
 
@@ -541,10 +765,18 @@ async function collectBookingPayment(
     throwHttp(
       409,
       "PAYMENT_COLLECTION_NOT_ALLOWED",
-      "Payment can be collected only for a confirmed reservation or an active checked-in stay."
+      "Payment can be collected only for a confirmed reservation, an active checked-in stay, or a finalized lifecycle settlement."
     );
   }
 
+  const paymentTarget =
+    await resolveLockedPaymentTarget(
+      connection,
+      {
+        hotelId,
+        booking,
+      }
+    );
 
   /* ==========================================================
      AMOUNT
@@ -578,6 +810,32 @@ async function collectBookingPayment(
       400,
       "PAYMENT_AMOUNT_TOO_LARGE",
       "The payment amount is too large."
+    );
+  }
+
+  const normalizedGroupPaymentId =
+    groupPaymentId === null ||
+    groupPaymentId === undefined ||
+    groupPaymentId === ""
+      ? null
+      : Number(
+          groupPaymentId
+        );
+
+
+  if (
+    normalizedGroupPaymentId !== null &&
+    (
+      !Number.isSafeInteger(
+        normalizedGroupPaymentId
+      ) ||
+      normalizedGroupPaymentId <= 0
+    )
+  ) {
+    throwHttp(
+      500,
+      "INVALID_GROUP_PAYMENT_REFERENCE",
+      "The group payment reference is invalid."
     );
   }
 
@@ -628,10 +886,17 @@ async function collectBookingPayment(
     booking.booking_status ===
       "checked_in"
       ? "during_stay"
-      : "advance";
+      : [
+          "no_show",
+          "cancelled",
+        ].includes(
+          booking.booking_status
+        )
+        ? "other"
+        : "advance";
 
 
-  const normalizedStage =
+  const requestedStage =
     String(
       stage ||
       defaultStage
@@ -642,6 +907,17 @@ async function collectBookingPayment(
         /[\s-]+/g,
         "_"
       );
+
+
+  const normalizedStage =
+    [
+      "no_show",
+      "cancelled",
+    ].includes(
+      booking.booking_status
+    )
+      ? "other"
+      : requestedStage;
 
 
   const paymentStages =
@@ -679,11 +955,20 @@ async function collectBookingPayment(
       transactionId || ""
     ).trim();
 
+  const ledgerTransactionId =
+    normalizedGroupPaymentId !== null
+      ? null
+      : normalizedMethod === "cash"
+        ? null
+        : normalizedTransactionId;
+
 
   if (
     normalizedMethod !==
       "cash" &&
-    !normalizedTransactionId
+    !normalizedTransactionId &&
+    normalizedGroupPaymentId ===
+      null
   ) {
     throwHttp(
       400,
@@ -721,6 +1006,7 @@ async function collectBookingPayment(
       "Payment notes cannot exceed 500 characters."
     );
   }
+  
 
 
   /* ==========================================================
@@ -728,23 +1014,44 @@ async function collectBookingPayment(
   ========================================================== */
 
   const totalAmount =
-    Number(
-      booking.total_amount
-    );
+    paymentTarget
+      .originalTotalAmount;
 
 
-  if (
-    !Number.isFinite(
-      totalAmount
-    ) ||
-    totalAmount < 0
-  ) {
-    throwHttp(
-      500,
-      "INVALID_BOOKING_TOTAL",
-      "The booking total is invalid."
-    );
-  }
+  const payableAmount =
+    paymentTarget
+      .payableAmount;
+
+  const settlementLabel =
+    booking.booking_status ===
+      "no_show"
+      ? "No Show"
+      : booking.booking_status ===
+          "cancelled"
+        ? "Cancellation"
+        : null;
+
+
+  const paymentAuditNote =
+    settlementLabel
+      ? [
+          `${settlementLabel} financial settlement payment.`,
+
+          `Final payable: ₹${payableAmount.toFixed(
+            2
+          )}.`,
+
+          normalizedNotes ||
+            null,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .slice(
+            0,
+            500
+          )
+      : normalizedNotes ||
+        null;
 
 
   const currentState =
@@ -752,7 +1059,7 @@ async function collectBookingPayment(
       connection,
       hotelId,
       bookingId,
-      totalAmount
+      payableAmount
     );
 
 
@@ -801,6 +1108,7 @@ async function collectBookingPayment(
         INSERT INTO payments (
           hotel_id,
           booking_id,
+          group_payment_id,
 
           transaction_type,
           payment_stage,
@@ -816,6 +1124,7 @@ async function collectBookingPayment(
         )
 
         VALUES (
+          ?,
           ?,
           ?,
 
@@ -835,21 +1144,18 @@ async function collectBookingPayment(
       [
         hotelId,
         bookingId,
+        normalizedGroupPaymentId,
 
         normalizedStage,
 
         paymentAmount,
         normalizedMethod,
 
-        normalizedMethod ===
-          "cash"
-          ? null
-          : normalizedTransactionId,
+        ledgerTransactionId,
 
         adminId,
 
-        normalizedNotes ||
-          null,
+        paymentAuditNote,
       ]
     );
 
@@ -863,7 +1169,7 @@ async function collectBookingPayment(
       connection,
       hotelId,
       bookingId,
-      totalAmount
+      payableAmount
     );
 
 
@@ -899,6 +1205,9 @@ async function collectBookingPayment(
         result.insertId
       ),
 
+    groupPaymentId:
+      normalizedGroupPaymentId,
+
     bookingId:
       booking.booking_id,
 
@@ -915,12 +1224,19 @@ async function collectBookingPayment(
       normalizedStage,
 
     transactionId:
-      normalizedMethod ===
-        "cash"
-        ? null
-        : normalizedTransactionId,
+      ledgerTransactionId,
 
     totalAmount,
+
+    payableAmount,
+
+    settlementType:
+      paymentTarget
+        .settlementType,
+
+    settlementId:
+      paymentTarget
+        .settlementId,
 
     amountPaid:
       Math.max(

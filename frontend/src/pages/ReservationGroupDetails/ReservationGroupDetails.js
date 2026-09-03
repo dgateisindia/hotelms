@@ -10,7 +10,17 @@ import {
 
 import apiClient from "../../services/apiClient";
 
+import ManageGuestsDialog from "../Bookings/components/ManageGuestsDialog";
+
+import GroupCheckInDialog from "./components/GroupCheckInDialog";
+import GroupPaymentDialog from "./components/GroupPaymentDialog";
+import GroupCheckoutDialog from "./components/GroupCheckoutDialog";
+
+import { IcoEye, IcoEdit, IcoCheck } from "../../utils/icons/BookingIcons";
+
+
 import "../../styles/Bookings.css";
+import "./components/GroupPaymentDialog.css";
 
 
 function formatCurrency(
@@ -106,6 +116,12 @@ function formatStatus(
 
     cancelled:
       "Cancelled",
+
+    no_show:
+      "No Show",
+
+    expired:
+      "Expired",
   };
 
 
@@ -187,6 +203,17 @@ function ReservationGroupDetails() {
     null
   );
 
+  const [
+    manageGuestsBooking,
+    setManageGuestsBooking,
+  ] = useState(
+    null
+  );
+
+  const [showGroupCheckIn, setShowGroupCheckIn] = useState(false);
+  const [showGroupPayment, setShowGroupPayment] = useState(false);
+  const [showGroupCheckout, setShowGroupCheckout] = useState(false);
+
 
   useEffect(
     () => {
@@ -256,6 +283,26 @@ function ReservationGroupDetails() {
       groupId,
     ]
   );
+
+  async function refreshGroup() {
+    try {
+      const response =
+        await apiClient.get(
+          `/bookings/groups/${groupId}`
+        );
+
+      setGroup(
+        response.data?.data ||
+        null
+      );
+    } catch {
+      /*
+      * ManageGuestsDialog already shows the operation result.
+      * Do not destroy the current group page only because
+      * this lightweight parent refresh failed.
+      */
+    }
+  }
 
 
   if (
@@ -341,6 +388,57 @@ function ReservationGroupDetails() {
         )
     );
 
+  const canGroupCheckIn =
+    bookings.some(
+      (booking) =>
+        [
+          "confirmed",
+          "checked_in",
+        ].includes(
+          String(
+            booking.booking_status ||
+            ""
+          )
+            .trim()
+            .toLowerCase()
+        )
+    );
+
+  const canGroupPayment =
+    bookings.some((booking) => {
+      const status =
+        String(
+          booking.booking_status || ""
+        )
+          .trim()
+          .toLowerCase();
+
+      return (
+        [
+          "confirmed",
+          "checked_in",
+          "no_show",
+        ].includes(status) &&
+        Number(
+          booking.outstanding_amount || 0
+        ) > 0.009 &&
+        Number(
+          booking.financial_review_required || 0
+        ) !== 1
+      );
+    });
+
+  const canGroupCheckout =
+    bookings.some(
+      (booking) =>
+        String(
+          booking.booking_status || ""
+        )
+          .trim()
+          .toLowerCase() ===
+        "checked_in"
+    );
+
   return (
     <div className="bookings-page">
 
@@ -378,19 +476,80 @@ function ReservationGroupDetails() {
 
         </div>
 
-        {canAddRoom && (
+        <div className="booking-actions">
+
+          <button
+            type="button"
+            className="booking-btn-secondary"
+            disabled={!canGroupCheckIn}
+            onClick={() =>
+              setShowGroupCheckIn(true)
+            }
+            title={
+              canGroupCheckIn
+                ? "Manage actual guest arrivals across this reservation group"
+                : "No room currently allows guest check-in"
+            }
+          >
+            Group Check-In
+          </button>
+
+
+          <button
+            type="button"
+            className="booking-btn-secondary"
+            disabled={!canGroupPayment}
+            onClick={() =>
+              setShowGroupPayment(true)
+            }
+            title={
+              canGroupPayment
+                ? "Collect payment across this reservation group"
+                : "No eligible outstanding payment is currently available"
+            }
+          >
+            Group Payment
+          </button>
+
+          <button
+            type="button"
+            className="booking-btn-secondary"
+            disabled={!canGroupCheckout}
+            onClick={() =>
+              setShowGroupCheckout(true)
+            }
+            title={
+              canGroupCheckout
+                ? "Check out all or selected checked-in rooms"
+                : "No checked-in room is currently available for checkout"
+            }
+          >
+            Group Check-Out
+          </button>
+
           <button
             type="button"
             className="booking-new-button"
-            onClick={() =>
+            disabled={!canAddRoom}
+            onClick={() => {
+              if (!canAddRoom) {
+                return;
+              }
+
               navigate(
                 `/booking-desk?group=${group.reservation_group_id}&mode=add-room`
-              )
+              );
+            }}
+            title={
+              canAddRoom
+                ? "Add another room to this reservation group"
+                : "Rooms cannot be added because this reservation group has no active booking."
             }
           >
             + Add Room
           </button>
-        )}
+
+        </div>
 
       </div>
 
@@ -592,9 +751,21 @@ function ReservationGroupDetails() {
 
             </div>
 
+            <div className="booking-detail-row">
+              <span>
+                Pending
+              </span>
+
+              <strong>
+                {Number(
+                  summary.pending_bookings ||
+                  0
+                )}
+              </strong>
+            </div>
+
 
             <div className="booking-detail-row">
-
               <span>
                 Confirmed
               </span>
@@ -605,12 +776,10 @@ function ReservationGroupDetails() {
                   0
                 )}
               </strong>
-
             </div>
 
 
             <div className="booking-detail-row">
-
               <span>
                 Checked In
               </span>
@@ -621,12 +790,24 @@ function ReservationGroupDetails() {
                   0
                 )}
               </strong>
-
             </div>
 
 
             <div className="booking-detail-row">
+              <span>
+                Checked Out
+              </span>
 
+              <strong>
+                {Number(
+                  summary.checked_out_bookings ||
+                  0
+                )}
+              </strong>
+            </div>
+
+
+            <div className="booking-detail-row">
               <span>
                 Cancelled
               </span>
@@ -637,7 +818,34 @@ function ReservationGroupDetails() {
                   0
                 )}
               </strong>
+            </div>
 
+
+            <div className="booking-detail-row">
+              <span>
+                No Show
+              </span>
+
+              <strong>
+                {Number(
+                  summary.no_show_bookings ||
+                  0
+                )}
+              </strong>
+            </div>
+
+
+            <div className="booking-detail-row">
+              <span>
+                Expired
+              </span>
+
+              <strong>
+                {Number(
+                  summary.expired_bookings ||
+                  0
+                )}
+              </strong>
             </div>
 
           </section>
@@ -857,6 +1065,29 @@ function ReservationGroupDetails() {
                     0
                   );
 
+                const bookingStatus =
+                  String(
+                    booking.booking_status ||
+                    ""
+                  )
+                    .trim()
+                    .toLowerCase();
+
+
+                const canManageGuests =
+                  bookingStatus ===
+                    "confirmed" ||
+                  bookingStatus ===
+                    "checked_in";
+
+
+                const canEdit =
+                  bookingStatus ===
+                    "pending" ||
+                  bookingStatus ===
+                    "confirmed";
+
+
                 const expanded =
                   expandedBookingId ===
                   Number(
@@ -1007,32 +1238,10 @@ function ReservationGroupDetails() {
                       <td>
                         <div className="booking-actions">
 
+                          {/* VIEW GUESTS */}
                           <button
                             type="button"
-                            className="booking-btn-secondary"
-                            onClick={() =>
-                              navigate(
-                                `/booking-desk?edit=${booking.booking_id}`
-                              )
-                            }
-                            disabled={
-                              ![
-                                "pending",
-                                "confirmed",
-                              ].includes(
-                                String(
-                                  booking.booking_status ||
-                                  ""
-                                ).toLowerCase()
-                              )
-                            }
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            className="booking-btn-secondary"
+                            className="booking-action-button booking-action-button--view"
                             onClick={() =>
                               setExpandedBookingId(
                                 expanded
@@ -1042,11 +1251,55 @@ function ReservationGroupDetails() {
                                     )
                               )
                             }
+                            title={
+                              expanded
+                                ? "Hide staying guests"
+                                : `View staying guests (${roomGuests.length})`
+                            }
+                            aria-label={
+                              expanded
+                                ? `Hide guests for ${booking.booking_code}`
+                                : `View guests for ${booking.booking_code}`
+                            }
                           >
-                            {expanded
-                              ? "Hide Guests"
-                              : `Guests (${roomGuests.length})`}
+                            <IcoEye />
                           </button>
+
+
+                          {/* MANAGE GUESTS / CHECK-IN */}
+                          {canManageGuests && (
+                            <button
+                              type="button"
+                              className="booking-action-button booking-action-button--edit"
+                              onClick={() =>
+                                setManageGuestsBooking(
+                                  booking
+                                )
+                              }
+                              title="Manage guests / check-in"
+                              aria-label={`Manage guests for ${booking.booking_code}`}
+                            >
+                              <IcoCheck />
+                            </button>
+                          )}
+
+
+                          {/* NORMAL BOOKING EDIT */}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="booking-action-button booking-action-button--edit"
+                              onClick={() =>
+                                navigate(
+                                  `/booking-desk?edit=${booking.booking_id}`
+                                )
+                              }
+                              title="Edit booking"
+                              aria-label={`Edit ${booking.booking_code}`}
+                            >
+                              <IcoEdit />
+                            </button>
+                          )}
 
                         </div>
                       </td>
@@ -1272,6 +1525,72 @@ function ReservationGroupDetails() {
         </div>
 
       </div>
+
+      {showGroupPayment && (
+        <GroupPaymentDialog
+          group={group}
+          onClose={() =>
+            setShowGroupPayment(false)
+          }
+          onChanged={refreshGroup}
+        />
+      )}
+
+      {showGroupCheckout && (
+        <GroupCheckoutDialog
+          group={group}
+          onClose={() =>
+            setShowGroupCheckout(false)
+          }
+          onChanged={refreshGroup}
+        />
+      )}
+
+      {showGroupCheckIn && (
+        <GroupCheckInDialog
+          group={
+            group
+          }
+          onClose={() =>
+            setShowGroupCheckIn(
+              false
+            )
+          }
+          onChanged={() =>
+            void refreshGroup()
+          }
+          onManageRoom={(
+            booking
+          ) => {
+            /*
+            * Never stack two operational modals.
+            * Close Group Check-In first,
+            * then open the canonical room guest manager.
+            */
+            setShowGroupCheckIn(
+              false
+            );
+
+            setManageGuestsBooking(
+              booking
+            );
+          }}
+        />
+      )}
+
+      <ManageGuestsDialog
+        booking={
+          manageGuestsBooking
+        }
+        onClose={() =>
+          setManageGuestsBooking(
+            null
+          )
+        }
+        onChanged={() =>
+          void refreshGroup()
+        }
+      />
 
     </div>
   );

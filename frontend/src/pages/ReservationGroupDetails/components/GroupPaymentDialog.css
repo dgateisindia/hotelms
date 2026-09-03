@@ -1,0 +1,362 @@
+/* ============================================================
+   GROUP PAYMENT DIALOG
+
+   Generic modal shell/buttons come from Bookings.css.
+   Only Group Payment-specific layout belongs here.
+============================================================ */
+
+.bookings-page .group-payment-dialog {
+  max-width: 720px;
+}
+
+
+/* ============================================================
+   PAYMENT SCOPE
+============================================================ */
+
+.bookings-page .group-payment-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+
+  padding:
+    var(--space-3)
+    var(--space-4);
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+
+  color:
+    var(--color-text-secondary);
+
+  font-size:
+    var(--font-size-sm);
+
+  cursor: pointer;
+}
+
+.bookings-page .group-payment-option:last-child {
+  border-bottom: none;
+}
+
+.bookings-page .group-payment-option input {
+  width: 16px;
+  height: 16px;
+
+  flex-shrink: 0;
+
+  margin: 0;
+
+  accent-color:
+    var(--color-primary);
+}
+
+.bookings-page .group-payment-option:has(input:disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
+/* ============================================================
+   ROOM OUTSTANDING
+============================================================ */
+
+.bookings-page .group-payment-room {
+  display: grid;
+
+  grid-template-columns:
+    auto
+    minmax(0, 1fr)
+    auto;
+
+  align-items: center;
+
+  gap:
+    var(--space-3);
+
+  padding:
+    var(--space-3)
+    var(--space-4);
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+
+  cursor: pointer;
+}
+
+.bookings-page .group-payment-room:last-of-type {
+  border-bottom: none;
+}
+
+.bookings-page .group-payment-room:hover {
+  background:
+    var(--color-surface-muted);
+}
+
+.bookings-page .group-payment-room input {
+  width: 16px;
+  height: 16px;
+
+  margin: 0;
+
+  accent-color:
+    var(--color-primary);
+}
+
+.bookings-page .group-payment-room > span {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  gap:
+    var(--space-1);
+}
+
+.bookings-page .group-payment-room > span strong {
+  overflow: hidden;
+
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-semibold);
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookings-page .group-payment-room > span small {
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-xs);
+
+  text-transform:
+    capitalize;
+}
+
+.bookings-page .group-payment-room > strong:last-child {
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-sm);
+
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   FINANCIAL REVIEW MESSAGE
+============================================================ */
+
+.bookings-page
+.group-payment-dialog
+.booking-view-body
+> .booking-special-request {
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    var(--color-surface-muted);
+}
+
+
+/* ============================================================
+   PAYMENT FORM
+============================================================ */
+
+.bookings-page .group-payment-field {
+  display: flex;
+  flex-direction: column;
+
+  gap:
+    var(--space-2);
+
+  padding:
+    var(--space-3)
+    var(--space-4);
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+}
+
+.bookings-page .group-payment-field:last-child {
+  border-bottom: none;
+}
+
+.bookings-page .group-payment-field > label {
+  color:
+    var(--color-text-secondary);
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-semibold);
+}
+
+.bookings-page .group-payment-field input,
+.bookings-page .group-payment-field select,
+.bookings-page .group-payment-field textarea {
+  width: 100%;
+
+  padding:
+    var(--space-2)
+    var(--space-3);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    var(--color-surface);
+
+  color:
+    var(--color-text);
+
+  font: inherit;
+  font-size:
+    var(--font-size-sm);
+}
+
+.bookings-page .group-payment-field input,
+.bookings-page .group-payment-field select {
+  min-height: 42px;
+}
+
+.bookings-page .group-payment-field textarea {
+  min-height: 82px;
+
+  resize: vertical;
+}
+
+.bookings-page .group-payment-field input:focus,
+.bookings-page .group-payment-field select:focus,
+.bookings-page .group-payment-field textarea:focus {
+  outline:
+    2px solid
+    var(--color-primary);
+
+  outline-offset: 1px;
+
+  border-color:
+    var(--color-primary);
+}
+
+.bookings-page .group-payment-field input:disabled,
+.bookings-page .group-payment-field select:disabled,
+.bookings-page .group-payment-field textarea:disabled {
+  opacity: 0.65;
+
+  cursor: not-allowed;
+}
+
+
+/* ============================================================
+   AMOUNT + FULL DUE
+============================================================ */
+
+.bookings-page .group-payment-amount-row {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+
+  gap:
+    var(--space-2);
+
+  align-items: stretch;
+}
+
+.bookings-page
+.group-payment-amount-row
+.booking-btn-secondary {
+  min-height: 42px;
+
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   FOOTER
+============================================================ */
+
+.bookings-page
+.group-payment-dialog
+> .booking-confirm-actions {
+  justify-content: flex-end;
+
+  margin-top: 0;
+
+  padding:
+    var(--space-4)
+    var(--space-5);
+
+  border-top:
+    1px solid
+    var(--color-divider);
+
+  background:
+    var(--color-surface);
+}
+
+
+/* ============================================================
+   MOBILE
+============================================================ */
+
+@media (max-width: 640px) {
+
+  .bookings-page .group-payment-room {
+    grid-template-columns:
+      auto
+      minmax(0, 1fr);
+
+    align-items: flex-start;
+  }
+
+  .bookings-page
+  .group-payment-room
+  > strong:last-child {
+    grid-column: 2;
+  }
+
+  .bookings-page .group-payment-amount-row {
+    grid-template-columns: 1fr;
+  }
+
+  .bookings-page
+  .group-payment-dialog
+  > .booking-confirm-actions {
+    padding:
+      var(--space-4);
+  }
+
+  .bookings-page
+  .group-payment-dialog
+  > .booking-confirm-actions
+  .booking-btn-primary,
+  .bookings-page
+  .group-payment-dialog
+  > .booking-confirm-actions
+  .booking-btn-secondary {
+    width: 100%;
+  }
+}

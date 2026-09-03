@@ -5,6 +5,7 @@ import {
   formatCurrency,
   formatDate,
   maskIdNumber,
+  calculateNights,
 } from "../bookingUtils";
 
 
@@ -136,6 +137,76 @@ function formatStayDuration(
   } ${mins} min`;
 }
 
+function getRoomCheckIn(
+  room,
+  booking
+) {
+  return (
+    room?.check_in ||
+    booking?.check_in ||
+    ""
+  );
+}
+
+
+function getRoomCheckOut(
+  room,
+  booking
+) {
+  return (
+    room?.check_out ||
+    booking?.check_out ||
+    ""
+  );
+}
+
+
+function getRoomStayDurationMinutes(
+  room,
+  booking
+) {
+  const quotedMinutes =
+    Number(
+      room?.duration_minutes
+    );
+
+  if (
+    Number.isFinite(
+      quotedMinutes
+    ) &&
+    quotedMinutes > 0
+  ) {
+    return quotedMinutes;
+  }
+
+  return calculateStayMinutes(
+    getRoomCheckIn(
+      room,
+      booking
+    ),
+    getRoomCheckOut(
+      room,
+      booking
+    )
+  );
+}
+
+
+function getRoomNights(
+  room,
+  booking
+) {
+  return calculateNights(
+    getRoomCheckIn(
+      room,
+      booking
+    ),
+    getRoomCheckOut(
+      room,
+      booking
+    )
+  );
+}
 
 /* ============================================================
    COMPONENT
@@ -689,75 +760,133 @@ function ReviewStep({
         {roomTotals.map(
           (
             room
-          ) => (
-            <div
-              className="booking-desk-review-room"
-              key={
-                room.room_id
-              }
-            >
+          ) => {
+            const roomCheckIn =
+              getRoomCheckIn(
+                room,
+                booking
+              );
 
-              <div>
+            const roomCheckOut =
+              getRoomCheckOut(
+                room,
+                booking
+              );
 
-                <strong>
-                  Room{" "}
-                  {
-                    room.room_number
-                  }
-                </strong>
+            const roomNights =
+              isDayUse
+                ? 0
+                : getRoomNights(
+                    room,
+                    booking
+                  );
 
-                <span>
-                  {
-                    room.room_type
-                  }
+            const roomDurationLabel =
+              isDayUse
+                ? formatStayDuration(
+                    getRoomStayDurationMinutes(
+                      room,
+                      booking
+                    )
+                  )
+                : "";
 
-                  {" · "}
+            return (
+              <div
+                className="booking-desk-review-room"
+                key={
+                  room.room_id
+                }
+              >
 
-                  {isDayUse
-                    ? `Standard rate ${formatCurrency(
-                        room.price_per_night
-                      )}/night`
-                    : `${formatCurrency(
-                        room.price_per_night
-                      )}/night`}
-                </span>
+                <div>
+
+                  <strong>
+                    Room{" "}
+                    {
+                      room.room_number
+                    }
+                  </strong>
+
+                  <span>
+                    {
+                      room.room_type
+                    }
+
+                    {" · "}
+
+                    {formatCurrency(
+                      room.rate_per_night ??
+                      room.price_per_night
+                    )}
+                    /night
+                  </span>
+
+
+                  <span>
+                    Check In:{" "}
+                    {isDayUse
+                      ? formatDateTime(
+                          roomCheckIn
+                        )
+                      : formatDate(
+                          roomCheckIn
+                        )}
+                  </span>
+
+
+                  <span>
+                    {isDayUse
+                      ? "Check Out"
+                      : "Expected Check Out"}
+                    :{" "}
+                    {isDayUse
+                      ? formatDateTime(
+                          roomCheckOut
+                        )
+                      : formatDate(
+                          roomCheckOut
+                        )}
+                  </span>
+
+                </div>
+
+
+                <div>
+
+                  <span>
+                    {
+                      room.total_guests
+                    }{" "}
+                    guest
+                    {
+                      Number(
+                        room.total_guests
+                      ) === 1
+                        ? ""
+                        : "s"
+                    }
+
+                    {isDayUse
+                      ? ` · ${roomDurationLabel}`
+                      : ` · ${roomNights} night${
+                          roomNights === 1
+                            ? ""
+                            : "s"
+                        }`}
+                  </span>
+
+                  <strong>
+                    {formatCurrency(
+                      room.total_amount
+                    )}
+                  </strong>
+
+                </div>
 
               </div>
-
-
-              <div>
-
-                <span>
-                  {
-                    room.total_guests
-                  }{" "}
-                  guest
-                  {
-                    room.total_guests ===
-                    1
-                      ? ""
-                      : "s"
-                  }
-
-                  {isDayUse
-                    ? ` · ${stayDurationLabel}`
-                    : ` · ${nights} night${
-                        nights === 1
-                          ? ""
-                          : "s"
-                      }`}
-                </span>
-
-                <strong>
-                  {formatCurrency(
-                    room.total_amount
-                  )}
-                </strong>
-
-              </div>
-
-            </div>
-          )
+            );
+          }
         )}
 
 

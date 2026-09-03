@@ -49,6 +49,34 @@ const {
 } = require("../services/bookingPaymentService");
 
 const {
+  refundNoShowOverpayment:
+    refundNoShowOverpaymentService,
+} = require(
+  "../services/bookingPayments/noShowRefundService"
+);
+
+const {
+  collectReservationGroupPayment:
+    collectReservationGroupPaymentService,
+} = require(
+  "../services/bookingPayments/groupPaymentService"
+);
+
+const {
+  checkoutReservationGroup:
+    checkoutReservationGroupService,
+} = require(
+  "../services/bookingCheckout/groupCheckoutService"
+);
+
+const {
+  cancelBooking:
+    cancelBookingService,
+} = require(
+  "../services/bookingCancellationService"
+);
+
+const {
   findOrCreateCustomer,
 } = require("../services/bookingCustomerService");
 
@@ -88,8 +116,20 @@ const {
 const {
   checkInBookingGuest:
     checkInBookingGuestLifecycle,
+
+  checkoutBookingGuest:
+    checkoutBookingGuestLifecycle,
 } = require(
   "../services/bookingGuestLifecycleService"
+);
+
+const {
+  reconcileOverdueBookingsWithConnection,
+  reconcileOverdueBookingsForHotel,
+  reconcileOverdueBookingForHotel,
+  reconcileOverdueReservationGroupForHotel,
+} = require(
+  "../services/bookingStatusService"
 );
 
 /* ============================================================
@@ -143,6 +183,67 @@ function throwHttp(
     code;
 
   throw error;
+}
+
+async function reconcileBookingBeforeAction(
+  connection,
+  {
+    hotelId,
+    bookingId,
+  }
+) {
+  const result =
+    await reconcileOverdueBookingsWithConnection(
+      connection,
+      {
+        hotelId,
+        bookingId,
+      }
+    );
+
+
+  if (!result?.changed) {
+    return null;
+  }
+
+
+  if (
+    Number(
+      result.noShowCount || 0
+    ) > 0
+  ) {
+    return {
+      code:
+        "BOOKING_BECAME_NO_SHOW",
+
+      message:
+        "This reservation is now marked No Show because its configured no-show time passed without any check-in.",
+    };
+  }
+
+
+  if (
+    Number(
+      result.expiredCount || 0
+    ) > 0
+  ) {
+    return {
+      code:
+        "BOOKING_EXPIRED",
+
+      message:
+        "This pending reservation has expired because its stay window passed without becoming an active stay.",
+    };
+  }
+
+
+  return {
+    code:
+      "BOOKING_LIFECYCLE_CLOSED",
+
+    message:
+      "This reservation is no longer open for this action.",
+  };
 }
 
 
@@ -262,6 +363,14 @@ function buildBookingOccupancy(
         )
       : [];
 
+  const rosterCaptured =
+    Number(
+      booking
+        ?.guest_roster_captured ||
+      0
+    ) === 1 ||
+    records.length > 0;
+
 
   const primaryGuest =
     records.find(
@@ -312,10 +421,10 @@ function buildBookingOccupancy(
 
   return {
     roster_captured:
-      records.length > 0,
+      rosterCaptured,
 
     roster_status:
-      records.length > 0
+      rosterCaptured
         ? "captured"
         : "legacy_not_captured",
 
@@ -767,6 +876,7 @@ async function insertBooking(
           actual_check_in,
           actual_check_out,
           total_guests,
+          guest_roster_captured,
           booking_status,
           payment_status,
           total_amount,
@@ -777,7 +887,7 @@ async function insertBooking(
           ?, ?, ?, ?, ?, ?, ?, ?,
           ?, NULL, ?, ?, ?,
           NULL, NULL,
-          ?, ?,
+          ?, ?, ?,
           'unpaid',
           ?,
           ?
@@ -797,6 +907,13 @@ async function insertBooking(
         item.checkIn,
         item.checkOut,
         authoritativeTotalGuests,
+
+        pricing
+          .guestRosterProvided ===
+        true
+          ? 1
+          : 0,
+
         item.bookingStatus,
         totalAmount,
         item.specialRequest,
@@ -1504,6 +1621,23 @@ async function createBookingsInExistingReservationGroup({
     );
   }
 
+  /*
+  * Reservation group row is already locked.
+  *
+  * Reconcile only this group's overdue child bookings before
+  * deciding whether the group is still operationally open.
+  *
+  * Lock order remains:
+  * reservation_group -> booking rows
+  */
+  await reconcileOverdueBookingsWithConnection(
+    connection,
+    {
+      hotelId,
+      reservationGroupId,
+    }
+  );
+
 
   /* ==========================================================
      LOCK EXISTING CHILD BOOKINGS
@@ -1573,7 +1707,7 @@ async function createBookingsInExistingReservationGroup({
     throwHttp(
       409,
       "RESERVATION_GROUP_CLOSED",
-      "New rooms cannot be added to a completed or fully cancelled reservation group."
+      "This reservation group is closed and no longer accepts new room bookings."
     );
   }
 
@@ -1988,6 +2122,9 @@ exports.getBookings = async (
 
 
   try {
+    await reconcileOverdueBookingsForHotel(
+      context.hotelId
+    );
     const [rows] =
       await db.query(
         `
@@ -2020,9 +2157,75 @@ exports.getBookings = async (
             b.actual_check_in,
             b.actual_check_out,
 
+            b.cancellation_source,
+            b.cancellation_reason,
+            b.cancelled_at,
+            b.cancelled_by_admin_id,
+
             b.total_guests,
             b.booking_status,
             b.total_amount,
+
+            bfs.settlement_id
+              AS financial_settlement_id,
+
+            bfs.settlement_type
+              AS financial_settlement_type,
+
+            bfs.settlement_status
+              AS financial_settlement_status,
+
+            bfs.calculation_mode
+              AS financial_calculation_mode,
+
+            bfs.charge_method
+              AS financial_charge_method,
+
+            bfs.charge_value
+              AS financial_charge_value,
+
+            bfs.final_payable_amount
+              AS final_payable_amount,
+
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.settlement_status =
+                'finalized'
+              AND bfs.final_payable_amount
+                IS NOT NULL
+                THEN bfs.final_payable_amount
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+                THEN NULL
+
+              ELSE b.total_amount
+            END AS effective_payable_amount,
+
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND (
+                COALESCE(
+                  bfs.settlement_status,
+                  'missing'
+                ) <> 'finalized'
+
+                OR bfs.final_payable_amount
+                  IS NULL
+              )
+                THEN 1
+
+              ELSE 0
+            END AS financial_review_required,
+
             b.special_request,
             b.created_at,
             b.updated_at,
@@ -2063,6 +2266,11 @@ exports.getBookings = async (
               0
             ) AS refunded_amount,
 
+            COALESCE(
+              pay.net_paid,
+              0
+            ) AS net_paid,
+
             GREATEST(
               COALESCE(
                 pay.net_paid,
@@ -2071,25 +2279,96 @@ exports.getBookings = async (
               0
             ) AS amount_paid,
 
-            GREATEST(
-              b.total_amount -
-              COALESCE(
-                pay.net_paid,
-                0
-              ),
-              0
-            ) AS outstanding_amount,
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.settlement_status =
+                'finalized'
+              AND bfs.final_payable_amount
+                IS NOT NULL
+                THEN GREATEST(
+                  bfs.final_payable_amount -
+                  COALESCE(
+                    pay.net_paid,
+                    0
+                  ),
+                  0
+                )
 
-            GREATEST(
-              COALESCE(
-                pay.net_paid,
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+                THEN NULL
+
+              ELSE GREATEST(
+                b.total_amount -
+                COALESCE(
+                  pay.net_paid,
+                  0
+                ),
                 0
-              ) -
-              b.total_amount,
-              0
-            ) AS overpaid_amount,
+              )
+            END AS outstanding_amount,
 
             CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.settlement_status =
+                'finalized'
+              AND bfs.final_payable_amount
+                IS NOT NULL
+                THEN GREATEST(
+                  COALESCE(
+                    pay.net_paid,
+                    0
+                  ) -
+                  bfs.final_payable_amount,
+                  0
+                )
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+                THEN NULL
+
+              ELSE GREATEST(
+                COALESCE(
+                  pay.net_paid,
+                  0
+                ) -
+                b.total_amount,
+                0
+              )
+            END AS overpaid_amount,
+
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND (
+                COALESCE(
+                  bfs.settlement_status,
+                  'missing'
+                ) <> 'finalized'
+
+                OR bfs.final_payable_amount
+                  IS NULL
+              )
+                THEN 'review_required'
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.final_payable_amount <= 0
+                THEN 'paid'
 
               WHEN COALESCE(
                 pay.net_paid,
@@ -2100,11 +2379,19 @@ exports.getBookings = async (
               WHEN COALESCE(
                 pay.net_paid,
                 0
-              ) < b.total_amount
+              ) <
+                CASE
+                  WHEN b.booking_status IN (
+                    'no_show',
+                    'cancelled'
+                  )
+                    THEN bfs.final_payable_amount
+
+                  ELSE b.total_amount
+                END
                 THEN 'partial'
 
               ELSE 'paid'
-
             END AS payment_status
 
           FROM bookings b
@@ -2241,6 +2528,33 @@ exports.getBookings = async (
            AND pay.booking_id =
               b.booking_id
 
+          LEFT JOIN booking_financial_settlements bfs
+            ON bfs.hotel_id =
+              b.hotel_id
+
+          AND bfs.booking_id =
+              b.booking_id
+
+          AND (
+                (
+                  b.booking_status =
+                    'no_show'
+
+                  AND bfs.settlement_type =
+                    'no_show'
+                )
+
+                OR
+
+                (
+                  b.booking_status =
+                    'cancelled'
+
+                  AND bfs.settlement_type =
+                    'cancellation'
+                )
+          )
+
           WHERE b.hotel_id = ?
 
           ORDER BY
@@ -2311,6 +2625,10 @@ exports.getBooking = async (
 
 
   try {
+    await reconcileOverdueBookingForHotel(
+      context.hotelId,
+      bookingId
+    );
     const [[booking]] =
       await db.query(
         `
@@ -2342,9 +2660,76 @@ exports.getBooking = async (
             b.actual_check_in,
             b.actual_check_out,
 
+            b.cancellation_source,
+            b.cancellation_reason,
+            b.cancelled_at,
+            b.cancelled_by_admin_id,
+
             b.total_guests,
+            b.guest_roster_captured,
             b.booking_status,
             b.total_amount,
+
+            bfs.settlement_id
+              AS financial_settlement_id,
+
+            bfs.settlement_type
+              AS financial_settlement_type,
+
+            bfs.settlement_status
+              AS financial_settlement_status,
+
+            bfs.calculation_mode
+              AS financial_calculation_mode,
+
+            bfs.charge_method
+              AS financial_charge_method,
+
+            bfs.charge_value
+              AS financial_charge_value,
+
+            bfs.final_payable_amount
+              AS final_payable_amount,
+
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.settlement_status =
+                'finalized'
+              AND bfs.final_payable_amount
+                IS NOT NULL
+                THEN bfs.final_payable_amount
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+                THEN NULL
+
+              ELSE b.total_amount
+            END AS effective_payable_amount, 
+
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND (
+                COALESCE(
+                  bfs.settlement_status,
+                  'missing'
+                ) <> 'finalized'
+
+                OR bfs.final_payable_amount
+                  IS NULL
+              )
+                THEN 1
+
+              ELSE 0
+            END AS financial_review_required,
+
             b.special_request,
             b.created_at,
             b.updated_at,
@@ -2375,6 +2760,11 @@ exports.getBooking = async (
               0
             ) AS refunded_amount,
 
+            COALESCE(
+              pay.net_paid,
+              0
+            ) AS net_paid,
+
             GREATEST(
               COALESCE(
                 pay.net_paid,
@@ -2383,16 +2773,96 @@ exports.getBooking = async (
               0
             ) AS amount_paid,
 
-            GREATEST(
-              b.total_amount -
-              COALESCE(
-                pay.net_paid,
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.settlement_status =
+                'finalized'
+              AND bfs.final_payable_amount
+                IS NOT NULL
+                THEN GREATEST(
+                  bfs.final_payable_amount -
+                  COALESCE(
+                    pay.net_paid,
+                    0
+                  ),
+                  0
+                )
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+                THEN NULL
+
+              ELSE GREATEST(
+                b.total_amount -
+                COALESCE(
+                  pay.net_paid,
+                  0
+                ),
                 0
-              ),
-              0
-            ) AS outstanding_amount,
+              )
+            END AS outstanding_amount,
 
             CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.settlement_status =
+                'finalized'
+              AND bfs.final_payable_amount
+                IS NOT NULL
+                THEN GREATEST(
+                  COALESCE(
+                    pay.net_paid,
+                    0
+                  ) -
+                  bfs.final_payable_amount,
+                  0
+                )
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+                THEN NULL
+
+              ELSE GREATEST(
+                COALESCE(
+                  pay.net_paid,
+                  0
+                ) -
+                b.total_amount,
+                0
+              )
+            END AS overpaid_amount,
+
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND (
+                COALESCE(
+                  bfs.settlement_status,
+                  'missing'
+                ) <> 'finalized'
+
+                OR bfs.final_payable_amount
+                  IS NULL
+              )
+                THEN 'review_required'
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.final_payable_amount <= 0
+                THEN 'paid'
 
               WHEN COALESCE(
                 pay.net_paid,
@@ -2403,11 +2873,19 @@ exports.getBooking = async (
               WHEN COALESCE(
                 pay.net_paid,
                 0
-              ) < b.total_amount
+              ) <
+                CASE
+                  WHEN b.booking_status IN (
+                    'no_show',
+                    'cancelled'
+                  )
+                    THEN bfs.final_payable_amount
+
+                  ELSE b.total_amount
+                END
                 THEN 'partial'
 
               ELSE 'paid'
-
             END AS payment_status
 
           FROM bookings b
@@ -2498,8 +2976,35 @@ exports.getBooking = async (
           ) pay
             ON pay.hotel_id =
               b.hotel_id
-           AND pay.booking_id =
+          AND pay.booking_id =
               b.booking_id
+
+          LEFT JOIN booking_financial_settlements bfs
+            ON bfs.hotel_id =
+              b.hotel_id
+
+          AND bfs.booking_id =
+              b.booking_id
+
+          AND (
+                (
+                  b.booking_status =
+                    'no_show'
+
+                  AND bfs.settlement_type =
+                    'no_show'
+                )
+
+                OR
+
+                (
+                  b.booking_status =
+                    'cancelled'
+
+                  AND bfs.settlement_type =
+                    'cancellation'
+                )
+          )
 
           WHERE b.hotel_id = ?
             AND b.booking_id = ?
@@ -2798,6 +3303,10 @@ exports.getReservationGroupDetails = async (
 
 
   try {
+    await reconcileOverdueReservationGroupForHotel(
+      context.hotelId,
+      reservationGroupId
+    );
     /* ========================================================
        GROUP + CUSTOMER
     ======================================================== */
@@ -2884,9 +3393,73 @@ exports.getReservationGroupDetails = async (
             b.actual_check_in,
             b.actual_check_out,
 
+            b.cancellation_source,
+            b.cancellation_reason,
+            b.cancelled_at,
+            b.cancelled_by_admin_id,
+
             b.total_guests,
+            b.guest_roster_captured,
             b.booking_status,
             b.total_amount,
+
+            bfs.settlement_id
+              AS financial_settlement_id,
+
+            bfs.settlement_status
+              AS financial_settlement_status,
+
+            bfs.calculation_mode
+              AS financial_calculation_mode,
+
+            bfs.charge_method
+              AS financial_charge_method,
+
+            bfs.charge_value
+              AS financial_charge_value,
+
+            bfs.final_payable_amount
+              AS final_payable_amount,
+
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.settlement_status =
+                'finalized'
+              AND bfs.final_payable_amount
+                IS NOT NULL
+                THEN bfs.final_payable_amount
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+                THEN NULL
+
+              ELSE b.total_amount
+            END AS effective_payable_amount,
+
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND (
+                COALESCE(
+                  bfs.settlement_status,
+                  'missing'
+                ) <> 'finalized'
+
+                OR bfs.final_payable_amount
+                  IS NULL
+              )
+                THEN 1
+
+              ELSE 0
+            END AS financial_review_required,
+
             b.special_request,
 
             b.created_by_admin_id,
@@ -2904,6 +3477,11 @@ exports.getReservationGroupDetails = async (
               0
             ) AS refunded_amount,
 
+            COALESCE(
+              pay.net_paid,
+              0
+            ) AS net_paid,
+
             GREATEST(
               COALESCE(
                 pay.net_paid,
@@ -2913,10 +3491,28 @@ exports.getReservationGroupDetails = async (
             ) AS amount_paid,
 
             CASE
-
-              WHEN b.booking_status =
+              WHEN b.booking_status IN (
+                'no_show',
                 'cancelled'
-                THEN 0
+              )
+              AND bfs.settlement_status =
+                'finalized'
+              AND bfs.final_payable_amount
+                IS NOT NULL
+                THEN GREATEST(
+                  bfs.final_payable_amount -
+                  COALESCE(
+                    pay.net_paid,
+                    0
+                  ),
+                  0
+                )
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+                THEN NULL
 
               ELSE GREATEST(
                 b.total_amount -
@@ -2926,24 +3522,64 @@ exports.getReservationGroupDetails = async (
                 ),
                 0
               )
-
             END AS outstanding_amount,
 
-            GREATEST(
-              COALESCE(
-                pay.net_paid,
+            CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.settlement_status =
+                'finalized'
+              AND bfs.final_payable_amount
+                IS NOT NULL
+                THEN GREATEST(
+                  COALESCE(
+                    pay.net_paid,
+                    0
+                  ) -
+                  bfs.final_payable_amount,
+                  0
+                )
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+                THEN NULL
+
+              ELSE GREATEST(
+                COALESCE(
+                  pay.net_paid,
+                  0
+                ) -
+                b.total_amount,
                 0
-              ) -
-              CASE
-                WHEN b.booking_status =
-                  'cancelled'
-                  THEN 0
-                ELSE b.total_amount
-              END,
-              0
-            ) AS overpaid_amount,
+              )
+            END AS overpaid_amount,
 
             CASE
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND (
+                COALESCE(
+                  bfs.settlement_status,
+                  'missing'
+                ) <> 'finalized'
+
+                OR bfs.final_payable_amount
+                  IS NULL
+              )
+                THEN 'review_required'
+
+              WHEN b.booking_status IN (
+                'no_show',
+                'cancelled'
+              )
+              AND bfs.final_payable_amount <= 0
+                THEN 'paid'
 
               WHEN COALESCE(
                 pay.net_paid,
@@ -2951,18 +3587,22 @@ exports.getReservationGroupDetails = async (
               ) <= 0
                 THEN 'unpaid'
 
-              WHEN b.booking_status =
-                'cancelled'
-                THEN 'paid'
-
               WHEN COALESCE(
                 pay.net_paid,
                 0
-              ) < b.total_amount
+              ) <
+                CASE
+                  WHEN b.booking_status IN (
+                    'no_show',
+                    'cancelled'
+                  )
+                    THEN bfs.final_payable_amount
+
+                  ELSE b.total_amount
+                END
                 THEN 'partial'
 
               ELSE 'paid'
-
             END AS payment_status
 
           FROM bookings b
@@ -3026,6 +3666,33 @@ exports.getReservationGroupDetails = async (
               b.hotel_id
            AND pay.booking_id =
               b.booking_id
+          
+          LEFT JOIN booking_financial_settlements bfs
+            ON bfs.hotel_id =
+              b.hotel_id
+
+          AND bfs.booking_id =
+              b.booking_id
+
+          AND (
+                (
+                  b.booking_status =
+                    'no_show'
+
+                  AND bfs.settlement_type =
+                    'no_show'
+                )
+
+                OR
+
+                (
+                  b.booking_status =
+                    'cancelled'
+
+                  AND bfs.settlement_type =
+                    'cancellation'
+                )
+          )
 
           WHERE b.hotel_id = ?
             AND b.reservation_group_id = ?
@@ -3131,12 +3798,46 @@ exports.getReservationGroupDetails = async (
             status ===
             "cancelled";
 
+          const noShow =
+            status ===
+            "no_show";
+
+          const expired =
+            status ===
+            "expired";
+
+          const closedWithoutStay =
+            cancelled ||
+            noShow ||
+            expired;
+
 
           const bookingTotal =
             Number(
               booking.total_amount ||
               0
             );
+
+          const effectivePayable =
+            booking
+              .effective_payable_amount ===
+                null ||
+            booking
+              .effective_payable_amount ===
+                undefined
+              ? null
+              : Number(
+                  booking
+                    .effective_payable_amount
+                );
+
+
+          const financialReviewRequired =
+            Number(
+              booking
+                .financial_review_required ||
+              0
+            ) === 1;
 
 
           const grossPaid =
@@ -3164,7 +3865,7 @@ exports.getReservationGroupDetails = async (
             1;
 
 
-          if (!cancelled) {
+          if (!closedWithoutStay) {
             result.activeBookings +=
               1;
 
@@ -3176,11 +3877,22 @@ exports.getReservationGroupDetails = async (
 
             result.bookingTotal +=
               bookingTotal;
-          } else {
+          }
+
+          if (cancelled) {
             result.cancelledBookings +=
               1;
           }
 
+          if (noShow) {
+            result.noShowBookings +=
+              1;
+          }
+
+          if (expired) {
+            result.expiredBookings +=
+              1;
+          }
 
           if (
             status ===
@@ -3190,7 +3902,6 @@ exports.getReservationGroupDetails = async (
               1;
           }
 
-
           if (
             status ===
             "confirmed"
@@ -3199,7 +3910,6 @@ exports.getReservationGroupDetails = async (
               1;
           }
 
-
           if (
             status ===
             "checked_in"
@@ -3207,7 +3917,6 @@ exports.getReservationGroupDetails = async (
             result.checkedInBookings +=
               1;
           }
-
 
           if (
             status ===
@@ -3226,6 +3935,20 @@ exports.getReservationGroupDetails = async (
 
           result.netPaid +=
             netPaid;
+
+          if (
+            financialReviewRequired
+          ) {
+            result.financialReviewRequired =
+              true;
+          } else if (
+            Number.isFinite(
+              effectivePayable
+            )
+          ) {
+            result.financialPayableTotal +=
+              effectivePayable;
+          }
 
 
           result.outstandingAmount +=
@@ -3250,6 +3973,10 @@ exports.getReservationGroupDetails = async (
           totalBookings: 0,
           activeBookings: 0,
           cancelledBookings: 0,
+          noShowBookings: 0,
+          expiredBookings: 0,
+          financialPayableTotal: 0,
+          financialReviewRequired: false,
 
           pendingBookings: 0,
           confirmedBookings: 0,
@@ -3277,6 +4004,23 @@ exports.getReservationGroupDetails = async (
 
       cancelled_bookings:
         summary.cancelledBookings,
+
+      no_show_bookings:
+        summary.noShowBookings,
+
+      financial_payable_total:
+        Number(
+          summary
+            .financialPayableTotal
+            .toFixed(2)
+        ),
+
+      financial_review_required:
+        summary
+          .financialReviewRequired,
+
+      expired_bookings:
+        summary.expiredBookings,
 
       pending_bookings:
         summary.pendingBookings,
@@ -3439,6 +4183,9 @@ exports.getBookingStats = async (
 
 
   try {
+    await reconcileOverdueBookingsForHotel(
+      context.hotelId
+    );
     const [[bookingStats]] =
       await db.query(
         `
@@ -3487,6 +4234,66 @@ exports.getBookingStats = async (
 
             COALESCE(
               SUM(
+                booking_status =
+                  'no_show'
+              ),
+              0
+            ) AS noShowBookings,
+
+            COALESCE(
+              SUM(
+                booking_status =
+                  'expired'
+              ),
+              0
+            ) AS expiredBookings,
+
+            COALESCE(
+              SUM(
+                CASE
+                  WHEN b.booking_status =
+                    'no_show'
+
+                  AND bfs.settlement_status =
+                    'finalized'
+
+                  AND bfs.final_payable_amount
+                    IS NOT NULL
+
+                    THEN bfs.final_payable_amount
+
+                  ELSE 0
+                END
+              ),
+              0
+            ) AS noShowPayableValue,
+
+            COALESCE(
+              SUM(
+                CASE
+                  WHEN b.booking_status =
+                    'no_show'
+
+                  AND (
+                    COALESCE(
+                      bfs.settlement_status,
+                      'missing'
+                    ) <> 'finalized'
+
+                    OR bfs.final_payable_amount
+                        IS NULL
+                  )
+
+                    THEN 1
+
+                  ELSE 0
+                END
+              ),
+              0
+            ) AS noShowFinancialReviewBookings,
+
+            COALESCE(
+              SUM(
                 CASE
                   WHEN booking_status <>
                     'cancelled'
@@ -3497,9 +4304,19 @@ exports.getBookingStats = async (
               0
             ) AS totalBookedValue
 
-          FROM bookings
+          FROM bookings b
 
-          WHERE hotel_id = ?
+          LEFT JOIN booking_financial_settlements bfs
+            ON bfs.hotel_id =
+              b.hotel_id
+
+          AND bfs.booking_id =
+              b.booking_id
+
+          AND bfs.settlement_type =
+              'no_show'
+
+          WHERE b.hotel_id = ?
         `,
         [
           context.hotelId,
@@ -3585,6 +4402,34 @@ exports.getBookingStats = async (
             Number(
               bookingStats
                 .cancelledBookings ||
+              0
+            ),
+
+          noShowBookings:
+            Number(
+              bookingStats
+                .noShowBookings ||
+              0
+            ),
+
+          noShowPayableValue:
+            Number(
+              bookingStats
+                .noShowPayableValue ||
+              0
+            ),
+
+          noShowFinancialReviewBookings:
+            Number(
+              bookingStats
+                .noShowFinancialReviewBookings ||
+              0
+            ),
+
+          expiredBookings:
+            Number(
+              bookingStats
+                .expiredBookings ||
               0
             ),
 
@@ -4215,6 +5060,24 @@ exports.quoteReservationGroupRooms = async (
   const items =
     validation.value;
 
+  try {
+    await reconcileOverdueReservationGroupForHotel(
+      context.hotelId,
+      reservationGroupId
+    );
+  } catch (error) {
+    logBookingError(
+      "RECONCILE_RESERVATION_GROUP_QUOTE",
+      error
+    );
+
+    return sendError(
+      res,
+      500,
+      "RESERVATION_GROUP_RECONCILE_FAILED",
+      "The reservation lifecycle could not be refreshed before adding another room."
+    );
+  }
 
   const connection =
     await db.getConnection();
@@ -4315,7 +5178,7 @@ exports.quoteReservationGroupRooms = async (
       throwHttp(
         409,
         "RESERVATION_GROUP_CLOSED",
-        "New rooms cannot be added to a completed or fully cancelled reservation group."
+        "This reservation group is closed and no longer accepts new room bookings."
       );
     }
 
@@ -4755,6 +5618,29 @@ exports.quoteBookingEditPrice = async (
   try {
     await connection
       .beginTransaction();
+
+    const automaticClosure =
+      await reconcileBookingBeforeAction(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+        }
+      );
+
+
+    if (automaticClosure) {
+      await connection.commit();
+
+      return sendError(
+        res,
+        409,
+        automaticClosure.code,
+        automaticClosure.message
+      );
+    }
 
 
     const [[existing]] =
@@ -5662,6 +6548,29 @@ exports.updateBooking = async (
       }
     }
 
+    const automaticClosure =
+      await reconcileBookingBeforeAction(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+        }
+      );
+
+
+    if (automaticClosure) {
+      await connection.commit();
+
+      return sendError(
+        res,
+        409,
+        automaticClosure.code,
+        automaticClosure.message
+      );
+    }
+
     const [[existing]] =
       await connection.query(
         `
@@ -6019,6 +6928,14 @@ exports.updateBooking = async (
           check_in = ?,
           check_out = ?,
           total_guests = ?,
+
+          guest_roster_captured =
+            CASE
+              WHEN ? = 1
+                THEN 1
+              ELSE guest_roster_captured
+            END,
+
           booking_status = ?,
           payment_status = ?,
           total_amount = ?,
@@ -6034,6 +6951,13 @@ exports.updateBooking = async (
         item.checkIn,
         item.checkOut,
         authoritativeTotalGuests,
+
+        pricing
+          .guestRosterProvided ===
+        true
+          ? 1
+          : 0,
+
         item.bookingStatus,
         finalPaymentState.paymentStatus,
         newTotalAmount,
@@ -6220,6 +7144,12 @@ exports.updateBooking = async (
 
           stay_type:
             existing.stay_type,
+
+          check_in:
+            item.checkIn,
+
+          check_out:
+            item.checkOut,
 
           pricing_mode:
             pricingMode,
@@ -6433,6 +7363,29 @@ exports.checkInBooking = async (
     await connection
       .beginTransaction();
 
+    const automaticClosure =
+      await reconcileBookingBeforeAction(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+        }
+      );
+
+
+    if (automaticClosure) {
+      await connection.commit();
+
+      return sendError(
+        res,
+        409,
+        automaticClosure.code,
+        automaticClosure.message
+      );
+    }
+
 
     const result =
       await checkInBookingLifecycle(
@@ -6548,6 +7501,29 @@ exports.checkInBookingGuest = async (
   try {
     await connection
       .beginTransaction();
+
+    const automaticClosure =
+      await reconcileBookingBeforeAction(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+        }
+      );
+
+
+    if (automaticClosure) {
+      await connection.commit();
+
+      return sendError(
+        res,
+        409,
+        automaticClosure.code,
+        automaticClosure.message
+      );
+    }
 
 
     const result =
@@ -6729,6 +7705,197 @@ exports.checkInBookingGuest = async (
   }
 };
 
+/* ============================================================
+   CHECK OUT INDIVIDUAL GUEST
+
+   Guest lifecycle only:
+
+   checked_in
+      ↓
+   checked_out
+
+   Important:
+   - Booking remains checked_in.
+   - Room remains occupied.
+   - Financial settlement is NOT required for one guest leaving.
+   - Formal room checkout remains a separate action.
+============================================================ */
+
+exports.checkoutBookingGuest = async (
+  req,
+  res
+) => {
+  const context =
+    getAdminContext(req);
+
+
+  const bookingId =
+    parsePositiveInteger(
+      req.params.id
+    );
+
+
+  const bookingGuestId =
+    parsePositiveInteger(
+      req.params.guestId
+    );
+
+
+  if (!context) {
+    return sendError(
+      res,
+      403,
+      "HOTEL_CONTEXT_MISSING",
+      "Your Admin account is not linked to a valid hotel."
+    );
+  }
+
+
+  if (!bookingId) {
+    return sendError(
+      res,
+      400,
+      "INVALID_BOOKING_ID",
+      "The booking ID is invalid."
+    );
+  }
+
+
+  if (!bookingGuestId) {
+    return sendError(
+      res,
+      400,
+      "INVALID_BOOKING_GUEST_ID",
+      "The booking guest ID is invalid."
+    );
+  }
+
+
+  const connection =
+    await db.getConnection();
+
+
+  try {
+    await connection
+      .beginTransaction();
+
+
+    const result =
+      await checkoutBookingGuestLifecycle(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          adminId:
+            context.adminId,
+
+          bookingId,
+
+          bookingGuestId,
+        }
+      );
+
+
+    await connection
+      .commit();
+
+
+    return res
+      .status(200)
+      .json({
+        success: true,
+
+        message:
+          "Guest checked out successfully.",
+
+        data: {
+          booking_id:
+            result.bookingId,
+
+          booking_code:
+            result.bookingCode,
+
+          room_id:
+            result.roomId,
+
+          room_number:
+            result.roomNumber,
+
+          room_type:
+            result.roomType,
+
+          booking_guest_id:
+            result.bookingGuestId,
+
+          guest_role:
+            result.guestRole,
+
+          guest_type:
+            result.guestType,
+
+          full_name:
+            result.fullName,
+
+          guest_status:
+            result.guestStatus,
+
+          actual_guest_check_out:
+            result.actualGuestCheckOut,
+
+          checked_in_guests_remaining:
+            result.checkedInGuestsRemaining,
+
+          expected_guests_remaining:
+            result.expectedGuestsRemaining,
+
+          total_guests:
+            result.totalGuests,
+
+          booking_status:
+            result.bookingStatus,
+
+          room_status:
+            result.roomStatus,
+        },
+      });
+  } catch (error) {
+    await connection
+      .rollback()
+      .catch(
+        () => {}
+      );
+
+
+    logBookingError(
+      "CHECKOUT_BOOKING_GUEST",
+      error
+    );
+
+
+    if (
+      error?.status &&
+      error?.code
+    ) {
+      return sendError(
+        res,
+        error.status,
+        error.code,
+        error.message
+      );
+    }
+
+
+    return sendError(
+      res,
+      500,
+      "BOOKING_GUEST_CHECKOUT_FAILED",
+      "The guest could not be checked out. Please try again."
+    );
+  } finally {
+    connection.release();
+  }
+};
 
 /* ============================================================
    EXTEND STAY
@@ -6859,6 +8026,158 @@ exports.extendStayBooking = async (
 };
 
 /* ============================================================
+   COLLECT RESERVATION GROUP PAYMENT
+
+   One customer receipt may be allocated across one or more
+   child room bookings.
+
+   Financial source of truth remains:
+   reservation_group_payments -> receipt
+   payments                   -> booking ledger
+
+   All allocations run inside ONE transaction.
+============================================================ */
+
+exports.collectReservationGroupPayment = async (
+  req,
+  res
+) => {
+  const context =
+    getAdminContext(req);
+
+
+  const reservationGroupId =
+    parsePositiveInteger(
+      req.params.groupId
+    );
+
+
+  if (!context) {
+    return sendError(
+      res,
+      403,
+      "HOTEL_CONTEXT_MISSING",
+      "Your Admin account is not linked to a valid hotel."
+    );
+  }
+
+
+  if (!reservationGroupId) {
+    return sendError(
+      res,
+      400,
+      "INVALID_RESERVATION_GROUP_ID",
+      "The reservation group ID is invalid."
+    );
+  }
+
+
+  const connection =
+    await db.getConnection();
+
+
+  try {
+    await connection
+      .beginTransaction();
+
+
+    const result =
+      await collectReservationGroupPaymentService(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          adminId:
+            context.adminId,
+
+          reservationGroupId,
+
+          amount:
+            req.body?.amount,
+
+          method:
+            req.body?.payment_method,
+
+          transactionId:
+            req.body?.transaction_id,
+
+          notes:
+            req.body?.notes,
+
+          bookingIds:
+            req.body?.booking_ids,
+        }
+      );
+
+
+    await connection
+      .commit();
+
+
+    return res
+      .status(201)
+      .json({
+        success: true,
+
+        message:
+          "Reservation group payment collected successfully.",
+
+        data:
+          result,
+      });
+  } catch (error) {
+    await connection
+      .rollback()
+      .catch(
+        () => {}
+      );
+
+
+    logBookingError(
+      "COLLECT_GROUP_PAYMENT",
+      error
+    );
+
+
+    if (
+      error?.status &&
+      error?.code
+    ) {
+      return sendError(
+        res,
+        error.status,
+        error.code,
+        error.message
+      );
+    }
+
+
+    if (
+      error?.code ===
+      "ER_DUP_ENTRY"
+    ) {
+      return sendError(
+        res,
+        409,
+        "DUPLICATE_TRANSACTION_REFERENCE",
+        "This payment transaction reference has already been used."
+      );
+    }
+
+
+    return sendError(
+      res,
+      500,
+      "GROUP_PAYMENT_COLLECTION_FAILED",
+      "The reservation group payment could not be recorded. Please try again."
+    );
+  } finally {
+    connection.release();
+  }
+};
+
+/* ============================================================
    COLLECT BOOKING PAYMENT
 
    Financial source of truth:
@@ -6867,6 +8186,7 @@ exports.extendStayBooking = async (
    Allowed:
    confirmed
    checked_in
+   no_show — only against a finalized No Show settlement
 ============================================================ */
 
 exports.collectBookingPayment = async (
@@ -6910,6 +8230,29 @@ exports.collectBookingPayment = async (
   try {
     await connection
       .beginTransaction();
+
+    const automaticClosure =
+      await reconcileBookingBeforeAction(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+        }
+      );
+
+
+    if (automaticClosure) {
+      await connection.commit();
+
+      return sendError(
+        res,
+        409,
+        automaticClosure.code,
+        automaticClosure.message
+      );
+    }
 
 
     const result =
@@ -6998,6 +8341,260 @@ exports.collectBookingPayment = async (
       500,
       "PAYMENT_COLLECTION_FAILED",
       "The payment could not be recorded. Please try again."
+    );
+  } finally {
+    connection.release();
+  }
+};
+
+/* ============================================================
+   REFUND NO-SHOW OVERPAYMENT
+
+   Backend calculates the exact refundable amount.
+   Client only chooses refund method/reference/notes.
+============================================================ */
+
+exports.refundNoShowOverpayment = async (
+  req,
+  res
+) => {
+  const context =
+    getAdminContext(req);
+
+  const bookingId =
+    parsePositiveInteger(
+      req.params.id
+    );
+
+  if (!context) {
+    return sendError(
+      res,
+      403,
+      "HOTEL_CONTEXT_MISSING",
+      "Your Admin account is not linked to a valid hotel."
+    );
+  }
+
+  if (!bookingId) {
+    return sendError(
+      res,
+      400,
+      "INVALID_BOOKING_ID",
+      "The booking ID is invalid."
+    );
+  }
+
+  const connection =
+    await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const result =
+      await refundNoShowOverpaymentService(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          adminId:
+            context.adminId,
+
+          bookingId,
+
+          method:
+            req.body?.refund_method,
+
+          transactionId:
+            req.body?.transaction_id,
+
+          notes:
+            req.body?.notes,
+        }
+      );
+
+    await connection.commit();
+
+    return res
+      .status(201)
+      .json({
+        success: true,
+
+        message:
+          "No Show refund processed successfully.",
+
+        data:
+          result,
+      });
+  } catch (error) {
+    await connection.rollback();
+
+    logBookingError(
+      "REFUND_NO_SHOW_OVERPAYMENT",
+      error
+    );
+
+    if (
+      error?.status &&
+      error?.code
+    ) {
+      return sendError(
+        res,
+        error.status,
+        error.code,
+        error.message
+      );
+    }
+
+    if (
+      error?.code ===
+      "ER_DUP_ENTRY"
+    ) {
+      return sendError(
+        res,
+        409,
+        "DUPLICATE_TRANSACTION_REFERENCE",
+        "This refund transaction reference has already been used."
+      );
+    }
+
+    return sendError(
+      res,
+      500,
+      "NO_SHOW_REFUND_FAILED",
+      "The No Show refund could not be processed. Please try again."
+    );
+  } finally {
+    connection.release();
+  }
+};
+
+
+/* ============================================================
+   CHECKOUT RESERVATION GROUP
+
+   booking_ids omitted / empty:
+   → checkout every currently checked-in room in the group
+
+   booking_ids supplied:
+   → checkout exactly those selected checked-in rooms
+
+   One transaction:
+   any child checkout failure rolls back the complete operation.
+============================================================ */
+
+exports.checkoutReservationGroup = async (
+  req,
+  res
+) => {
+  const context =
+    getAdminContext(req);
+
+
+  const reservationGroupId =
+    parsePositiveInteger(
+      req.params.groupId
+    );
+
+
+  if (!context) {
+    return sendError(
+      res,
+      403,
+      "HOTEL_CONTEXT_MISSING",
+      "Your Admin account is not linked to a valid hotel."
+    );
+  }
+
+
+  if (!reservationGroupId) {
+    return sendError(
+      res,
+      400,
+      "INVALID_RESERVATION_GROUP_ID",
+      "The reservation group ID is invalid."
+    );
+  }
+
+
+  const connection =
+    await db.getConnection();
+
+
+  try {
+    await connection
+      .beginTransaction();
+
+
+    const result =
+      await checkoutReservationGroupService(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          adminId:
+            context.adminId,
+
+          groupId:
+            reservationGroupId,
+
+          bookingIds:
+            req.body?.booking_ids,
+        }
+      );
+
+
+    await connection
+      .commit();
+
+
+    return res
+      .status(200)
+      .json({
+        success: true,
+
+        message:
+          result.scope ===
+          "selected"
+            ? "Selected rooms checked out successfully."
+            : "Reservation group checked out successfully.",
+
+        data:
+          result,
+      });
+  } catch (error) {
+    await connection
+      .rollback()
+      .catch(
+        () => {}
+      );
+
+
+    logBookingError(
+      "CHECKOUT_RESERVATION_GROUP",
+      error
+    );
+
+
+    if (
+      error?.status &&
+      error?.code
+    ) {
+      return sendError(
+        res,
+        error.status,
+        error.code,
+        error.message
+      );
+    }
+
+
+    return sendError(
+      res,
+      500,
+      "GROUP_CHECKOUT_FAILED",
+      "The reservation group could not be checked out. Please try again."
     );
   } finally {
     connection.release();
@@ -7126,9 +8723,10 @@ exports.checkoutBooking = async (
 /* ============================================================
    CANCEL BOOKING
 
-   Only pending / confirmed reservations may be cancelled.
+   Pre-arrival only:
+   pending / confirmed → cancelled
 
-   Checked-in stay uses operational lifecycle instead.
+   Business logic lives in bookingCancellationService.
 ============================================================ */
 
 exports.cancelBooking = async (
@@ -7174,156 +8772,174 @@ exports.cancelBooking = async (
       .beginTransaction();
 
 
-    const [[booking]] =
-      await connection.query(
-        `
-          SELECT
-            booking_id,
-            booking_status,
-            total_amount
-
-          FROM bookings
-
-          WHERE hotel_id = ?
-            AND booking_id = ?
-
-          FOR UPDATE
-        `,
-        [
-          context.hotelId,
-          bookingId,
-        ]
-      );
-
-
-    if (!booking) {
-      throwHttp(
-        404,
-        "BOOKING_NOT_FOUND",
-        "The booking was not found in your hotel."
-      );
-    }
-
-
-    if (
-      booking.booking_status ===
-      "cancelled"
-    ) {
-      throwHttp(
-        409,
-        "BOOKING_ALREADY_CANCELLED",
-        "This booking is already cancelled."
-      );
-    }
-
-
-    if (
-      booking.booking_status ===
-      "checked_in"
-    ) {
-      throwHttp(
-        409,
-        "ACTIVE_STAY_CANNOT_CANCEL",
-        "A checked-in stay cannot be cancelled. Use the checkout or early-checkout workflow."
-      );
-    }
-
-
-    if (
-      booking.booking_status ===
-      "checked_out"
-    ) {
-      throwHttp(
-        409,
-        "COMPLETED_BOOKING_CANNOT_CANCEL",
-        "A checked-out booking cannot be cancelled."
-      );
-    }
-
-
-    const paymentState =
-      await getLockedPaymentState(
+    /*
+     * Prevent stale confirmed reservations from being
+     * cancelled after they have already crossed into
+     * No Show / Expired lifecycle.
+     */
+    const automaticClosure =
+      await reconcileBookingBeforeAction(
         connection,
-        context.hotelId,
-        bookingId,
-        Number(
-          booking.total_amount
-        )
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+        }
       );
 
 
-    await connection.query(
-      `
-        UPDATE bookings
-
-        SET
-          booking_status =
-            'cancelled',
-
-          updated_by_admin_id = ?
-
-        WHERE hotel_id = ?
-          AND booking_id = ?
-      `,
-      [
-        context.adminId,
-        context.hotelId,
-        bookingId,
-      ]
-    );
+    if (automaticClosure) {
+      await connection
+        .commit();
 
 
-    await connection.query(
-      `
-        UPDATE booking_room_history
-
-        SET
-          assignment_status =
-            'cancelled',
-
-          changed_by_admin_id = ?
-
-        WHERE hotel_id = ?
-          AND booking_id = ?
-          AND assignment_status IN (
-            'planned',
-            'active'
-          )
-      `,
-      [
-        context.adminId,
-        context.hotelId,
-        bookingId,
-      ]
-    );
+      return sendError(
+        res,
+        409,
+        automaticClosure.code,
+        automaticClosure.message
+      );
+    }
 
 
-    await connection.commit();
+    const result =
+      await cancelBookingService(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          adminId:
+            context.adminId,
+
+          bookingId,
+
+          cancellationSource:
+            req.body
+              ?.cancellation_source,
+
+          cancellationReason:
+            req.body
+              ?.cancellation_reason,
+        }
+      );
+
+
+    await connection
+      .commit();
+
+
+    let message =
+      "Booking cancelled successfully.";
+
+
+    if (
+      result
+        .financialReviewRequired
+    ) {
+      message =
+        "Booking cancelled. The cancellation financial settlement requires review.";
+    } else if (
+      result
+        .refundReviewRequired
+    ) {
+      message =
+        "Booking cancelled. A refund is due based on the cancellation settlement.";
+    } else if (
+      Number(
+        result
+          .outstandingAmount ||
+        0
+      ) > 0.009
+    ) {
+      message =
+        "Booking cancelled. A cancellation charge remains outstanding.";
+    }
 
 
     return res
       .status(200)
       .json({
         success: true,
+        message,
 
-        message:
-          paymentState.netPaid > 0
-            ? "Booking cancelled. A payment exists on this booking; review the refund according to hotel policy."
-            : "Booking cancelled successfully.",
+        data: {
+          booking_id:
+            result.bookingId,
 
-        refund_review_required:
-          paymentState.netPaid >
-          0,
+          booking_code:
+            result.bookingCode,
 
-        net_paid_amount:
-          Math.max(
-            0,
-            paymentState.netPaid
-          ),
+          booking_status:
+            result.bookingStatus,
+
+          cancellation_source:
+            result
+              .cancellationSource,
+
+          cancellation_reason:
+            result
+              .cancellationReason,
+
+          cancelled_at:
+            result.cancelledAt,
+
+          cancelled_by_admin_id:
+            result
+              .cancelledByAdminId,
+
+          original_total_amount:
+            result
+              .originalTotalAmount,
+
+          settlement_id:
+            result.settlementId,
+
+          settlement_status:
+            result
+              .settlementStatus,
+
+          final_payable_amount:
+            result
+              .finalPayableAmount,
+
+          financial_review_required:
+            result
+              .financialReviewRequired,
+
+          gross_paid:
+            result.grossPaid,
+
+          refunded_amount:
+            result
+              .refundedAmount,
+
+          net_paid:
+            result.netPaid,
+
+          outstanding_amount:
+            result
+              .outstandingAmount,
+
+          overpaid_amount:
+            result
+              .overpaidAmount,
+
+          refund_review_required:
+            result
+              .refundReviewRequired,
+
+          payment_status:
+            result.paymentStatus,
+        },
       });
   } catch (error) {
     await connection
-      .rollback();
+      .rollback()
+      .catch(
+        () => {}
+      );
 
 
     logBookingError(
@@ -7406,6 +9022,29 @@ exports.deleteBooking = async (
   try {
     await connection
       .beginTransaction();
+
+    const automaticClosure =
+      await reconcileBookingBeforeAction(
+        connection,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+        }
+      );
+
+
+    if (automaticClosure) {
+      await connection.commit();
+
+      return sendError(
+        res,
+        409,
+        automaticClosure.code,
+        automaticClosure.message
+      );
+    }
 
 
     const [[booking]] =

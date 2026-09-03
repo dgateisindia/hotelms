@@ -130,7 +130,13 @@ function ManageGuestsDialog({ booking, onClose, onChanged }) {
   const primaryAllocated = Boolean(primaryAllocation);
 
   const status = normalizeGuestValue(details?.booking_status);
-  const canManage = status === "confirmed" || status === "checked_in";
+
+  const canManage =
+    status === "confirmed" ||
+    status === "checked_in";
+
+  const canCheckOut =
+    status === "checked_in";
 
   const primaryStoredId = Boolean(
     String(details?.id_proof_type || "").trim() &&
@@ -238,6 +244,57 @@ function ManageGuestsDialog({ booking, onClose, onChanged }) {
       );
     } finally {
       setProcessingGuestId(null);
+    }
+  }
+
+  async function checkOutGuest(guest) {
+    const guestId =
+      Number(
+        guest?.booking_guest_id ||
+        0
+      );
+
+    if (
+      !guestId ||
+      !canCheckOut
+    ) {
+      return;
+    }
+
+    setProcessingGuestId(
+      guestId
+    );
+
+    setError("");
+    setSuccess("");
+
+    try {
+      const response =
+        await apiClient.post(
+          `/bookings/${bookingId}/guests/${guestId}/checkout`
+        );
+
+      setSuccess(
+        response.data?.message ||
+          "Guest checked out successfully."
+      );
+
+      await refresh();
+    } catch (
+      requestError
+    ) {
+      setError(
+        requestError
+          ?.response
+          ?.data
+          ?.message ||
+        requestError?.message ||
+        "Guest checkout could not be completed."
+      );
+    } finally {
+      setProcessingGuestId(
+        null
+      );
     }
   }
 
@@ -545,9 +602,19 @@ function ManageGuestsDialog({ booking, onClose, onChanged }) {
               <GuestRoster
                 guests={guests}
                 canManage={canManage}
+                canCheckOut={canCheckOut}
                 busy={busy}
                 processingGuestId={processingGuestId}
-                onCheckIn={(guest) => void checkInExpectedGuest(guest)}
+                onCheckIn={(guest) =>
+                  void checkInExpectedGuest(
+                    guest
+                  )
+                }
+                onCheckOut={(guest) =>
+                  void checkOutGuest(
+                    guest
+                  )
+                }
               />
             </section>
 

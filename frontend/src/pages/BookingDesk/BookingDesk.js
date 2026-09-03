@@ -491,6 +491,76 @@ function normalizeBookingDateTime(
       );
 }
 
+function normalizeBookingDate(
+  value
+) {
+  if (!value) {
+    return "";
+  }
+
+  const text =
+    String(
+      value
+    ).trim();
+
+  /*
+   * Plain/local database date or datetime:
+   * date portion already represents the intended hotel date,
+   * so do not apply timezone conversion.
+   */
+  if (
+    !/(?:Z|[+-]\d{2}:\d{2})$/i.test(
+      text
+    )
+  ) {
+    const match =
+      /^(\d{4})-(\d{2})-(\d{2})/
+        .exec(
+          text
+        );
+
+    return match
+      ? `${match[1]}-${match[2]}-${match[3]}`
+      : "";
+  }
+
+  /*
+   * Timezone-aware API value:
+   * convert to browser/hotel-local date before placing it
+   * inside <input type="date">.
+   */
+  const date =
+    new Date(
+      text
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
+
+  const pad =
+    (number) =>
+      String(
+        number
+      ).padStart(
+        2,
+        "0"
+      );
+
+  return (
+    `${date.getFullYear()}-` +
+    `${pad(
+      date.getMonth() + 1
+    )}-` +
+    `${pad(
+      date.getDate()
+    )}`
+  );
+}
 
 function formatStayDateTime(
   value
@@ -1671,11 +1741,8 @@ function BookingDesk() {
                 ? normalizeBookingDateTime(
                     data.check_in
                   )
-                : String(
+                : normalizeBookingDate(
                     data.check_in
-                  ).slice(
-                    0,
-                    10
                   )
               : "",
 
@@ -1686,11 +1753,8 @@ function BookingDesk() {
                 ? normalizeBookingDateTime(
                     data.check_out
                   )
-                : String(
+                : normalizeBookingDate(
                     data.check_out
-                  ).slice(
-                    0,
-                    10
                   )
               : "",
 
@@ -1731,6 +1795,28 @@ function BookingDesk() {
                 data.max_extra_beds ??
                 0
               ),
+
+            check_in:
+              data.check_in
+                ? existingStayType === "day_use"
+                  ? normalizeBookingDateTime(
+                      data.check_in
+                    )
+                  : normalizeBookingDate(
+                      data.check_in
+                    )
+                : "",
+
+            check_out:
+              data.check_out
+                ? existingStayType === "day_use"
+                  ? normalizeBookingDateTime(
+                      data.check_out
+                    )
+                  : normalizeBookingDate(
+                      data.check_out
+                    )
+                : "",
 
             /*
              * Important:
@@ -2158,33 +2244,6 @@ function BookingDesk() {
             rooms
           );
 
-
-          if (
-            !isEditMode
-          ) {
-            const allowedIds =
-              new Set(
-                rooms.map(
-                  (room) =>
-                    Number(
-                      room.room_id
-                    )
-                )
-              );
-
-
-            setSelectedRooms(
-              (current) =>
-                current.filter(
-                  (room) =>
-                    allowedIds.has(
-                      Number(
-                        room.room_id
-                      )
-                    )
-                )
-            );
-          }
         } catch (
           error
         ) {
@@ -2316,9 +2375,11 @@ function BookingDesk() {
                       ),
 
                     check_in:
+                      room.check_in ||
                       booking.check_in,
 
                     check_out:
+                      room.check_out ||
                       booking.check_out,
 
                     ...buildRoomOccupancyPayload(
@@ -2343,9 +2404,11 @@ function BookingDesk() {
                       ),
 
                     check_in:
+                      room.check_in ||
                       booking.check_in,
 
                     check_out:
+                      room.check_out ||
                       booking.check_out,
 
                     ...buildRoomOccupancyPayload(
@@ -3317,6 +3380,14 @@ function BookingDesk() {
               0
             ),
 
+          check_in:
+            currentRoom?.check_in ||
+            booking.check_in,
+
+          check_out:
+            currentRoom?.check_out ||
+            booking.check_out,
+
           roster_captured:
             currentRoom
               ?.roster_captured ===
@@ -3396,6 +3467,12 @@ function BookingDesk() {
                 0
               ),
 
+            check_in:
+              booking.check_in,
+
+            check_out:
+              booking.check_out,
+
             /*
               * Room-first reservation:
               * selecting a room does not automatically create
@@ -3444,6 +3521,35 @@ function BookingDesk() {
         )
     );
 
+
+    setFormError("");
+  }
+
+  function updateRoomTiming(
+    roomId,
+    field,
+    value
+  ) {
+    if (
+      field !== "check_in" &&
+      field !== "check_out"
+    ) {
+      return;
+    }
+
+    setSelectedRooms(
+      (current) =>
+        current.map(
+          (room) =>
+            Number(room.room_id) ===
+            Number(roomId)
+              ? {
+                  ...room,
+                  [field]: value,
+                }
+              : room
+        )
+    );
 
     setFormError("");
   }
@@ -4127,9 +4233,11 @@ function BookingDesk() {
             booking.stay_type,
 
           check_in:
+            room.check_in ||
             booking.check_in,
 
           check_out:
+            room.check_out ||
             booking.check_out,
 
           ...buildRoomOccupancyPayload(
@@ -4208,9 +4316,13 @@ function BookingDesk() {
             guest.guest_name,
 
           checkIn:
+            result.check_in ||
+            room.check_in ||
             booking.check_in,
 
           checkOut:
+            result.check_out ||
+            room.check_out ||
             booking.check_out,
 
           nights:
@@ -4261,6 +4373,38 @@ function BookingDesk() {
 
               roomType:
                 room.room_type,
+
+              stayType:
+                result.stay_type ||
+                booking.stay_type,
+
+              checkIn:
+                result.check_in ||
+                room.check_in ||
+                booking.check_in,
+
+              checkOut:
+                result.check_out ||
+                room.check_out ||
+                booking.check_out,
+
+              nights:
+                Number(
+                  result.nights ||
+                  0
+                ),
+
+              durationMinutes:
+                Number(
+                  result.duration_minutes ||
+                  0
+                ),
+
+              totalAmount:
+                Number(
+                  result.total_amount ??
+                  grandTotal
+                ),
             },
           ],
         });
@@ -4280,9 +4424,11 @@ function BookingDesk() {
               booking.stay_type,
 
             check_in:
+              room.check_in ||
               booking.check_in,
 
             check_out:
+              room.check_out ||
               booking.check_out,
 
             ...buildRoomOccupancyPayload(
@@ -4401,12 +4547,21 @@ function BookingDesk() {
             guest.guest_name,
 
           checkIn:
+            firstCreatedBooking
+              ?.checkIn ||
             booking.check_in,
 
           checkOut:
+            firstCreatedBooking
+              ?.checkOut ||
             booking.check_out,
 
-          nights,
+          nights:
+            Number(
+              firstCreatedBooking
+                ?.nights ??
+              nights
+            ),
 
           grandTotal:
             Number(
@@ -4565,12 +4720,21 @@ function BookingDesk() {
           guest.guest_name.trim(),
 
         checkIn:
+          firstCreatedBooking
+            ?.checkIn ||
           booking.check_in,
 
         checkOut:
+          firstCreatedBooking
+            ?.checkOut ||
           booking.check_out,
 
-        nights,
+        nights:
+          Number(
+            firstCreatedBooking
+              ?.nights ??
+            nights
+          ),
 
         grandTotal:
           Number(
@@ -4749,6 +4913,16 @@ function BookingDesk() {
             total
           );
 
+    const successBookings =
+      Array.isArray(
+        success.bookings
+      )
+        ? success.bookings
+        : [];
+
+
+    const hasMultipleSuccessRooms =
+      successBookings.length > 1;
 
     return (
       <div className="booking-desk-page">
@@ -4774,9 +4948,7 @@ function BookingDesk() {
 
             <section className="booking-desk-review-card">
 
-              <h3>
-                Stay Summary
-              </h3>
+              <h3>Stay Summary</h3>
 
               <div>
                 <span>
@@ -4816,63 +4988,89 @@ function BookingDesk() {
               </div>
 
 
-              <div>
-                <span>
-                  Check In
-                </span>
+              {hasMultipleSuccessRooms ? (
 
-                <strong>
-                  {success.stayType ===
-                    "day_use"
-                    ? formatStayDateTime(
-                        success.checkIn
-                      )
-                    : formatDate(
-                        success.checkIn
-                      )}
-                </strong>
-              </div>
+                <div>
 
+                  <span>
+                    Stay Timing
+                  </span>
 
-              <div>
-                <span>
-                  {success.stayType ===
-                    "day_use"
-                    ? "Check Out"
-                    : "Expected Check Out"}
-                </span>
+                  <strong>
+                    Room-specific timings shown below
+                  </strong>
 
-                <strong>
-                  {success.stayType ===
-                    "day_use"
-                    ? formatStayDateTime(
-                        success.checkOut
-                      )
-                    : formatDate(
-                        success.checkOut
-                      )}
-                </strong>
-              </div>
+                </div>
+
+              ) : (
+                <>
+
+                  <div>
+
+                    <span>
+                      Check In
+                    </span>
+
+                    <strong>
+                      {success.stayType ===
+                      "day_use"
+                        ? formatStayDateTime(
+                            success.checkIn
+                          )
+                        : formatDate(
+                            success.checkIn
+                          )}
+                    </strong>
+
+                  </div>
 
 
-              <div>
-                <span>
-                  {success.stayType ===
-                    "day_use"
-                    ? "Stay Duration"
-                    : "Nights"}
-                </span>
+                  <div>
 
-                <strong>
-                  {success.stayType ===
-                    "day_use"
-                    ? formatStayDuration(
-                        success.durationMinutes
-                      )
-                    : success.nights ||
-                      nights}
-                </strong>
-              </div>
+                    <span>
+                      {success.stayType ===
+                      "day_use"
+                        ? "Check Out"
+                        : "Expected Check Out"}
+                    </span>
+
+                    <strong>
+                      {success.stayType ===
+                      "day_use"
+                        ? formatStayDateTime(
+                            success.checkOut
+                          )
+                        : formatDate(
+                            success.checkOut
+                          )}
+                    </strong>
+
+                  </div>
+
+
+                  <div>
+
+                    <span>
+                      {success.stayType ===
+                      "day_use"
+                        ? "Stay Duration"
+                        : "Nights"}
+                    </span>
+
+                    <strong>
+                      {success.stayType ===
+                      "day_use"
+                        ? formatStayDuration(
+                            success.durationMinutes
+                          )
+                        : success.nights ||
+                          nights}
+                    </strong>
+
+                  </div>
+
+                </>
+              )}
 
             </section>
 
@@ -4984,36 +5182,108 @@ function BookingDesk() {
           </div>
 
 
-          {Array.isArray(
-            success.bookings
-          ) &&
-            success.bookings.length >
-              0 && (
+          {successBookings.length >
+            0 && (
               <div className="booking-desk-success__bookings">
 
-                {success.bookings.map(
+                {successBookings.map(
                   (
                     created
-                  ) => (
-                    <div
-                      key={
-                        created.bookingId
-                      }
-                    >
-                      <strong>
-                        {
-                          created.bookingCode
-                        }
-                      </strong>
+                  ) => {
+                    const roomStayType =
+                      created.stayType ||
+                      success.stayType;
 
-                      <span>
-                        Room{" "}
-                        {
-                          created.roomNumber
+                    const roomCheckIn =
+                      created.checkIn ||
+                      created.check_in ||
+                      success.checkIn ||
+                      "";
+
+                    const roomCheckOut =
+                      created.checkOut ||
+                      created.check_out ||
+                      success.checkOut ||
+                      "";
+
+                    const roomNights =
+                      Number(
+                        created.nights ??
+                        calculateNights(
+                          roomCheckIn,
+                          roomCheckOut
+                        )
+                      );
+
+                    const roomDurationMinutes =
+                      Number(
+                        created.durationMinutes ??
+                        created.duration_minutes ??
+                        0
+                      );
+
+                    const roomTotal =
+                      Number(
+                        created.totalAmount ??
+                        created.total_amount ??
+                        0
+                      );
+
+                    return (
+                      <div
+                        key={
+                          created.bookingId
                         }
-                      </span>
-                    </div>
-                  )
+                      >
+
+                        <strong>
+                          {created.bookingCode}
+                          {" · "}
+                          Room{" "}
+                          {created.roomNumber}
+                        </strong>
+
+
+                        <span>
+
+                          {created.roomType
+                            ? `${created.roomType} · `
+                            : ""}
+
+                          {roomStayType ===
+                          "day_use"
+                            ? (
+                                `${formatStayDateTime(
+                                  roomCheckIn
+                                )} → ${formatStayDateTime(
+                                  roomCheckOut
+                                )} · ${formatStayDuration(
+                                  roomDurationMinutes
+                                )}`
+                              )
+                            : (
+                                `${formatDate(
+                                  roomCheckIn
+                                )} → ${formatDate(
+                                  roomCheckOut
+                                )} · ${roomNights} night${
+                                  roomNights === 1
+                                    ? ""
+                                    : "s"
+                                }`
+                              )}
+
+                          {" · "}
+
+                          {formatCurrency(
+                            roomTotal
+                          )}
+
+                        </span>
+
+                      </div>
+                    );
+                  }
                 )}
 
               </div>
@@ -5275,6 +5545,9 @@ function BookingDesk() {
             }
             removeRoom={
               removeRoom
+            }
+            updateRoomTiming={
+              updateRoomTiming
             }
             updateRoomGuests={
               updateRoomGuests

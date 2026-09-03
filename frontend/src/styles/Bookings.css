@@ -165,6 +165,26 @@
     translateY(0);
 }
 
+.bookings-page .booking-new-button:disabled {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+
+  box-shadow: none;
+  transform: none;
+
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.bookings-page .booking-new-button:disabled:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+
+  box-shadow: none;
+  transform: none;
+}
+
 
 /* ============================================================
    ERROR BANNER
@@ -1029,6 +1049,29 @@
 
   color:
     var(--color-danger);
+}
+
+.bookings-page .booking-status--no_show {
+  border-color:
+    var(--color-danger-border);
+
+  background:
+    var(--color-danger-bg);
+
+  color:
+    var(--color-danger);
+}
+
+
+.bookings-page .booking-status--expired {
+  border-color:
+    var(--color-border);
+
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text-secondary);
 }
 
 

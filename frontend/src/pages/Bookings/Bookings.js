@@ -4,7 +4,9 @@ import { useNavigate } from "react-router-dom";
 import apiClient from "../../services/apiClient";
 import ExtendStayDialog from "./components/ExtendStayDialog";
 import CollectPaymentDialog from "./components/CollectPaymentDialog";
+import NoShowRefundDialog from "./components/NoShowRefundDialog";
 import ManageGuestsDialog from "./components/ManageGuestsDialog";
+import AppAlert from "../../components/common/AppAlert";
 
 import "../../styles/Bookings.css";
 
@@ -57,6 +59,14 @@ const STATUS_OPTIONS = [
     value: "cancelled",
     label: "Cancelled",
   },
+  {
+    value: "no_show",
+    label: "No Show",
+  },
+  {
+    value: "expired",
+    label: "Expired",
+  },
 ];
 
 const DATE_FILTER_OPTIONS = [
@@ -102,6 +112,8 @@ function formatStatus(value) {
     checked_in: "Checked In",
     checked_out: "Checked Out",
     cancelled: "Cancelled",
+    no_show: "No Show",
+    expired: "Expired",
   };
 
   return (
@@ -121,6 +133,7 @@ function formatPaymentStatus(
     paid: "Paid",
     partial: "Partial",
     unpaid: "Unpaid",
+    review_required: "Review Required",
   };
 
   return (
@@ -175,6 +188,59 @@ function formatCurrency(value) {
   ).format(amount);
 }
 
+function formatFinancialChargeRule(
+  booking
+) {
+  const method =
+    normalizeText(
+      booking
+        ?.financial_charge_method
+    );
+
+
+  const value =
+    Number(
+      booking
+        ?.financial_charge_value ||
+      0
+    );
+
+
+  switch (method) {
+    case "percentage":
+      return `${value}%`;
+
+    case "fixed_amount":
+      return formatCurrency(
+        value
+      );
+
+    case "night_count":
+      return `${value} ${
+        value === 1
+          ? "night"
+          : "nights"
+      }`;
+
+    case "actual_nights":
+      return "Actual nights";
+
+    case "full_booking":
+      return "Full booking amount";
+
+    case "percentage_of_remaining":
+      return `${value}% of remaining amount`;
+
+    case "none":
+      return "No charge";
+
+    case "manual":
+      return "Manual review";
+
+    default:
+      return "Pending review";
+  }
+}
 
 function formatDate(value) {
   if (!value) {
@@ -824,6 +890,34 @@ function BookingViewDialog({
     return null;
   }
 
+  const isNoShow =
+    booking
+      ?.booking_status ===
+    "no_show";
+
+
+  const financialReviewRequired =
+    Number(
+      booking
+        ?.financial_review_required ||
+      0
+    ) === 1;
+
+  const grossPaidAmount = Number(
+    booking?.gross_paid || 0
+  );
+
+  const refundedAmount = Number(
+    booking?.refunded_amount || 0
+  );
+
+  const netPaidAmount = Number(
+    booking?.amount_paid || 0
+  );
+
+  const hasRefund =
+    refundedAmount > 0.009;
+
   return (
     <div
       className="booking-modal-overlay"
@@ -1058,7 +1152,12 @@ function BookingViewDialog({
               </div>
 
               <div className="booking-detail-row">
-                <span>Booking Amount</span>
+                <span>
+                  {isNoShow
+                    ? "Original Booking Amount"
+                    : "Booking Amount"}
+                </span>
+
                 <strong>
                   {formatCurrency(
                     booking.total_amount
@@ -1066,23 +1165,124 @@ function BookingViewDialog({
                 </strong>
               </div>
 
-              <div className="booking-detail-row">
-                <span>Amount Paid</span>
-                <strong>
-                  {formatCurrency(
-                    booking.amount_paid
+
+              {isNoShow && (
+                <>
+                  <div className="booking-detail-row">
+                    <span>
+                      No Show Charge
+                    </span>
+
+                    <strong>
+                      {formatFinancialChargeRule(
+                        booking
+                      )}
+                    </strong>
+                  </div>
+
+
+                  <div className="booking-detail-row">
+                    <span>
+                      Final Payable
+                    </span>
+
+                    <strong>
+                      {financialReviewRequired
+                        ? "Pending Review"
+                        : formatCurrency(
+                            booking
+                              .final_payable_amount
+                          )}
+                    </strong>
+                  </div>
+
+
+                  {financialReviewRequired && (
+                    <div className="booking-detail-row">
+                      <span>
+                        Financial Review
+                      </span>
+
+                      <strong>
+                        Required
+                      </strong>
+                    </div>
                   )}
-                </strong>
-              </div>
+                </>
+              )}
+
+              {hasRefund ? (
+                <>
+                  <div className="booking-detail-row">
+                    <span>Gross Paid</span>
+
+                    <strong>
+                      {formatCurrency(
+                        grossPaidAmount
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="booking-detail-row">
+                    <span>Refunded</span>
+
+                    <strong>
+                      -{formatCurrency(
+                        refundedAmount
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="booking-detail-row">
+                    <span>Net Paid</span>
+
+                    <strong>
+                      {formatCurrency(
+                        netPaidAmount
+                      )}
+                    </strong>
+                  </div>
+                </>
+              ) : (
+                <div className="booking-detail-row">
+                  <span>Amount Paid</span>
+
+                  <strong>
+                    {formatCurrency(
+                      netPaidAmount
+                    )}
+                  </strong>
+                </div>
+              )}
 
               <div className="booking-detail-row">
                 <span>Outstanding</span>
+
                 <strong>
-                  {formatCurrency(
-                    booking.outstanding_amount
-                  )}
+                  {financialReviewRequired
+                    ? "Pending Review"
+                    : formatCurrency(
+                        booking
+                          .outstanding_amount
+                      )}
                 </strong>
               </div>
+
+              {isNoShow &&
+                !financialReviewRequired &&
+                Number(
+                  booking.overpaid_amount || 0
+                ) > 0.009 && (
+                  <div className="booking-detail-row">
+                    <span>Refund Due</span>
+
+                    <strong>
+                      {formatCurrency(
+                        booking.overpaid_amount
+                      )}
+                    </strong>
+                  </div>
+                )}
 
               <div className="booking-detail-row">
                 <span>Created On</span>
@@ -1113,9 +1313,7 @@ function BookingViewDialog({
 
             <section className="booking-detail-section">
 
-              <h4>
-                Payment History
-              </h4>
+              <h4>Payment & Refund History</h4>
 
               {!Array.isArray(
                 booking.payments
@@ -1129,46 +1327,69 @@ function BookingViewDialog({
                 <div className="booking-payment-history">
 
                   {booking.payments.map(
-                    (payment) => (
-                      <div
-                        className="booking-payment-history-row"
-                        key={payment.payment_id}
-                      >
-                        <div>
-                          <strong>
-                            {formatCurrency(
-                              payment.amount
-                            )}
-                          </strong>
+                    (payment) => {
+                      const isRefund =
+                        normalizeText(
+                          payment.transaction_type
+                        ) === "refund";
 
-                          <span>
-                            {String(
-                              payment.payment_method ||
-                                "—"
-                            )
-                              .replaceAll(
-                                "_",
-                                " "
+                      const transactionLabel =
+                        isRefund
+                          ? "Refund"
+                          : "Payment";
+
+                      return (
+                        <div
+                          className="booking-payment-history-row"
+                          key={payment.payment_id}
+                        >
+                          <div>
+                            <span
+                              className={
+                                isRefund
+                                  ? "booking-payment booking-payment--partial"
+                                  : "booking-payment booking-payment--paid"
+                              }
+                            >
+                              {transactionLabel}
+                            </span>
+
+                            <strong>
+                              {isRefund ? "-" : "+"}
+                              {formatCurrency(
+                                payment.amount
                               )}
-                          </span>
-                        </div>
+                            </strong>
 
-                        <div>
-                          <strong>
-                            {String(
-                              payment.payment_status ||
-                                "—"
-                            )}
-                          </strong>
+                            <span>
+                              {String(
+                                payment.payment_method ||
+                                  "—"
+                              )
+                                .replaceAll("_", " ")}
+                            </span>
+                          </div>
 
-                          <span>
-                            {formatDateTime(
-                              payment.payment_date
-                            )}
-                          </span>
+                          <div>
+                            <strong>
+                              {normalizeText(
+                                payment.payment_status
+                              ) === "success"
+                                ? "Success"
+                                : formatPaymentStatus(
+                                    payment.payment_status
+                                  )}
+                            </strong>
+
+                            <span>
+                              {formatDateTime(
+                                payment.payment_date
+                              )}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    )
+                      );
+                    }
                   )}
 
                 </div>
@@ -1347,6 +1568,17 @@ function Bookings() {
     paymentError,
     setPaymentError,
   ] = useState("");
+
+  const [refundBooking, setRefundBooking] = useState(null);
+  const [refundMethod, setRefundMethod] = useState("cash");
+  const [refundTransactionId, setRefundTransactionId] = useState("");
+  const [refundNotes, setRefundNotes] = useState("");
+  const [refundProcessing, setRefundProcessing] = useState(false);
+  const [refundError, setRefundError] = useState("");
+  const [refundSuccess, setRefundSuccess] = useState("");
+
+  const [editOpeningId, setEditOpeningId] = useState(null);
+  const [editGuardMessage, setEditGuardMessage] = useState("");
 
   /* ==========================================================
      LOAD BOOKINGS
@@ -1615,14 +1847,101 @@ function Bookings() {
   }
 
 
-  function openEditBooking(
+  async function openEditBooking(
     booking
   ) {
-    navigate(
-      `/booking-desk?edit=${booking.booking_id}`
+    const bookingId =
+      Number(
+        booking?.booking_id
+      );
+
+    if (
+      !Number.isSafeInteger(
+        bookingId
+      ) ||
+      bookingId <= 0
+    ) {
+      setEditGuardMessage(
+        "This booking could not be opened for editing."
+      );
+
+      return;
+    }
+
+    if (editOpeningId) {
+      return;
+    }
+
+    setEditOpeningId(
+      bookingId
     );
+
+    setEditGuardMessage("");
+
+    try {
+      /*
+      * GET /bookings/:id also performs the authoritative
+      * lifecycle reconciliation on the backend.
+      *
+      * Therefore we must verify the latest booking status
+      * before opening Booking Desk.
+      */
+      const response =
+        await apiClient.get(
+          `/bookings/${bookingId}`
+        );
+
+      const latestBooking =
+        response.data || {};
+
+      const latestStatus =
+        normalizeText(
+          latestBooking.booking_status
+        );
+
+      if (
+        latestStatus !== "pending" &&
+        latestStatus !== "confirmed"
+      ) {
+        await loadBookings();
+
+        setEditGuardMessage(
+          latestStatus === "no_show"
+            ? `${booking.booking_code} is now No Show and can no longer be edited as an active reservation. The booking list has been refreshed.`
+            : latestStatus === "expired"
+              ? `${booking.booking_code} has expired and can no longer be edited. The booking list has been refreshed.`
+              : `${booking.booking_code} is now ${formatStatus(
+                  latestStatus
+                )} and can no longer be edited through normal Edit.`
+        );
+
+        return;
+      }
+
+      navigate(
+        `/booking-desk?edit=${bookingId}`
+      );
+    } catch (requestError) {
+      /*
+      * Never open Edit when the latest booking state
+      * could not be verified.
+      */
+      setEditGuardMessage(
+        getApiMessage(
+          requestError,
+          "The latest booking status could not be verified. Please try again."
+        )
+      );
+
+      await loadBookings();
+    } finally {
+      setEditOpeningId(
+        null
+      );
+    }
   }
 
+  
 
   /* ==========================================================
      VIEW BOOKING
@@ -1958,10 +2277,14 @@ function Bookings() {
             paymentMethod,
 
           payment_stage:
-            amount + 0.009 >=
-            outstanding
-              ? "checkout"
-              : "during_stay",
+            paymentBooking
+              .booking_status ===
+              "no_show"
+              ? "other"
+              : amount + 0.009 >=
+                  outstanding
+                ? "checkout"
+                : "during_stay",
 
           transaction_id:
             paymentMethod ===
@@ -2017,11 +2340,113 @@ function Bookings() {
   }
 
   /* ==========================================================
+    NO-SHOW REFUND
+  ========================================================== */
+
+  function openNoShowRefund(booking) {
+    setRefundBooking(booking);
+    setRefundMethod("cash");
+    setRefundTransactionId("");
+    setRefundNotes("");
+    setRefundError("");
+  }
+
+
+  function closeNoShowRefund() {
+    if (refundProcessing) return;
+
+    setRefundBooking(null);
+    setRefundMethod("cash");
+    setRefundTransactionId("");
+    setRefundNotes("");
+    setRefundError("");
+  }
+
+
+  async function confirmNoShowRefund() {
+    if (!refundBooking) return;
+
+    const transactionId =
+      refundTransactionId.trim();
+
+    if (
+      refundMethod !== "cash" &&
+      !transactionId
+    ) {
+      setRefundError(
+        "Transaction ID is required for non-cash refunds."
+      );
+      return;
+    }
+
+    setRefundProcessing(true);
+    setRefundError("");
+    setRefundSuccess("");
+
+    try {
+      const response = await apiClient.post(
+        `/bookings/${refundBooking.booking_id}/no-show-refund`,
+        {
+          refund_method: refundMethod,
+
+          transaction_id:
+            refundMethod === "cash"
+              ? null
+              : transactionId,
+
+          notes:
+            refundNotes.trim() || null,
+        }
+      );
+
+      setRefundBooking(null);
+      setRefundMethod("cash");
+      setRefundTransactionId("");
+      setRefundNotes("");
+      setRefundError("");
+
+      setRefundSuccess(
+        response.data?.message ||
+          "No Show refund processed successfully."
+      );
+
+      await loadBookings();
+    } catch (requestError) {
+      setRefundError(
+        getApiMessage(
+          requestError,
+          "The No Show refund could not be processed."
+        )
+      );
+    } finally {
+      setRefundProcessing(false);
+    }
+  }
+
+  /* ==========================================================
      RENDER
   ========================================================== */
 
   return (
     <div className="bookings-page">
+
+      <AppAlert
+        type="success"
+        message={refundSuccess}
+        onClose={() =>
+          setRefundSuccess("")
+        }
+      />
+
+      <AppAlert
+        type="error"
+        message={editGuardMessage}
+        autoClose
+        duration={6000}
+        onClose={() =>
+          setEditGuardMessage("")
+        }
+      />
 
       {/* ======================================================
           PAGE HEADER
@@ -2382,9 +2807,35 @@ function Bookings() {
                           0
                         );
 
+                      const financialReviewRequired =
+                        Number(
+                          booking
+                            .financial_review_required ||
+                          0
+                        ) === 1;
+
+                      const overpaidAmount =
+                        Number(
+                          booking.overpaid_amount || 0
+                        );
+
+                      const canRefundNoShow =
+                        status === "no_show" &&
+                        !financialReviewRequired &&
+                        overpaidAmount > 0.009;
+
+
                       const canCollectPayment =
-                        status ===
-                          "checked_in" &&
+                        (
+                          status ===
+                            "checked_in" ||
+
+                          (
+                            status ===
+                              "no_show" &&
+                            !financialReviewRequired
+                          )
+                        ) &&
                         outstandingAmount >
                           0.009;
 
@@ -2538,10 +2989,17 @@ function Bookings() {
                               </strong>
 
                               <span>
-                                Paid{" "}
-                                {formatCurrency(
-                                  booking.amount_paid
-                                )}
+                                {Number(
+                                  booking.refunded_amount || 0
+                                ) > 0.009
+                                  ? `Net ${formatCurrency(
+                                      booking.amount_paid
+                                    )} · Refunded ${formatCurrency(
+                                      booking.refunded_amount
+                                    )}`
+                                  : `Paid ${formatCurrency(
+                                      booking.amount_paid
+                                    )}`}
                               </span>
                             </div>
                           </td>
@@ -2558,7 +3016,6 @@ function Bookings() {
                               )}
                             </span>
                           </td>
-
 
                           <td>
                             <span
@@ -2618,6 +3075,18 @@ function Bookings() {
                                 </button>
                               )}
 
+                              {canRefundNoShow && (
+                                <button
+                                  type="button"
+                                  className="booking-action-button booking-action-button--cancel"
+                                  onClick={() => openNoShowRefund(booking)}
+                                  title={`Refund ${formatCurrency(overpaidAmount)} No-Show overpayment`}
+                                  aria-label={`Refund No Show overpayment for ${booking.booking_code}`}
+                                >
+                                  <IcoRupee />
+                                </button>
+                              )}
+
                               {canExtendStay && (
                                 <button
                                   type="button"
@@ -2655,12 +3124,25 @@ function Bookings() {
                                 <button
                                   type="button"
                                   className="booking-action-button booking-action-button--edit"
+                                  disabled={
+                                    Number(editOpeningId) ===
+                                    Number(booking.booking_id)
+                                  }
+                                  aria-busy={
+                                    Number(editOpeningId) ===
+                                    Number(booking.booking_id)
+                                  }
                                   onClick={() =>
-                                    openEditBooking(
+                                    void openEditBooking(
                                       booking
                                     )
                                   }
-                                  title="Edit booking"
+                                  title={
+                                    Number(editOpeningId) ===
+                                    Number(booking.booking_id)
+                                      ? "Checking latest booking status..."
+                                      : "Edit booking"
+                                  }
                                   aria-label={`Edit ${booking.booking_code}`}
                                 >
                                   <IcoEdit />
@@ -2970,6 +3452,28 @@ function Bookings() {
         }
         onConfirm={() =>
           void confirmCollectPayment()
+        }
+      />
+
+      <NoShowRefundDialog
+        booking={refundBooking}
+
+        method={refundMethod}
+        transactionId={refundTransactionId}
+        notes={refundNotes}
+
+        processing={refundProcessing}
+        error={refundError}
+
+        onChangeMethod={setRefundMethod}
+        onChangeTransactionId={
+          setRefundTransactionId
+        }
+        onChangeNotes={setRefundNotes}
+
+        onClose={closeNoShowRefund}
+        onConfirm={() =>
+          void confirmNoShowRefund()
         }
       />
 

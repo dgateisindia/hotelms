@@ -20,8 +20,12 @@ const {
   updateBooking,
   checkInBooking,
   checkInBookingGuest,
+  checkoutBookingGuest,
   extendStayBooking,
+  collectReservationGroupPayment,
+  checkoutReservationGroup,
   collectBookingPayment,
+  refundNoShowOverpayment,
   checkoutBooking,
   cancelBooking,
   deleteBooking,
@@ -83,6 +87,30 @@ router.post(
 router.post(
   "/groups/:groupId/rooms",
   addReservationGroupRooms
+);
+
+/* ============================================================
+   COLLECT RESERVATION GROUP PAYMENT
+============================================================ */
+
+router.post(
+  "/groups/:groupId/payments",
+  collectReservationGroupPayment
+);
+
+/* ============================================================
+   CHECKOUT RESERVATION GROUP
+
+   booking_ids omitted / []:
+   → all currently checked-in rooms
+
+   booking_ids supplied:
+   → selected checked-in rooms only
+============================================================ */
+
+router.post(
+  "/groups/:groupId/checkout",
+  checkoutReservationGroup
 );
 
 /* ============================================================
@@ -152,6 +180,18 @@ router.post(
 );
 
 /* ============================================================
+   CHECK OUT INDIVIDUAL GUEST
+
+   Only the selected staying guest leaves.
+   Room booking remains checked_in until formal room checkout.
+============================================================ */
+
+router.post(
+  "/:id/guests/:guestId/checkout",
+  checkoutBookingGuest
+);
+
+/* ============================================================
    EXTEND STAY
 ============================================================ */
 
@@ -167,6 +207,15 @@ router.post(
 router.post(
   "/:id/payments",
   collectBookingPayment
+);
+
+/* ============================================================
+   REFUND NO-SHOW OVERPAYMENT
+============================================================ */
+
+router.post(
+  "/:id/no-show-refund",
+  refundNoShowOverpayment
 );
 
 /* ============================================================

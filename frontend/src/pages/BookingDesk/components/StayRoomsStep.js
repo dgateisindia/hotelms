@@ -397,6 +397,7 @@ function StayRoomsStep({
   isRoomSelected,
   addRoom,
   removeRoom,
+  updateRoomTiming,
   updateRoomGuests,
 
   guestRequirementsPolicy,
@@ -1553,15 +1554,7 @@ function StayRoomsStep({
                 (
                   isEditMode &&
                   editPrimaryGuestAllocatedElsewhere &&
-                  room
-                    .primary_guest_staying !==
-                    true
-                ) ||
-                (
-                  isEditMode &&
-                  room
-                    .primary_guest_staying ===
-                    true
+                  room.primary_guest_staying !== true
                 );
 
 
@@ -1672,8 +1665,134 @@ function StayRoomsStep({
 
                   </div>
 
+                  {/* ==========================================
+                      ROOM-SPECIFIC STAY TIMING
+                  ========================================== */}
+
+                  <div className="booking-desk-occupancy-primary">
+
+                    <div
+                      style={{
+                        width: "100%",
+                      }}
+                    >
+
+                      <div className="booking-desk-occupancy-guests__heading">
+
+                        <div>
+                          <strong>
+                            Room Stay Timing
+                          </strong>
+
+                          <span>
+                            Reservation timing is used as the default.
+                            This room can have its own check-in and check-out.
+                          </span>
+                        </div>
+
+                      </div>
+
+                      <div className="booking-desk-occupant__grid">
+
+                        <div className="booking-desk-field">
+
+                          <label
+                            htmlFor={`room-check-in-${room.room_id}`}
+                          >
+                            Check In
+                          </label>
+
+                          <div className="booking-desk-input-icon">
+
+                            <IcoCalendar />
+
+                            <input
+                              id={`room-check-in-${room.room_id}`}
+                              type={
+                                isDayUse
+                                  ? "datetime-local"
+                                  : "date"
+                              }
+                              min={
+                                !isEditMode &&
+                                !isDayUse
+                                  ? today
+                                  : undefined
+                              }
+                              value={
+                                room.check_in ||
+                                booking.check_in ||
+                                ""
+                              }
+                              onChange={(
+                                event
+                              ) =>
+                                updateRoomTiming(
+                                  room.room_id,
+                                  "check_in",
+                                  event.target.value
+                                )
+                              }
+                            />
+
+                          </div>
+
+                        </div>
+
+
+                        <div className="booking-desk-field">
+
+                          <label
+                            htmlFor={`room-check-out-${room.room_id}`}
+                          >
+                            Check Out
+                          </label>
+
+                          <div className="booking-desk-input-icon">
+
+                            <IcoCalendar />
+
+                            <input
+                              id={`room-check-out-${room.room_id}`}
+                              type={
+                                isDayUse
+                                  ? "datetime-local"
+                                  : "date"
+                              }
+                              min={
+                                room.check_in ||
+                                booking.check_in ||
+                                undefined
+                              }
+                              value={
+                                room.check_out ||
+                                booking.check_out ||
+                                ""
+                              }
+                              onChange={(
+                                event
+                              ) =>
+                                updateRoomTiming(
+                                  room.room_id,
+                                  "check_out",
+                                  event.target.value
+                                )
+                              }
+                            />
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
                   {extraBedEnabled &&
                     extraBedLimitExceeded && (
+                      
                       <div className="booking-desk-room-state booking-desk-room-state--error">
 
                         Room{" "}
@@ -1939,15 +2058,6 @@ function StayRoomsStep({
                                 );
 
 
-                              const cannotRemove =
-                                room
-                                  .primary_guest_staying !==
-                                  true &&
-                                accompanyingGuests
-                                  .length <=
-                                  1;
-
-
                               return (
                                 <div
                                   className="booking-desk-occupant"
@@ -1970,9 +2080,6 @@ function StayRoomsStep({
                                     <button
                                       type="button"
                                       className="booking-desk-selected__remove"
-                                      disabled={
-                                        cannotRemove
-                                      }
                                       aria-label={`Remove guest ${guestIndex + 1}`}
                                       onClick={() =>
                                         removeAccompanyingGuest(

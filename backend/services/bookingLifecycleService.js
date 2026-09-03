@@ -14,6 +14,10 @@ const {
   getLockedPaymentState,
 } = require("./bookingPaymentService");
 
+const {
+  closeBookingGuestsForRoomCheckoutWithConnection,
+} = require("./bookingGuestService");
+
 function throwHttp(
   status,
   code,
@@ -1623,7 +1627,36 @@ async function checkoutBooking(
 
 
   /* ==========================================================
-     UPDATE BOOKING
+    CLOSE ROOM GUEST LIFECYCLE
+
+    Formal room checkout closes every remaining occupancy state.
+
+    checked_in
+        → checked_out
+
+    expected
+        → cancelled
+
+    already checked_out / cancelled
+        → preserved
+
+    The helper resolves ONE database checkout timestamp.
+    The exact same timestamp is then stored on the booking.
+  ========================================================== */
+
+  const guestClosure =
+    await closeBookingGuestsForRoomCheckoutWithConnection(
+      connection,
+      {
+        hotelId,
+        bookingId,
+        adminId,
+      }
+    );
+
+
+  /* ==========================================================
+    UPDATE BOOKING
   ========================================================== */
 
   await connection.query(
@@ -1634,8 +1667,9 @@ async function checkoutBooking(
         booking_status =
           'checked_out',
 
-        actual_check_out =
-          NOW(),
+        actual_check_out = ?,
+
+        total_guests = 0,
 
         payment_status = ?,
 
@@ -1645,6 +1679,9 @@ async function checkoutBooking(
         AND booking_id = ?
     `,
     [
+      guestClosure
+        .actualCheckOut,
+
       paymentState
         .paymentStatus,
 
@@ -1771,6 +1808,25 @@ async function checkoutBooking(
 
     actualCheckOut:
       updated.actual_check_out,
+
+    guestCount:
+      guestClosure
+        .guestCount,
+
+    checkedOutGuestCount:
+      guestClosure
+        .checkedOutGuestCount,
+
+    cancelledExpectedGuestCount:
+      guestClosure
+        .cancelledExpectedGuestCount,
+
+    alreadyClosedGuestCount:
+      guestClosure
+        .alreadyClosedGuestCount,
+
+    totalGuests:
+      0,
 
     totalAmount:
       Number(

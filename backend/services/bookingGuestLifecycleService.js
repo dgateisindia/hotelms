@@ -19,6 +19,9 @@ const {
   calculateGuestCharges,
   loadPrimaryCustomerWithConnection,
   insertCheckedInGuestWithConnection,
+
+  checkoutBookingGuestWithConnection,
+
   countGroupPrimaryGuestsWithConnection,
 } = require("./bookingGuestService");
 
@@ -319,6 +322,111 @@ async function loadBooking(
   return booking;
 }
 
+/* ============================================================
+   LOAD BOOKING FOR INDIVIDUAL GUEST CHECKOUT
+
+   Important:
+   - Guest checkout is allowed only during an active room stay.
+   - Expected checkout time may already have passed.
+     Late checkout must NOT block an actual guest departure.
+   - Room booking itself remains checked_in after one guest leaves.
+============================================================ */
+
+async function loadBookingForGuestCheckout(
+  connection,
+  hotelId,
+  bookingId
+) {
+  const [[booking]] =
+    await connection.query(
+      `
+        SELECT
+          booking_id,
+          booking_code,
+          reservation_group_id,
+          customer_id,
+          room_id,
+
+          actual_check_in,
+          actual_check_out,
+
+          booking_status,
+          payment_status,
+          total_amount
+
+        FROM bookings
+
+        WHERE hotel_id = ?
+          AND booking_id = ?
+
+        FOR UPDATE
+      `,
+      [
+        hotelId,
+        bookingId,
+      ]
+    );
+
+
+  if (!booking) {
+    throwHttp(
+      404,
+      "BOOKING_NOT_FOUND",
+      "The booking was not found in your hotel."
+    );
+  }
+
+
+  if (
+    booking.booking_status ===
+      "checked_out" ||
+    booking.actual_check_out
+  ) {
+    throwHttp(
+      409,
+      "BOOKING_ALREADY_CHECKED_OUT",
+      "This room stay has already been checked out."
+    );
+  }
+
+
+  if (
+    booking.booking_status ===
+    "cancelled"
+  ) {
+    throwHttp(
+      409,
+      "CANCELLED_BOOKING_CANNOT_CHECK_OUT_GUEST",
+      "A cancelled booking cannot process guest checkout."
+    );
+  }
+
+
+  if (
+    booking.booking_status !==
+    "checked_in"
+  ) {
+    throwHttp(
+      409,
+      "GUEST_CHECKOUT_NOT_ALLOWED",
+      "Individual guest checkout is available only for an active checked-in stay."
+    );
+  }
+
+
+  if (
+    !booking.actual_check_in
+  ) {
+    throwHttp(
+      409,
+      "CHECK_IN_TIME_MISSING",
+      "This booking is marked checked in but has no actual check-in time."
+    );
+  }
+
+
+  return booking;
+}
 
 async function loadRoom(
   connection,
@@ -1469,7 +1577,217 @@ async function checkInBookingGuest(
   };
 }
 
+/* ============================================================
+   CHECK OUT INDIVIDUAL BOOKING GUEST
+
+   Transaction is owned by controller.
+
+   Guest lifecycle:
+   checked_in
+      ↓
+   checked_out
+
+   Important:
+   - Only selected guest is checked out.
+   - Booking remains checked_in.
+   - Room remains occupied.
+   - Room history remains active.
+   - Payment ledger is untouched.
+   - Remaining guests may continue staying.
+
+   Formal room checkout is a separate lifecycle operation.
+============================================================ */
+
+async function checkoutBookingGuest(
+  connection,
+  {
+    hotelId,
+    adminId,
+    bookingId,
+    bookingGuestId,
+  }
+) {
+  /* ==========================================================
+     LOCK / VALIDATE ACTIVE BOOKING
+  ========================================================== */
+
+  const booking =
+    await loadBookingForGuestCheckout(
+      connection,
+      hotelId,
+      bookingId
+    );
+
+
+  /* ==========================================================
+     LOCK / VALIDATE ROOM
+
+     Individual guest departure must not accidentally operate
+     against a room whose physical lifecycle has already drifted
+     away from the active stay.
+  ========================================================== */
+
+  const room =
+    await loadRoom(
+      connection,
+      hotelId,
+      booking.room_id
+    );
+
+
+  await ensureActiveRoomState(
+    connection,
+    hotelId,
+    bookingId,
+    room
+  );
+
+
+  /* ==========================================================
+     CHECK OUT SELECTED GUEST
+
+     Persistence helper:
+     - verifies guest belongs to this booking
+     - requires guest_status = checked_in
+     - records DB checkout timestamp
+     - records admin attribution
+     - does NOT close room stay
+  ========================================================== */
+
+  const guestResult =
+    await checkoutBookingGuestWithConnection(
+      connection,
+      {
+        hotelId,
+        bookingId,
+        bookingGuestId,
+        adminId,
+      }
+    );
+
+
+  /* ==========================================================
+    SYNC ACTIVE GUEST COUNT
+
+    total_guests represents currently active/expected occupancy.
+
+    Individual guest checkout removes one checked-in guest from
+    active occupancy while preserving any expected or still
+    checked-in guests.
+  ========================================================== */
+
+  const activeGuestsRemaining =
+    Number(
+      guestResult
+        .checkedInGuestsRemaining ||
+      0
+    ) +
+    Number(
+      guestResult
+        .expectedGuestsRemaining ||
+      0
+    );
+
+
+  await connection.query(
+    `
+      UPDATE bookings
+
+      SET
+        total_guests = ?,
+        updated_by_admin_id = ?
+
+      WHERE hotel_id = ?
+        AND booking_id = ?
+        AND booking_status =
+          'checked_in'
+    `,
+    [
+      activeGuestsRemaining,
+      adminId,
+      hotelId,
+      bookingId,
+    ]
+  );
+
+
+  /* ==========================================================
+     RESULT
+
+     Even when checkedInGuestsRemaining becomes 0, room booking
+     is intentionally NOT auto-checked-out.
+
+     Formal Room Checkout must still:
+     - verify financial settlement
+     - close remaining expected guest allocations
+     - complete room history
+     - move room to cleaning
+  ========================================================== */
+
+  return {
+    bookingId:
+      Number(
+        booking.booking_id
+      ),
+
+    bookingCode:
+      booking.booking_code,
+
+    roomId:
+      Number(
+        booking.room_id
+      ),
+
+    roomNumber:
+      room.room_number,
+
+    roomType:
+      room.room_type,
+
+    bookingGuestId:
+      guestResult
+        .bookingGuestId,
+
+    guestRole:
+      guestResult
+        .guestRole,
+
+    guestType:
+      guestResult
+        .guestType,
+
+    fullName:
+      guestResult
+        .fullName,
+
+    guestStatus:
+      guestResult
+        .guestStatus,
+
+    actualGuestCheckOut:
+      guestResult
+        .actualCheckOut,
+
+    checkedInGuestsRemaining:
+      guestResult
+        .checkedInGuestsRemaining,
+
+    expectedGuestsRemaining:
+      guestResult
+        .expectedGuestsRemaining,
+
+    totalGuests:
+      activeGuestsRemaining,
+
+    bookingStatus:
+      "checked_in",
+
+    roomStatus:
+      "occupied",
+  };
+}
 
 module.exports = {
   checkInBookingGuest,
+  checkoutBookingGuest,
 };

@@ -9,9 +9,11 @@ import {
 function GuestRoster({
   guests,
   canManage,
+  canCheckOut,
   busy,
   processingGuestId,
   onCheckIn,
+  onCheckOut,
 }) {
   if (!guests.length) {
     return (
@@ -24,8 +26,15 @@ function GuestRoster({
   return guests.map((guest, index) => {
     const status = normalizeGuestValue(guest.guest_status);
     const expected = status === "expected";
+    const checkedIn = status === "checked_in";
+
     const processing =
       processingGuestId === Number(guest.booking_guest_id);
+
+    const canCheckoutGuest =
+      checkedIn &&
+      canCheckOut &&
+      typeof onCheckOut === "function";
 
     return (
       <div
@@ -81,10 +90,17 @@ function GuestRoster({
           <strong>{guestUsesExtraBed(guest) ? "Used" : "No"}</strong>
         </div>
 
-        {status === "checked_in" && (
+        {guest.actual_check_in && (
           <div className="booking-detail-row">
             <span>Checked In</span>
             <strong>{formatGuestDateTime(guest.actual_check_in)}</strong>
+          </div>
+        )}
+
+        {guest.actual_check_out && (
+          <div className="booking-detail-row">
+            <span>Checked Out</span>
+            <strong>{formatGuestDateTime(guest.actual_check_out)}</strong>
           </div>
         )}
 
@@ -101,6 +117,22 @@ function GuestRoster({
             </button>
           </div>
         )}
+
+        {canCheckoutGuest && (
+          <div className="booking-detail-row">
+            <span>Departure</span>
+
+            <button
+              type="button"
+              className="booking-btn-secondary"
+              disabled={busy}
+              onClick={() => onCheckOut(guest)}
+            >
+              {processing ? "Checking Out..." : "Check Out"}
+            </button>
+          </div>
+        )}
+
       </div>
     );
   });

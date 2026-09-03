@@ -520,6 +520,89 @@ function calculateStayMinutes(
   );
 }
 
+function validateRoomStayRange({
+  room,
+  roomNumber,
+  stayType,
+  booking,
+}) {
+  const checkIn =
+    room?.check_in ||
+    booking?.check_in ||
+    "";
+
+  const checkOut =
+    room?.check_out ||
+    booking?.check_out ||
+    "";
+
+  if (
+    !checkIn ||
+    !checkOut
+  ) {
+    return stayType ===
+      "day_use"
+      ? `Room ${roomNumber}: check-in and check-out date/time are required.`
+      : `Room ${roomNumber}: check-in and expected check-out dates are required.`;
+  }
+
+  if (
+    stayType ===
+    "day_use"
+  ) {
+    const checkInDate =
+      String(
+        checkIn
+      ).slice(
+        0,
+        10
+      );
+
+    const checkOutDate =
+      String(
+        checkOut
+      ).slice(
+        0,
+        10
+      );
+
+    if (
+      checkInDate !==
+      checkOutDate
+    ) {
+      return (
+        `Room ${roomNumber}: Day Use must start and end on the same calendar date.`
+      );
+    }
+
+    if (
+      calculateStayMinutes(
+        checkIn,
+        checkOut
+      ) <= 0
+    ) {
+      return (
+        `Room ${roomNumber}: check-out time must be later than check-in time.`
+      );
+    }
+
+    return "";
+  }
+
+  if (
+    calculateStayMinutes(
+      checkIn,
+      checkOut
+    ) <= 0
+  ) {
+    return (
+      `Room ${roomNumber}: expected check-out date must be after the check-in date.`
+    );
+  }
+
+  return "";
+}
+
 /* ============================================================
    GUEST & OCCUPANCY HELPERS
 ============================================================ */
@@ -1117,6 +1200,22 @@ export function validateStayRoomsStep({
       room?.room_number ||
       room?.room_id ||
       "—";
+
+
+    const roomTimingError =
+      validateRoomStayRange({
+        room,
+        roomNumber,
+        stayType,
+        booking,
+      });
+
+
+    if (
+      roomTimingError
+    ) {
+      return roomTimingError;
+    }
 
 
     const capacity =
