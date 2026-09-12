@@ -1,0 +1,489 @@
+/* ============================================================
+   ADMIN LAYOUT
+
+   Matches Super Admin portal structure:
+   - Fixed desktop sidebar
+   - Collapsible sidebar
+   - Responsive mobile drawer
+   - Sticky topbar
+   - Global breadcrumb row
+   - Main content workspace
+
+   Design system:
+   src/styles/global.css
+============================================================ */
+
+
+/* ============================================================
+   ROOT
+============================================================ */
+
+.admin-layout {
+  min-height: 100vh;
+
+  display: grid;
+
+  grid-template-columns:
+    var(--sidebar-width)
+    minmax(0, 1fr);
+
+  background:
+    var(--color-background);
+
+  transition:
+    grid-template-columns
+    var(--transition-slow);
+}
+
+
+.admin-layout--collapsed {
+  grid-template-columns:
+    var(--sidebar-collapsed-width)
+    minmax(0, 1fr);
+}
+
+
+/* ============================================================
+   SIDEBAR
+============================================================ */
+
+.admin-layout__sidebar {
+  position: fixed;
+
+  inset:
+    0
+    auto
+    0
+    0;
+
+  z-index:
+    var(--z-sidebar);
+
+  width:
+    var(--sidebar-width);
+
+  height:
+    100vh;
+
+  overflow:
+    hidden;
+
+  background:
+    var(--color-navy);
+
+  border-right:
+    1px solid
+    rgba(255, 255, 255, 0.08);
+
+  transition:
+    width var(--transition-slow),
+    transform var(--transition-slow);
+
+  backface-visibility:
+    hidden;
+
+  transform:
+    translateZ(0);
+}
+
+
+.admin-layout--collapsed
+.admin-layout__sidebar {
+  width:
+    var(--sidebar-collapsed-width);
+}
+
+
+/* ============================================================
+   WORKSPACE
+============================================================ */
+
+.admin-layout__workspace {
+  grid-column: 2;
+
+  min-width: 0;
+  min-height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+
+  position: relative;
+}
+
+
+/* ============================================================
+   TOPBAR
+============================================================ */
+
+.admin-layout__topbar {
+  position: sticky;
+
+  top: 0;
+
+  z-index:
+    var(--z-topbar);
+
+  width: 100%;
+  height:
+    var(--topbar-height);
+
+  flex-shrink: 0;
+
+  background:
+    rgba(255, 255, 255, 0.96);
+
+  border-bottom:
+    1px solid
+    var(--color-border);
+
+  box-shadow:
+    var(--shadow-xs);
+
+  backdrop-filter:
+    blur(12px);
+}
+
+
+/* ============================================================
+   MAIN
+============================================================ */
+
+.admin-layout__main {
+  flex: 1;
+
+  min-width: 0;
+
+  background:
+    var(--color-background);
+}
+
+
+/*
+ * Page components control their own page padding.
+ * Do not add another padding layer here.
+ */
+.admin-layout__content {
+  width: 100%;
+
+  max-width:
+    var(--content-max-width);
+
+  margin:
+    0 auto;
+
+  padding: 0;
+}
+
+
+/* ============================================================
+   BREADCRUMB ROW
+============================================================ */
+
+.admin-layout__breadcrumbs {
+  width: 100%;
+
+  padding:
+    var(--space-5)
+    var(--page-padding)
+    0;
+}
+
+
+.admin-layout__breadcrumbs
+.page-breadcrumbs {
+  margin-bottom: 0;
+}
+
+
+/* ============================================================
+   MOBILE OVERLAY
+============================================================ */
+
+.admin-layout__overlay {
+  position: fixed;
+
+  inset: 0;
+
+  z-index:
+    calc(
+      var(--z-sidebar) - 1
+    );
+
+  display: none;
+
+  padding: 0;
+
+  border: 0;
+
+  background:
+    rgba(
+      15,
+      23,
+      42,
+      0.55
+    );
+
+  opacity: 0;
+  visibility: hidden;
+
+  transition:
+    opacity var(--transition),
+    visibility var(--transition);
+}
+
+
+/* ============================================================
+   SKIP LINK
+============================================================ */
+
+.admin-layout__skip-link {
+  position: fixed;
+
+  top:
+    var(--space-3);
+
+  left:
+    var(--space-3);
+
+  z-index:
+    calc(
+      var(--z-toast) + 1
+    );
+
+  padding:
+    var(--space-2)
+    var(--space-4);
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    var(--color-gold);
+
+  color:
+    var(--color-navy);
+
+  font-weight:
+    var(--font-weight-bold);
+
+  transform:
+    translateY(-160%);
+
+  transition:
+    transform var(--transition);
+}
+
+
+.admin-layout__skip-link:focus {
+  transform:
+    translateY(0);
+}
+
+
+/* ============================================================
+   LOADING STATE
+============================================================ */
+
+.admin-layout__loading {
+  min-height:
+    calc(
+      100vh -
+      var(--topbar-height) -
+      (var(--page-padding) * 2)
+    );
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding:
+    var(--page-padding);
+}
+
+
+.admin-layout__loading-card {
+  width:
+    min(
+      420px,
+      100%
+    );
+
+  padding:
+    var(--space-8);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--radius-lg);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-sm);
+
+  text-align:
+    center;
+}
+
+
+.admin-layout__loading-title {
+  margin: 0;
+
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-xl);
+
+  font-weight:
+    var(--font-weight-bold);
+}
+
+
+.admin-layout__loading-description {
+  margin:
+    var(--space-2)
+    0
+    0;
+
+  color:
+    var(--color-text-muted);
+}
+
+
+/* ============================================================
+   TABLET / MOBILE
+============================================================ */
+
+@media (max-width: 1024px) {
+
+  .admin-layout,
+  .admin-layout--collapsed {
+    grid-template-columns:
+      minmax(0, 1fr);
+
+    transition: none;
+  }
+
+
+  .admin-layout__workspace {
+    grid-column: 1;
+  }
+
+
+  .admin-layout__sidebar,
+  .admin-layout--collapsed
+  .admin-layout__sidebar {
+    width:
+      min(
+        var(--sidebar-width),
+        calc(100vw - 56px)
+      );
+
+    transform:
+      translateX(-100%)
+      translateZ(0);
+
+    box-shadow:
+      var(--shadow-xl);
+  }
+
+
+  .admin-layout--mobile-open
+  .admin-layout__sidebar {
+    transform:
+      translateX(0)
+      translateZ(0);
+  }
+
+
+  .admin-layout__overlay {
+    display: block;
+  }
+
+
+  .admin-layout--mobile-open
+  .admin-layout__overlay {
+    opacity: 1;
+
+    visibility: visible;
+  }
+}
+
+
+/* ============================================================
+   MOBILE
+============================================================ */
+
+@media (max-width: 768px) {
+
+  .admin-layout__breadcrumbs {
+    padding:
+      var(--space-4)
+      var(--page-padding)
+      0;
+  }
+}
+
+
+/* ============================================================
+   SMALL MOBILE
+============================================================ */
+
+@media (max-width: 480px) {
+
+  .admin-layout__sidebar,
+  .admin-layout--collapsed
+  .admin-layout__sidebar {
+    width:
+      calc(
+        100vw - 32px
+      );
+  }
+}
+
+
+/* ============================================================
+   PRINT
+============================================================ */
+
+@media print {
+
+  .admin-layout,
+  .admin-layout--collapsed {
+    display: block;
+
+    background:
+      var(--color-white);
+
+    transition: none;
+  }
+
+
+  .admin-layout__sidebar,
+  .admin-layout__topbar,
+  .admin-layout__overlay,
+  .admin-layout__skip-link,
+  .admin-layout__breadcrumbs {
+    display:
+      none !important;
+  }
+
+
+  .admin-layout__workspace,
+  .admin-layout__main {
+    display: block;
+
+    min-height: auto;
+  }
+
+
+  .admin-layout__content {
+    max-width: none;
+
+    padding: 0;
+  }
+}

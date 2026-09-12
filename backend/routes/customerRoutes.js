@@ -1,7 +1,9 @@
 const express = require("express");
-const router = express.Router();
 
-const customerController = require("../controllers/customerController");
+const router =
+  express.Router();
+
+
 const {
   getCustomers,
   getCustomer,
@@ -9,13 +11,64 @@ const {
   updateCustomer,
   deleteCustomer,
   getCustomerStats,
-} = require("../controllers/customerController");
+  lookupCustomerByPhone,
+} = require(
+  "../controllers/customerController"
+);
 
-router.get("/stats", getCustomerStats);
-router.get("/", getCustomers);
-router.get("/:id", getCustomer);
-router.post("/", addCustomer);
-router.put("/:id", updateCustomer);
-router.delete("/:id", deleteCustomer);
 
-module.exports = router;
+/* ============================================================
+   STATIC ROUTES
+
+   Important:
+   These must stay before "/:id".
+============================================================ */
+
+router.get(
+  "/lookup",
+  lookupCustomerByPhone
+);
+
+
+router.get(
+  "/stats",
+  getCustomerStats
+);
+
+
+/* ============================================================
+   CUSTOMER CRUD
+============================================================ */
+
+router.get(
+  "/",
+  getCustomers
+);
+
+
+router.post(
+  "/",
+  addCustomer
+);
+
+
+router.get(
+  "/:id",
+  getCustomer
+);
+
+
+router.put(
+  "/:id",
+  updateCustomer
+);
+
+
+router.delete(
+  "/:id",
+  deleteCustomer
+);
+
+
+module.exports =
+  router;

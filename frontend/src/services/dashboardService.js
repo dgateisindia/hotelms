@@ -1,4 +1,4 @@
-import apiClient from './apiClient';
+import apiClient from "../shared/api/apiClient";
 
 const getSuperAdminStats = async () => {
   const res = await apiClient.get('/dashboard/super-admin-stats');

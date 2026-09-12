@@ -1,0 +1,353 @@
+/* ============================================================
+   ADMIN WORKSPACE LAYOUT
+
+   Handles workspace-level states:
+   - Loading
+   - Context error
+   - Retry
+   - Page content
+
+   Outer visual structure is controlled by:
+   layouts/AdminLayout/AdminLayout.css
+
+   Design system:
+   src/styles/global.css
+============================================================ */
+
+
+/* ============================================================
+   ROOT
+============================================================ */
+
+.admin-workspace {
+  width: 100%;
+  min-height: 100%;
+}
+
+
+/* ============================================================
+   PAGE CONTENT WRAPPER
+============================================================ */
+
+.admin-workspace__page {
+  width: 100%;
+}
+
+
+/* ============================================================
+   STATE WRAPPER
+============================================================ */
+
+.admin-workspace__state {
+  min-height:
+    calc(
+      100vh -
+      var(--topbar-height)
+    );
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding:
+    var(--page-padding);
+}
+
+
+/* ============================================================
+   STATE CARD
+============================================================ */
+
+.admin-workspace__state-card {
+  width:
+    min(
+      460px,
+      100%
+    );
+
+  padding:
+    var(--space-8);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--radius-lg);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-sm);
+
+  text-align: center;
+}
+
+
+/* ============================================================
+   LOADING INDICATOR
+============================================================ */
+
+.admin-workspace__spinner {
+  width: 42px;
+  height: 42px;
+
+  margin:
+    0
+    auto
+    var(--space-5);
+
+  border:
+    3px solid
+    var(--color-border);
+
+  border-top-color:
+    var(--color-primary);
+
+  border-radius:
+    var(--radius-pill);
+
+  animation:
+    admin-workspace-spin
+    0.8s
+    linear
+    infinite;
+}
+
+
+@keyframes admin-workspace-spin {
+  to {
+    transform:
+      rotate(360deg);
+  }
+}
+
+
+/* ============================================================
+   STATE ICON
+============================================================ */
+
+.admin-workspace__state-icon {
+  width: 48px;
+  height: 48px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin:
+    0
+    auto
+    var(--space-4);
+
+  border-radius:
+    var(--radius-pill);
+
+  background:
+    var(--color-danger-bg);
+
+  color:
+    var(--color-danger);
+}
+
+
+.admin-workspace__state-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+
+/* ============================================================
+   STATE COPY
+============================================================ */
+
+.admin-workspace__state-title {
+  margin: 0;
+
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-xl);
+
+  font-weight:
+    var(--font-weight-bold);
+
+  line-height:
+    var(--line-height-tight);
+}
+
+
+.admin-workspace__state-description {
+  margin:
+    var(--space-3)
+    0
+    0;
+
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-sm);
+
+  line-height:
+    var(--line-height-relaxed);
+}
+
+
+/* ============================================================
+   ERROR CODE
+============================================================ */
+
+.admin-workspace__error-code {
+  display: inline-flex;
+
+  margin-top:
+    var(--space-3);
+
+  padding:
+    var(--space-1)
+    var(--space-3);
+
+  border-radius:
+    var(--radius-pill);
+
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-semibold);
+}
+
+
+/* ============================================================
+   ACTIONS
+============================================================ */
+
+.admin-workspace__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap:
+    var(--space-3);
+
+  margin-top:
+    var(--space-6);
+}
+
+
+.admin-workspace__retry {
+  min-height: 40px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  gap:
+    var(--space-2);
+
+  padding:
+    var(--space-2)
+    var(--space-5);
+
+  border:
+    1px solid
+    var(--color-primary);
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    var(--color-primary);
+
+  color:
+    var(--color-white);
+
+  font-family: inherit;
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-semibold);
+
+  cursor: pointer;
+
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+
+.admin-workspace__retry:hover {
+  box-shadow:
+    var(--shadow-sm);
+}
+
+
+.admin-workspace__retry:focus-visible {
+  outline:
+    2px solid
+    var(--color-primary);
+
+  outline-offset: 2px;
+}
+
+
+.admin-workspace__retry:disabled {
+  cursor: not-allowed;
+
+  opacity: 0.6;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 600px) {
+
+  .admin-workspace__state {
+    align-items: flex-start;
+
+    padding-top:
+      var(--space-8);
+  }
+
+
+  .admin-workspace__state-card {
+    padding:
+      var(--space-6);
+  }
+
+
+  .admin-workspace__actions {
+    flex-direction: column;
+  }
+
+
+  .admin-workspace__retry {
+    width: 100%;
+  }
+}
+
+
+/* ============================================================
+   REDUCED MOTION
+============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .admin-workspace__spinner {
+    animation: none;
+  }
+}

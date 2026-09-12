@@ -1,4 +1,4 @@
-import apiClient from './apiClient'; // your existing centralized axios instance
+import apiClient from "../shared/api/apiClient"; // your existing centralized axios instance
 
 const createStaffUser = async (data) => {
   const response = await apiClient.post('/users/create-admin', data);

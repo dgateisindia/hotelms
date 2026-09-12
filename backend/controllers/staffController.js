@@ -63,65 +63,184 @@ function validateStaffPayload(body) {
 
 // GET /api/staff
 exports.getAllStaff = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
-    const [rows] = await pool.query(`SELECT * FROM staff ORDER BY staff_id DESC`);
-    res.json(rows.map(toClient));
+    const [rows] = await pool.query(
+      `
+        SELECT *
+        FROM staff
+        WHERE hotel_id = ?
+        ORDER BY staff_id DESC
+      `,
+      [hotelId]
+    );
+
+    return res.json(rows.map(toClient));
   } catch (err) {
-    console.error('getAllStaff error:', err);
-    res.status(500).json({ message: 'Failed to fetch staff list.' });
+    console.error("getAllStaff error:", err);
+
+    return res.status(500).json({
+      message: "Failed to fetch staff list.",
+    });
   }
 };
 
 // GET /api/staff/:id
 exports.getStaffById = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
-    const [rows] = await pool.query(`SELECT * FROM staff WHERE staff_id = ?`, [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ message: 'Staff member not found.' });
-    res.json(toClient(rows[0]));
+    const [rows] = await pool.query(
+      `
+        SELECT *
+        FROM staff
+        WHERE staff_id = ?
+          AND hotel_id = ?
+      `,
+      [
+        req.params.id,
+        hotelId,
+      ]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        message: "Staff member not found.",
+      });
+    }
+
+    return res.json(
+      toClient(rows[0])
+    );
   } catch (err) {
-    console.error('getStaffById error:', err);
-    res.status(500).json({ message: 'Failed to fetch staff member.' });
+    console.error(
+      "getStaffById error:",
+      err
+    );
+
+    return res.status(500).json({
+      message: "Failed to fetch staff member.",
+    });
   }
 };
 
 // POST /api/staff
 exports.createStaff = async (req, res) => {
-  const errors = validateStaffPayload(req.body);
-  if (errors.length) return res.status(400).json({ message: errors.join(' ') });
+  const errors =
+    validateStaffPayload(req.body);
 
-  const { name, dept, designation, phone, email, salary, joinDate, status, emergencyContact } = req.body;
-  const connection = await pool.getConnection();
+  if (errors.length) {
+    return res.status(400).json({
+      message: errors.join(" "),
+    });
+  }
+
+  const {
+    name,
+    dept,
+    designation,
+    phone,
+    email,
+    salary,
+    joinDate,
+    status,
+    emergencyContact,
+  } = req.body;
+
+  const hotelId =
+    req.dbUser.hotelId;
+
+  const adminId =
+    req.dbUser.adminId;
+
+  const connection =
+    await pool.getConnection();
+
   try {
     await connection.beginTransaction();
 
-    const staffCode = await generateStaffCode(connection);
+    const staffCode =
+      await generateStaffCode(
+        connection
+      );
 
-    const [result] = await connection.query(
-      `INSERT INTO staff
-        (staff_code, full_name, email, phone, department, designation, salary, joining_date, emergency_contact, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        staffCode,
-        name.trim(),
-        email || null,
-        phone || null,
-        dept,
-        designation,
-        salary ? Number(String(salary).replace(/[^0-9.]/g, '')) : 0,
-        joinDate || null,
-        emergencyContact || null,
-        status || 'Active',
-      ]
-    );
+    const [result] =
+      await connection.query(
+        `
+          INSERT INTO staff (
+            hotel_id,
+            admin_id,
+            staff_code,
+            full_name,
+            email,
+            phone,
+            department,
+            designation,
+            salary,
+            joining_date,
+            emergency_contact,
+            status
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          hotelId,
+          adminId,
+          staffCode,
+          name.trim(),
+          email || null,
+          phone || null,
+          dept,
+          designation,
+          salary
+            ? Number(
+                String(salary)
+                  .replace(
+                    /[^0-9.]/g,
+                    ""
+                  )
+              )
+            : 0,
+          joinDate || null,
+          emergencyContact || null,
+          status || "Active",
+        ]
+      );
+
+    const [rows] =
+      await connection.query(
+        `
+          SELECT *
+          FROM staff
+          WHERE staff_id = ?
+            AND hotel_id = ?
+        `,
+        [
+          result.insertId,
+          hotelId,
+        ]
+      );
 
     await connection.commit();
 
-    const [rows] = await pool.query(`SELECT * FROM staff WHERE staff_id = ?`, [result.insertId]);
-    res.status(201).json(toClient(rows[0]));
+    return res
+      .status(201)
+      .json(
+        toClient(rows[0])
+      );
   } catch (err) {
     await connection.rollback();
-    console.error('createStaff error:', err);
-    res.status(500).json({ message: 'Failed to create staff member.' });
+
+    console.error(
+      "createStaff error:",
+      err
+    );
+
+    return res.status(500).json({
+      message:
+        "Failed to create staff member.",
+    });
   } finally {
     connection.release();
   }
@@ -129,49 +248,160 @@ exports.createStaff = async (req, res) => {
 
 // PUT /api/staff/:id
 exports.updateStaff = async (req, res) => {
-  const errors = validateStaffPayload(req.body);
-  if (errors.length) return res.status(400).json({ message: errors.join(' ') });
+  const errors =
+    validateStaffPayload(req.body);
 
-  const { name, dept, designation, phone, email, salary, joinDate, status, emergencyContact } = req.body;
+  if (errors.length) {
+    return res.status(400).json({
+      message: errors.join(" "),
+    });
+  }
+
+  const {
+    name,
+    dept,
+    designation,
+    phone,
+    email,
+    salary,
+    joinDate,
+    status,
+    emergencyContact,
+  } = req.body;
+
+  const hotelId =
+    req.dbUser.hotelId;
+
   try {
-    const [existing] = await pool.query(`SELECT staff_id FROM staff WHERE staff_id = ?`, [req.params.id]);
-    if (existing.length === 0) return res.status(404).json({ message: 'Staff member not found.' });
+    const [existing] =
+      await pool.query(
+        `
+          SELECT staff_id
+          FROM staff
+          WHERE staff_id = ?
+            AND hotel_id = ?
+        `,
+        [
+          req.params.id,
+          hotelId,
+        ]
+      );
+
+    if (existing.length === 0) {
+      return res.status(404).json({
+        message:
+          "Staff member not found.",
+      });
+    }
 
     await pool.query(
-      `UPDATE staff
-       SET full_name = ?, email = ?, phone = ?, department = ?, designation = ?,
-           salary = ?, joining_date = ?, emergency_contact = ?, status = ?
-       WHERE staff_id = ?`,
+      `
+        UPDATE staff
+        SET
+          full_name = ?,
+          email = ?,
+          phone = ?,
+          department = ?,
+          designation = ?,
+          salary = ?,
+          joining_date = ?,
+          emergency_contact = ?,
+          status = ?
+        WHERE staff_id = ?
+          AND hotel_id = ?
+      `,
       [
         name.trim(),
         email || null,
         phone || null,
         dept,
         designation,
-        salary ? Number(String(salary).replace(/[^0-9.]/g, '')) : 0,
+        salary
+          ? Number(
+              String(salary)
+                .replace(
+                  /[^0-9.]/g,
+                  ""
+                )
+            )
+          : 0,
         joinDate || null,
         emergencyContact || null,
-        status || 'Active',
+        status || "Active",
         req.params.id,
+        hotelId,
       ]
     );
 
-    const [rows] = await pool.query(`SELECT * FROM staff WHERE staff_id = ?`, [req.params.id]);
-    res.json(toClient(rows[0]));
+    const [rows] =
+      await pool.query(
+        `
+          SELECT *
+          FROM staff
+          WHERE staff_id = ?
+            AND hotel_id = ?
+        `,
+        [
+          req.params.id,
+          hotelId,
+        ]
+      );
+
+    return res.json(
+      toClient(rows[0])
+    );
   } catch (err) {
-    console.error('updateStaff error:', err);
-    res.status(500).json({ message: 'Failed to update staff member.' });
+    console.error(
+      "updateStaff error:",
+      err
+    );
+
+    return res.status(500).json({
+      message:
+        "Failed to update staff member.",
+    });
   }
 };
 
 // DELETE /api/staff/:id
 exports.deleteStaff = async (req, res) => {
+  const hotelId =
+    req.dbUser.hotelId;
+
   try {
-    const [result] = await pool.query(`DELETE FROM staff WHERE staff_id = ?`, [req.params.id]);
-    if (result.affectedRows === 0) return res.status(404).json({ message: 'Staff member not found.' });
-    res.json({ message: 'Staff member deleted successfully.' });
+    const [result] =
+      await pool.query(
+        `
+          DELETE FROM staff
+          WHERE staff_id = ?
+            AND hotel_id = ?
+        `,
+        [
+          req.params.id,
+          hotelId,
+        ]
+      );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        message:
+          "Staff member not found.",
+      });
+    }
+
+    return res.json({
+      message:
+        "Staff member deleted successfully.",
+    });
   } catch (err) {
-    console.error('deleteStaff error:', err);
-    res.status(500).json({ message: 'Failed to delete staff member.' });
+    console.error(
+      "deleteStaff error:",
+      err
+    );
+
+    return res.status(500).json({
+      message:
+        "Failed to delete staff member.",
+    });
   }
 };

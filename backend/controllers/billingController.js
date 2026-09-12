@@ -17,273 +17,203 @@ const METHOD_MAP = {
 =========================================================== */
 
 exports.getBillingDashboard = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
     const { dateFrom, dateTo } = req.query;
     const hasRange = Boolean(dateFrom && dateTo);
-
-    const invoiceDateFilter = hasRange ? `WHERE DATE(generated_at) BETWEEN ? AND ?` : "";
-    const paymentDateFilter = hasRange ? `WHERE DATE(payment_date) BETWEEN ? AND ?` : "";
-    const rangeParams = hasRange ? [dateFrom, dateTo] : [];
+    const invoiceRange = hasRange ? " AND DATE(generated_at) BETWEEN ? AND ?" : "";
+    const paymentRange = hasRange ? " AND DATE(payment_date) BETWEEN ? AND ?" : "";
+    const invoiceParams = hasRange ? [hotelId, dateFrom, dateTo] : [hotelId];
+    const paymentParams = hasRange ? [hotelId, dateFrom, dateTo] : [hotelId];
 
     const [[stats]] = await db.query(
-      `
-      SELECT
-        COUNT(*) AS totalBills,
-        IFNULL(SUM(total_amount),0) AS totalRevenue,
-        IFNULL(SUM(paid_amount),0) AS paidAmount,
-        IFNULL(SUM(pending_amount),0) AS outstanding
-      FROM invoices
-      ${invoiceDateFilter}
-    `,
-      rangeParams
+      `SELECT COUNT(*) AS totalBills, IFNULL(SUM(total_amount),0) AS totalRevenue, IFNULL(SUM(paid_amount),0) AS paidAmount, IFNULL(SUM(pending_amount),0) AS outstanding
+       FROM invoices WHERE hotel_id = ?${invoiceRange}`,
+      invoiceParams
     );
 
     const [revenue] = await db.query(
-      `
-      SELECT
-        DATE_FORMAT(generated_at,'%b') AS month,
-        SUM(total_amount) AS val
-      FROM invoices
-      ${invoiceDateFilter}
-      GROUP BY MONTH(generated_at), DATE_FORMAT(generated_at,'%b')
-      ORDER BY MONTH(generated_at)
-    `,
-      rangeParams
+      `SELECT DATE_FORMAT(generated_at,'%b') AS month, SUM(total_amount) AS val
+       FROM invoices WHERE hotel_id = ?${invoiceRange}
+       GROUP BY MONTH(generated_at), DATE_FORMAT(generated_at,'%b')
+       ORDER BY MONTH(generated_at)`,
+      invoiceParams
     );
 
     const [methods] = await db.query(
-      `
-      SELECT
-        payment_method,
-        COUNT(*) total
-      FROM payments
-      ${hasRange ? `WHERE payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?` : `WHERE payment_status='success'`}
-      GROUP BY payment_method
-    `,
-      rangeParams
+      `SELECT payment_method, COUNT(*) total
+       FROM payments
+       WHERE hotel_id = ? AND payment_status = 'success'${paymentRange}
+       GROUP BY payment_method`,
+      paymentParams
     );
 
     const totalMethodCount = methods.reduce((sum, m) => sum + Number(m.total), 0);
-
-    const colors = {
-      cash: "#10b981",
-      card: "#3b82f6",
-      upi: "#f59e0b",
-      bank_transfer: "#8b5cf6",
-    };
-
-    const paymentMethods = methods.map((m) => ({
-      label: m.payment_method,
-      pct: totalMethodCount === 0 ? 0 : Number(((m.total / totalMethodCount) * 100).toFixed(1)),
-      color: colors[m.payment_method] || "#64748b",
-    }));
+    const colors = { cash:"#10b981", card:"#3b82f6", upi:"#f59e0b", bank_transfer:"#8b5cf6" };
+    const paymentMethods = methods.map((m) => ({ label:m.payment_method, pct:totalMethodCount === 0 ? 0 : Number(((m.total / totalMethodCount) * 100).toFixed(1)), color:colors[m.payment_method] || "#64748b" }));
 
     const [recentPayments] = await db.query(
-      `
-      SELECT
-          c.full_name guest,
-          i.invoice_number inv,
-          CONCAT('₹ ',FORMAT(p.amount,0)) amount,
-          p.payment_status status,
-          DATE_FORMAT(p.payment_date,'%d %b %Y') date
-      FROM payments p
-      JOIN bookings b ON p.booking_id=b.booking_id
-      JOIN customers c ON b.customer_id=c.customer_id
-      JOIN invoices i ON i.booking_id=b.booking_id
-      ${paymentDateFilter}
-      ORDER BY p.payment_date DESC
-      LIMIT 5
-    `,
-      rangeParams
+      `SELECT c.full_name guest, i.invoice_number inv, CONCAT('₹ ',FORMAT(p.amount,0)) amount, p.payment_status status, DATE_FORMAT(p.payment_date,'%d %b %Y') date
+       FROM payments p
+       JOIN bookings b ON p.booking_id = b.booking_id AND b.hotel_id = p.hotel_id
+       JOIN customers c ON b.customer_id = c.customer_id
+       JOIN invoices i ON i.booking_id = b.booking_id AND i.hotel_id = b.hotel_id
+       WHERE p.hotel_id = ?${paymentRange}
+       ORDER BY p.payment_date DESC
+       LIMIT 5`,
+      paymentParams
     );
 
-    res.json({ stats, revenue, paymentMethods, recentPayments });
+    return res.json({ stats, revenue, paymentMethods, recentPayments });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to load billing dashboard" });
+    console.error("getBillingDashboard error:", err);
+    return res.status(500).json({ message:"Failed to load billing dashboard" });
   }
 };
-
-/* ===========================================================
-   REVENUE CHART
-=========================================================== */
 
 exports.getRevenueChart = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
     const { dateFrom, dateTo } = req.query;
     const hasRange = Boolean(dateFrom && dateTo);
-    const dateFilter = hasRange ? `WHERE DATE(generated_at) BETWEEN ? AND ?` : "";
-    const rangeParams = hasRange ? [dateFrom, dateTo] : [];
+    const dateRange = hasRange ? " AND DATE(generated_at) BETWEEN ? AND ?" : "";
+    const params = hasRange ? [hotelId, dateFrom, dateTo] : [hotelId];
 
     const [rows] = await db.query(
-      `
-      SELECT
-        DATE_FORMAT(generated_at,'%b') month,
-        SUM(total_amount) val
-      FROM invoices
-      ${dateFilter}
-      GROUP BY MONTH(generated_at), DATE_FORMAT(generated_at,'%b')
-      ORDER BY MONTH(generated_at)
-    `,
-      rangeParams
+      `SELECT DATE_FORMAT(generated_at,'%b') month, SUM(total_amount) val
+       FROM invoices
+       WHERE hotel_id = ?${dateRange}
+       GROUP BY MONTH(generated_at), DATE_FORMAT(generated_at,'%b')
+       ORDER BY MONTH(generated_at)`,
+      params
     );
 
-    res.json(rows);
+    return res.json(rows);
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Unable to load revenue chart" });
+    console.error("getRevenueChart error:", err);
+    return res.status(500).json({ message:"Unable to load revenue chart" });
   }
 };
-
-/* ===========================================================
-   PAYMENT METHODS
-=========================================================== */
 
 exports.getPaymentMethods = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
     const { dateFrom, dateTo } = req.query;
     const hasRange = Boolean(dateFrom && dateTo);
-    const whereClause = hasRange
-      ? `WHERE payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?`
-      : `WHERE payment_status='success'`;
-    const rangeParams = hasRange ? [dateFrom, dateTo] : [];
+    const dateRange = hasRange ? " AND DATE(payment_date) BETWEEN ? AND ?" : "";
+    const params = hasRange ? [hotelId, dateFrom, dateTo] : [hotelId];
 
     const [rows] = await db.query(
-      `
-        SELECT
-            payment_method,
-            COUNT(*) total
-        FROM payments
-        ${whereClause}
-        GROUP BY payment_method
-    `,
-      rangeParams
+      `SELECT payment_method, COUNT(*) total
+       FROM payments
+       WHERE hotel_id = ? AND payment_status = 'success'${dateRange}
+       GROUP BY payment_method`,
+      params
     );
 
-    const total = rows.reduce((s, r) => s + Number(r.total), 0);
+    const total = rows.reduce((sum, row) => sum + Number(row.total), 0);
+    const colors = { cash:"#10b981", card:"#3b82f6", upi:"#f59e0b", bank_transfer:"#8b5cf6" };
 
-    const colors = {
-      cash: "#10b981",
-      card: "#3b82f6",
-      upi: "#f59e0b",
-      bank_transfer: "#8b5cf6",
-    };
-
-    const data = rows.map((r) => ({
-      label: r.payment_method,
-      pct: total === 0 ? 0 : Number(((r.total / total) * 100).toFixed(1)),
-      color: colors[r.payment_method] || "#64748b",
-    }));
-
-    res.json(data);
+    return res.json(rows.map((row) => ({
+      label:row.payment_method,
+      pct:total === 0 ? 0 : Number(((row.total / total) * 100).toFixed(1)),
+      color:colors[row.payment_method] || "#64748b",
+    })));
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Unable to load payment methods" });
+    console.error("getPaymentMethods error:", err);
+    return res.status(500).json({ message:"Unable to load payment methods" });
   }
 };
 
-/* ===========================================================
-   RECENT PAYMENTS
-=========================================================== */
-
 exports.getRecentPayments = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
     const { dateFrom, dateTo, limit = 5 } = req.query;
     const hasRange = Boolean(dateFrom && dateTo);
-    const dateFilter = hasRange ? `WHERE DATE(payment_date) BETWEEN ? AND ?` : "";
-    const rangeParams = hasRange ? [dateFrom, dateTo] : [];
+    const dateRange = hasRange ? " AND DATE(p.payment_date) BETWEEN ? AND ?" : "";
+    const params = hasRange ? [hotelId, dateFrom, dateTo] : [hotelId];
+
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 5));
 
     const [rows] = await db.query(
-      `
-      SELECT
-        c.full_name guest,
-        i.invoice_number inv,
-        CONCAT('₹ ',FORMAT(p.amount,0)) amount,
-        p.payment_status status,
-        DATE_FORMAT(payment_date,'%d %b %Y') date
-      FROM payments p
-      JOIN bookings b ON p.booking_id=b.booking_id
-      JOIN customers c ON b.customer_id=c.customer_id
-      JOIN invoices i ON b.booking_id=i.booking_id
-      ${dateFilter}
-      ORDER BY payment_date DESC
-      LIMIT ?
-    `,
-      [...rangeParams, Number(limit)]
+      `SELECT c.full_name guest, i.invoice_number inv, CONCAT('₹ ',FORMAT(p.amount,0)) amount, p.payment_status status, DATE_FORMAT(p.payment_date,'%d %b %Y') date
+       FROM payments p
+       JOIN bookings b ON p.booking_id = b.booking_id AND b.hotel_id = p.hotel_id
+       JOIN customers c ON b.customer_id = c.customer_id
+       JOIN invoices i ON i.booking_id = b.booking_id AND i.hotel_id = b.hotel_id
+       WHERE p.hotel_id = ?${dateRange}
+       ORDER BY p.payment_date DESC
+       LIMIT ?`,
+      [...params, safeLimit]
     );
 
-    res.json(rows);
+    return res.json(rows);
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Unable to fetch recent payments" });
+    console.error("getRecentPayments error:", err);
+    return res.status(500).json({ message:"Unable to fetch recent payments" });
   }
 };
 
-/* ===========================================================
-   GET ALL INVOICES (search + status filter + date range + pagination)
-=========================================================== */
-
 exports.getAllInvoices = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
     const { search = "", status, page = 1, limit = 8, dateFrom, dateTo } = req.query;
-    const offset = (Number(page) - 1) * Number(limit);
-
-    const conditions = [];
-    const params = [];
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 8));
+    const offset = (safePage - 1) * safeLimit;
+    const conditions = ["i.hotel_id = ?"];
+    const params = [hotelId];
 
     if (search) {
       const like = `%${search}%`;
-      conditions.push(`(i.invoice_number LIKE ? OR c.full_name LIKE ? OR b.booking_id LIKE ?)`);
+      conditions.push("(i.invoice_number LIKE ? OR c.full_name LIKE ? OR b.booking_id LIKE ?)");
       params.push(like, like, like);
     }
 
-    // "All Bills" is the frontend's default tab label, not a real status — skip filtering on it
     if (status && status !== "All Bills") {
-      conditions.push(`i.invoice_status = ?`);
+      conditions.push("i.invoice_status = ?");
       params.push(status.toLowerCase());
     }
 
     if (dateFrom && dateTo) {
-      conditions.push(`DATE(i.generated_at) BETWEEN ? AND ?`);
+      conditions.push("DATE(i.generated_at) BETWEEN ? AND ?");
       params.push(dateFrom, dateTo);
     }
 
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
     const [[{ total }]] = await db.query(
       `SELECT COUNT(*) AS total
        FROM invoices i
-       JOIN bookings b ON i.booking_id = b.booking_id
+       JOIN bookings b ON i.booking_id = b.booking_id AND b.hotel_id = i.hotel_id
        JOIN customers c ON b.customer_id = c.customer_id
        ${whereClause}`,
       params
     );
 
     const [rows] = await db.query(
-      `SELECT
-        i.invoice_id,
-        i.invoice_number,
-
-        b.booking_id,
-        DATE_FORMAT(b.check_in, '%Y-%m-%d')  AS check_in,
-        DATE_FORMAT(b.check_out, '%Y-%m-%d') AS check_out,
-
-        c.full_name, r.room_number,
-        i.total_amount, i.paid_amount, i.pending_amount,
-        i.invoice_status,
-
-        (SELECT payment_method FROM payments
-         WHERE booking_id = b.booking_id
-         ORDER BY payment_date DESC LIMIT 1) AS payment_method
-
-      FROM invoices i
-      JOIN bookings b ON i.booking_id = b.booking_id
-      JOIN customers c ON b.customer_id = c.customer_id
-      JOIN rooms r ON b.room_id = r.room_id
-      ${whereClause}
-      ORDER BY i.generated_at DESC
-      LIMIT ? OFFSET ?`,
-      [...params, Number(limit), offset]
+      `SELECT i.invoice_id, i.invoice_number, b.booking_id, DATE_FORMAT(b.check_in,'%Y-%m-%d') AS check_in, DATE_FORMAT(b.check_out,'%Y-%m-%d') AS check_out,
+       c.full_name, r.room_number, i.total_amount, i.paid_amount, i.pending_amount, i.invoice_status,
+       COALESCE((SELECT SUM(CASE
+         WHEN p.transaction_type='payment' THEN p.amount
+         WHEN p.transaction_type='refund' THEN -p.amount
+         ELSE 0 END)
+       FROM payments p
+       WHERE p.booking_id=b.booking_id AND p.hotel_id=i.hotel_id AND p.payment_status='success'),0) AS net_paid,
+       (SELECT payment_method FROM payments WHERE booking_id = b.booking_id AND hotel_id = i.hotel_id ORDER BY payment_date DESC LIMIT 1) AS payment_method
+       FROM invoices i
+       JOIN bookings b ON i.booking_id = b.booking_id AND b.hotel_id = i.hotel_id
+       JOIN customers c ON b.customer_id = c.customer_id
+       JOIN rooms r ON b.room_id = r.room_id
+       ${whereClause}
+       ORDER BY i.generated_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, safeLimit, offset]
     );
 
     const invoices = rows.map((row) => ({
@@ -297,90 +227,55 @@ exports.getAllInvoices = async (req, res) => {
       amount: Number(row.total_amount),
       paid: Number(row.paid_amount),
       due: Number(row.pending_amount),
-      status:
-        row.invoice_status === "paid"
-          ? "Paid"
-          : row.invoice_status === "partial"
-          ? "Partial"
-          : "Unpaid",
+      netPaid: Number(row.net_paid),
+      refundDue: Math.max(0, Number(row.net_paid) - Number(row.total_amount)),
+      status: row.invoice_status === "paid" ? "Paid" : row.invoice_status === "partial" ? "Partial" : "Unpaid",
       method: row.payment_method || "-",
     }));
 
-    res.json({
-      invoices,
-      total,
-      totalPages: Math.max(1, Math.ceil(total / Number(limit))),
-    });
+    return res.json({ invoices, total, totalPages: Math.max(1, Math.ceil(total / safeLimit)) });
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Unable to fetch invoices" });
+    console.error("getAllInvoices error:", err);
+    return res.status(500).json({ message: "Unable to fetch invoices" });
   }
 };
 
-/* ===========================================================
-   GET SINGLE INVOICE
-=========================================================== */
-
 exports.getInvoiceById = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
     const { id } = req.params;
 
     const [[invoice]] = await db.query(
-      `
-      SELECT
-        i.invoice_id,
-        i.invoice_number,
-
-        b.booking_id,
-        DATE_FORMAT(b.check_in, '%Y-%m-%d')  AS check_in,
-        DATE_FORMAT(b.check_out, '%Y-%m-%d') AS check_out,
-
-        c.full_name,
-        c.phone,
-        c.email,
-
-        r.room_number,
-
-        i.room_charges,
-        i.food_charges,
-        i.laundry_charges,
-        i.extra_service_charges,
-
-        i.tax_amount,
-        i.total_amount,
-        i.paid_amount,
-        i.pending_amount,
-        i.invoice_status
-
-      FROM invoices i
-      JOIN bookings b ON i.booking_id=b.booking_id
-      JOIN customers c ON b.customer_id=c.customer_id
-      JOIN rooms r ON b.room_id=r.room_id
-      WHERE i.invoice_id=?
-    `,
-      [id]
+      `SELECT i.invoice_id, i.invoice_number, b.booking_id, DATE_FORMAT(b.check_in,'%Y-%m-%d') AS check_in, DATE_FORMAT(b.check_out,'%Y-%m-%d') AS check_out,
+       c.full_name, c.phone, c.email, r.room_number, i.room_charges, i.food_charges, i.laundry_charges, i.extra_service_charges,
+       i.tax_amount, i.total_amount, i.paid_amount, i.pending_amount, i.invoice_status,
+       COALESCE((SELECT SUM(CASE
+         WHEN p.transaction_type='payment' THEN p.amount
+         WHEN p.transaction_type='refund' THEN -p.amount
+         ELSE 0 END)
+       FROM payments p
+       WHERE p.booking_id=b.booking_id AND p.hotel_id=i.hotel_id AND p.payment_status='success'),0) AS net_paid
+       FROM invoices i
+       JOIN bookings b ON i.booking_id = b.booking_id AND b.hotel_id = i.hotel_id
+       JOIN customers c ON b.customer_id = c.customer_id
+       JOIN rooms r ON b.room_id = r.room_id
+       WHERE i.invoice_id = ? AND i.hotel_id = ?`,
+      [id, hotelId]
     );
 
-    if (!invoice) {
-      return res.status(404).json({ message: "Invoice not found" });
-    }
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
     const [[payment]] = await db.query(
-      `
-      SELECT
-        payment_method,
-        payment_status,
-        payment_date,
-        transaction_id
-      FROM payments
-      WHERE booking_id=?
-      ORDER BY payment_date DESC
-      LIMIT 1
-    `,
-      [invoice.booking_id]
+      `SELECT payment_method, payment_status, payment_date, transaction_id
+       FROM payments
+       WHERE booking_id = ? AND hotel_id = ?
+       ORDER BY payment_date DESC
+       LIMIT 1`,
+      [invoice.booking_id, hotelId]
     );
 
-    const response = {
+    return res.json({
       invoice_id: invoice.invoice_id,
       id: invoice.invoice_number,
       bookingId: invoice.booking_id,
@@ -398,25 +293,22 @@ exports.getInvoiceById = async (req, res) => {
       total: Number(invoice.total_amount),
       paid: Number(invoice.paid_amount),
       due: Number(invoice.pending_amount),
+      netPaid: Number(invoice.net_paid),
+      refundDue: Math.max(0, Number(invoice.net_paid) - Number(invoice.total_amount)),
       status: invoice.invoice_status,
       paymentMethod: payment?.payment_method || "-",
       paymentStatus: payment?.payment_status || "-",
       transactionId: payment?.transaction_id || "-",
       paymentDate: payment?.payment_date || null,
-    };
-
-    res.json(response);
+    });
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Unable to fetch invoice" });
+    console.error("getInvoiceById error:", err);
+    return res.status(500).json({ message: "Unable to fetch invoice" });
   }
 };
 
-/* ===========================================================
-   CREATE INVOICE
-=========================================================== */
-
 exports.createInvoice = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
   const connection = await db.getConnection();
 
   try {
@@ -424,23 +316,24 @@ exports.createInvoice = async (req, res) => {
 
     const {
       booking_id,
-      payment_method,
       room_charges = 0,
       food_charges = 0,
       laundry_charges = 0,
       extra_service_charges = 0,
       tax_amount = 0,
-      paid_amount = 0,
     } = req.body;
 
-    // NOTE: booking_id here is the numeric primary key (bookings.booking_id),
-    // the same value the frontend uses to fetch booking details for autofill
-    // (GET /api/bookings/:id) and the same value stored in the dropdown's
-    // option `value`. It is NOT the human-readable booking_code (e.g. "BK-1001"),
-    // so this must look up by booking_id, not booking_code.
     const [[booking]] = await connection.query(
-      "SELECT * FROM bookings WHERE booking_id=?",
-      [booking_id]
+      `SELECT b.booking_id,b.booking_status,
+              (SELECT bfs.final_payable_amount
+               FROM booking_financial_settlements bfs
+               WHERE bfs.hotel_id=b.hotel_id AND bfs.booking_id=b.booking_id
+                 AND bfs.settlement_status='finalized'
+               ORDER BY bfs.settlement_id DESC LIMIT 1) AS final_payable_amount
+       FROM bookings b
+       WHERE b.booking_id=? AND b.hotel_id=?
+       FOR UPDATE`,
+      [booking_id, hotelId]
     );
 
     if (!booking) {
@@ -448,76 +341,83 @@ exports.createInvoice = async (req, res) => {
       return res.status(404).json({ message: "Booking not found" });
     }
 
-    const total_amount =
+    const [[duplicate]] = await connection.query(
+      "SELECT invoice_id FROM invoices WHERE booking_id=? AND hotel_id=? LIMIT 1",
+      [booking_id, hotelId]
+    );
+
+    if (duplicate) {
+      await connection.rollback();
+      return res.status(409).json({ message: "Invoice already exists for this booking" });
+    }
+
+    const manualTotal =
       Number(room_charges) +
       Number(food_charges) +
       Number(laundry_charges) +
       Number(extra_service_charges) +
       Number(tax_amount);
 
-    const pending_amount = total_amount - Number(paid_amount);
+    const isFinalizedLifecycle =
+      ["no_show", "cancelled"].includes(booking.booking_status) &&
+      booking.final_payable_amount !== null;
+
+    const total_amount = isFinalizedLifecycle
+      ? Math.max(0, Number(booking.final_payable_amount))
+      : manualTotal;
+
+    const invoiceRoomCharges = isFinalizedLifecycle ? total_amount : Number(room_charges);
+    const invoiceFoodCharges = isFinalizedLifecycle ? 0 : Number(food_charges);
+    const invoiceLaundryCharges = isFinalizedLifecycle ? 0 : Number(laundry_charges);
+    const invoiceExtraCharges = isFinalizedLifecycle ? 0 : Number(extra_service_charges);
+    const invoiceTaxAmount = isFinalizedLifecycle ? 0 : Number(tax_amount);
+
+    const [[ledger]] = await connection.query(
+      `SELECT COALESCE(SUM(CASE
+         WHEN transaction_type='payment' THEN amount
+         WHEN transaction_type='refund' THEN -amount
+         ELSE 0 END),0) AS net_paid
+       FROM payments
+       WHERE booking_id=? AND hotel_id=? AND payment_status='success'`,
+      [booking_id, hotelId]
+    );
+
+    const netPaid = Math.max(0, Number(ledger.net_paid) || 0);
+    const paid_amount = Math.min(netPaid, total_amount);
+    const pending_amount = Math.max(0, total_amount - paid_amount);
 
     let invoice_status = "unpaid";
-    if (pending_amount <= 0) invoice_status = "paid";
+    if (total_amount <= 0 || paid_amount >= total_amount) invoice_status = "paid";
     else if (paid_amount > 0) invoice_status = "partial";
 
     const invoice_number = "INV-" + Date.now();
 
     const [result] = await connection.query(
       `INSERT INTO invoices
-      (
-        booking_id,
-        invoice_number,
-        room_charges,
-        food_charges,
-        laundry_charges,
-        extra_service_charges,
-        tax_amount,
-        total_amount,
-        paid_amount,
-        pending_amount,
-        invoice_status
-      )
-      VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+       (hotel_id, booking_id, invoice_number, room_charges, food_charges, laundry_charges,
+        extra_service_charges, tax_amount, total_amount, paid_amount, pending_amount, invoice_status)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
-        booking_id,
-        invoice_number,
-        room_charges,
-        food_charges,
-        laundry_charges,
-        extra_service_charges,
-        tax_amount,
-        total_amount,
-        paid_amount,
-        pending_amount,
-        invoice_status,
+        hotelId, booking_id, invoice_number, invoiceRoomCharges, invoiceFoodCharges,
+        invoiceLaundryCharges, invoiceExtraCharges, invoiceTaxAmount, total_amount,
+        paid_amount, pending_amount, invoice_status,
       ]
     );
 
-    // Record the payment so it shows up in Payment Methods / Recent Payments,
-    // which both read from the `payments` table — previously nothing was
-    // ever inserted there, so those widgets stayed empty no matter what.
-    if (Number(paid_amount) > 0) {
-      const dbMethod = METHOD_MAP[payment_method] || payment_method?.toLowerCase() || "cash";
-
-      await connection.query(
-        `INSERT INTO payments
-          (booking_id, amount, payment_method, payment_status, payment_date)
-         VALUES (?, ?, ?, 'success', NOW())`,
-        [booking_id, paid_amount, dbMethod]
-      );
-    }
-
     await connection.commit();
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Invoice generated successfully",
       invoice_id: result.insertId,
+      paid_amount,
+      pending_amount,
+      invoice_status,
+      settlement_applied: isFinalizedLifecycle,
     });
   } catch (err) {
     await connection.rollback();
-    console.log(err);
-    res.status(500).json({ message: "Unable to generate invoice" });
+    console.error("createInvoice error:", err);
+    return res.status(500).json({ message: "Unable to generate invoice" });
   } finally {
     connection.release();
   }
@@ -526,28 +426,34 @@ exports.createInvoice = async (req, res) => {
 /* ===========================================================
    UPDATE INVOICE
 =========================================================== */
-
 exports.updateInvoice = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
   const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();
 
     const { id } = req.params;
-
     const {
-      payment_method,
       room_charges,
       food_charges,
       laundry_charges,
       extra_service_charges,
       tax_amount,
-      paid_amount,
     } = req.body;
 
     const [[existing]] = await connection.query(
-      "SELECT booking_id, paid_amount AS previously_paid FROM invoices WHERE invoice_id=?",
-      [id]
+      `SELECT i.booking_id,b.booking_status,
+              (SELECT bfs.final_payable_amount
+               FROM booking_financial_settlements bfs
+               WHERE bfs.hotel_id=b.hotel_id AND bfs.booking_id=b.booking_id
+                 AND bfs.settlement_status='finalized'
+               ORDER BY bfs.settlement_id DESC LIMIT 1) AS final_payable_amount
+       FROM invoices i
+       JOIN bookings b ON b.booking_id=i.booking_id AND b.hotel_id=i.hotel_id
+       WHERE i.invoice_id=? AND i.hotel_id=?
+       FOR UPDATE`,
+      [id, hotelId]
     );
 
     if (!existing) {
@@ -555,71 +461,70 @@ exports.updateInvoice = async (req, res) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    const total_amount =
+    const manualTotal =
       Number(room_charges) +
       Number(food_charges) +
       Number(laundry_charges) +
       Number(extra_service_charges) +
       Number(tax_amount);
 
-    const pending_amount = total_amount - Number(paid_amount);
+    const isFinalizedLifecycle =
+      ["no_show", "cancelled"].includes(existing.booking_status) &&
+      existing.final_payable_amount !== null;
+
+    const total_amount = isFinalizedLifecycle
+      ? Math.max(0, Number(existing.final_payable_amount))
+      : manualTotal;
+
+    const invoiceRoomCharges = isFinalizedLifecycle ? total_amount : Number(room_charges);
+    const invoiceFoodCharges = isFinalizedLifecycle ? 0 : Number(food_charges);
+    const invoiceLaundryCharges = isFinalizedLifecycle ? 0 : Number(laundry_charges);
+    const invoiceExtraCharges = isFinalizedLifecycle ? 0 : Number(extra_service_charges);
+    const invoiceTaxAmount = isFinalizedLifecycle ? 0 : Number(tax_amount);
+
+    const [[ledger]] = await connection.query(
+      `SELECT COALESCE(SUM(CASE
+         WHEN transaction_type='payment' THEN amount
+         WHEN transaction_type='refund' THEN -amount
+         ELSE 0 END),0) AS net_paid
+       FROM payments
+       WHERE booking_id=? AND hotel_id=? AND payment_status='success'`,
+      [existing.booking_id, hotelId]
+    );
+
+    const netPaid = Math.max(0, Number(ledger.net_paid) || 0);
+    const paid_amount = Math.min(netPaid, total_amount);
+    const pending_amount = Math.max(0, total_amount - paid_amount);
 
     let invoice_status = "unpaid";
-    if (pending_amount <= 0) invoice_status = "paid";
+    if (total_amount <= 0 || paid_amount >= total_amount) invoice_status = "paid";
     else if (paid_amount > 0) invoice_status = "partial";
 
     await connection.query(
-      `
-      UPDATE invoices
-      SET
-        room_charges=?,
-        food_charges=?,
-        laundry_charges=?,
-        extra_service_charges=?,
-        tax_amount=?,
-        total_amount=?,
-        paid_amount=?,
-        pending_amount=?,
-        invoice_status=?
-      WHERE invoice_id=?
-      `,
+      `UPDATE invoices
+       SET room_charges=?, food_charges=?, laundry_charges=?, extra_service_charges=?,
+           tax_amount=?, total_amount=?, paid_amount=?, pending_amount=?, invoice_status=?
+       WHERE invoice_id=? AND hotel_id=?`,
       [
-        room_charges,
-        food_charges,
-        laundry_charges,
-        extra_service_charges,
-        tax_amount,
-        total_amount,
-        paid_amount,
-        pending_amount,
-        invoice_status,
-        id,
+        invoiceRoomCharges, invoiceFoodCharges, invoiceLaundryCharges, invoiceExtraCharges,
+        invoiceTaxAmount, total_amount, paid_amount, pending_amount,
+        invoice_status, id, hotelId,
       ]
     );
 
-    // Only record a new payment for the amount newly paid in this edit,
-    // so re-saving an already-paid invoice doesn't double-count it in
-    // Payment Methods / Recent Payments.
-    const newlyPaid = Number(paid_amount) - Number(existing.previously_paid);
-
-    if (newlyPaid > 0) {
-      const dbMethod = METHOD_MAP[payment_method] || payment_method?.toLowerCase() || "cash";
-
-      await connection.query(
-        `INSERT INTO payments
-          (booking_id, amount, payment_method, payment_status, payment_date)
-         VALUES (?, ?, ?, 'success', NOW())`,
-        [existing.booking_id, newlyPaid, dbMethod]
-      );
-    }
-
     await connection.commit();
 
-    res.json({ message: "Invoice updated successfully" });
+    return res.json({
+      message: "Invoice updated successfully",
+      paid_amount,
+      pending_amount,
+      invoice_status,
+      settlement_applied: isFinalizedLifecycle,
+    });
   } catch (err) {
     await connection.rollback();
-    console.log(err);
-    res.status(500).json({ message: "Unable to update invoice" });
+    console.error("updateInvoice error:", err);
+    return res.status(500).json({ message: "Unable to update invoice" });
   } finally {
     connection.release();
   }
@@ -628,12 +533,20 @@ exports.updateInvoice = async (req, res) => {
 /* ===========================================================
    DELETE INVOICE
 =========================================================== */
-
 exports.deleteInvoice = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
     const { id } = req.params;
 
-    await db.query("DELETE FROM invoices WHERE invoice_id=?", [id]);
+    const [result] = await db.query(
+      "DELETE FROM invoices WHERE invoice_id=? AND hotel_id=?",
+      [id, hotelId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
 
     res.json({ message: "Invoice deleted successfully" });
   } catch (err) {
