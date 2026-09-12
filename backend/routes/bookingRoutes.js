@@ -2,6 +2,16 @@ const express = require("express");
 
 const router = express.Router();
 
+const {
+  changeBookingRoom,
+  startTemporaryBookingRoomChange,
+  markOriginalBookingRoomReady,
+  returnBookingToOriginalRoom,
+  stayInReplacementRoom,
+} = require(
+  "../controllers/booking/bookingRoomChangeController"
+);
+
 
 /* ============================================================
    CONTROLLERS
@@ -12,26 +22,71 @@ const {
   getBookings,
   getBooking,
   getReservationGroupDetails,
+} = require(
+  "../controllers/booking/bookingQueryController"
+);
+
+const {
+  quoteBookingEditPrice,
+  updateBooking,
+} = require(
+  "../controllers/booking/bookingEditController"
+);
+
+const {
   quoteBookingPrice,
   quoteReservationGroupRooms,
-  quoteBookingEditPrice,
-  addBooking,
-  addReservationGroupRooms,
-  updateBooking,
-  checkInBooking,
-  checkInBookingGuest,
-  checkoutBookingGuest,
-  extendStayBooking,
+} = require(
+  "../controllers/booking/bookingPricingController"
+);
+
+const {
   collectReservationGroupPayment,
-  checkoutReservationGroup,
   collectBookingPayment,
   refundNoShowOverpayment,
   refundCancellationOverpayment,
-  checkoutBooking,
+} = require(
+  "../controllers/booking/bookingPaymentController"
+);
+
+const {
   cancelBooking,
+} = require(
+  "../controllers/booking/bookingCancellationController"
+);
+
+const {
+  checkInBooking,
+  extendStayBooking,
+  checkoutBooking,
+} = require(
+  "../controllers/booking/bookingLifecycleController"
+);
+
+const {
+  checkInBookingGuest,
+  checkoutBookingGuest,
+} = require(
+  "../controllers/booking/bookingGuestController"
+);
+
+const {
+  checkoutReservationGroup,
+} = require(
+  "../controllers/booking/bookingGroupController"
+);
+
+const {
   deleteBooking,
 } = require(
-  "../controllers/bookingController"
+  "../controllers/booking/bookingDeleteController"
+);
+
+const {
+  addBooking,
+  addReservationGroupRooms,
+} = require(
+  "../controllers/booking/bookingCreateController"
 );
 
 
@@ -206,6 +261,51 @@ router.post(
 router.post(
   "/:id/extend-stay",
   extendStayBooking
+);
+
+/* ============================================================
+   CHANGE ROOM DURING ACTIVE STAY
+============================================================ */
+
+router.post(
+  "/:id/change-room",
+  changeBookingRoom
+);
+
+/* ============================================================
+   START TEMPORARY ROOM CHANGE
+============================================================ */
+
+router.post(
+  "/:id/temporary-room-change",
+  startTemporaryBookingRoomChange
+);
+
+/* ============================================================
+   MARK ORIGINAL ROOM READY
+============================================================ */
+
+router.post(
+  "/:id/original-room-ready",
+  markOriginalBookingRoomReady
+);
+
+/* ============================================================
+   RETURN TO ORIGINAL ROOM
+============================================================ */
+
+router.post(
+  "/:id/return-original-room",
+  returnBookingToOriginalRoom
+);
+
+/* ============================================================
+   STAY IN REPLACEMENT ROOM
+============================================================ */
+
+router.post(
+  "/:id/stay-replacement",
+  stayInReplacementRoom
 );
 
 /* ============================================================

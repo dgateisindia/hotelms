@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 
-import apiClient from "../services/apiClient";
+import apiClient from "../shared/api/apiClient";
 
 export function useUserRole() {
   const {

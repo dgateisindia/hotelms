@@ -4,19 +4,29 @@ const promisePool = db.promisePool; // needed for the transactional approve flow
 // ===============================
 // Create Customer Room Request
 // ===============================
-exports.createRequest = (req, res) => {
+exports.createRequest = async (req, res) => {
+  const publicToken = String(req.params.publicToken || "").trim();
+
   const {
     room_type,
     full_name,
     phone,
     email,
     gender,
+    nationality,
     address,
     check_in,
     check_out,
     guests,
     special_request,
-  } = req.body;
+  } = req.body || {};
+
+  if (!publicToken) {
+    return res.status(400).json({
+      success: false,
+      message: "QR token is required.",
+    });
+  }
 
   if (!full_name || !phone || !check_in || !check_out) {
     return res.status(400).json({
@@ -25,159 +35,362 @@ exports.createRequest = (req, res) => {
     });
   }
 
-  const sql = `
-    INSERT INTO customer_requests
-    (
-      room_type,
-      full_name,
-      phone,
-      email,
-      gender,
-      address,
-      check_in,
-      check_out,
-      guests,
-      special_request
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
-  db.query(
-    sql,
-    [
-      room_type || null,
-      full_name,
-      phone,
-      email || null,
-      gender || null,
-      address || null,
-      check_in,
-      check_out,
-      guests || 1,
-      special_request || "",
-    ],
-    (err, result) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({
-          success: false,
-          message: err.sqlMessage,
-        });
-      }
+  if (!datePattern.test(check_in) || !datePattern.test(check_out)) {
+    return res.status(400).json({
+      success: false,
+      message: "Check-in and check-out dates are invalid.",
+    });
+  }
 
-      // Log an admin notification. This runs AFTER the insert succeeds and
-      // uses the values already in scope here — fire-and-forget so a
-      // notification failure never blocks the customer's response.
-      const notificationSql = `
-        INSERT INTO notifications (user_id, title, message)
-        VALUES (?, ?, ?)
-      `;
-      db.query(
-        notificationSql,
-        [
-          1, // TODO: replace with the actual admin user_id
-          "New Room Request",
-          `${full_name} submitted a room request${room_type ? ` for a ${room_type}` : ""}.`,
-        ],
-        (notifErr) => {
-          if (notifErr) console.error("Failed to log notification:", notifErr);
-        }
-      );
+  if (check_out <= check_in) {
+    return res.status(400).json({
+      success: false,
+      message: "Check-out date must be after check-in date.",
+    });
+  }
 
-      res.status(201).json({
-        success: true,
-        message: "Room request submitted successfully.",
-        requestId: result.insertId,
+  const guestCount =
+    guests === undefined ||
+    guests === null ||
+    guests === ""
+      ? 1
+      : Number(guests);
+
+  if (!Number.isInteger(guestCount) || guestCount < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "Guests must be at least 1.",
+    });
+  }
+
+  try {
+    const [qrRows] = await promisePool.query(
+      `
+        SELECT qr.hotel_id
+        FROM qr_codes qr
+        INNER JOIN hotels h
+          ON h.hotel_id = qr.hotel_id
+        WHERE qr.public_token = ?
+          AND qr.status = 'active'
+          AND h.status = 'active'
+        LIMIT 1
+      `,
+      [publicToken]
+    );
+
+    if (!qrRows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "This QR code is invalid or inactive.",
       });
     }
-  );
+
+    const hotelId = Number(qrRows[0].hotel_id);
+
+    const [result] = await promisePool.query(
+      `
+        INSERT INTO customer_requests (
+          hotel_id,
+          room_type,
+          full_name,
+          phone,
+          email,
+          gender,
+          nationality,
+          address,
+          check_in,
+          check_out,
+          guests,
+          special_request
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        hotelId,
+        room_type || null,
+        full_name.trim(),
+        phone.trim(),
+        email || null,
+        gender || null,
+        nationality || null,
+        address || null,
+        check_in,
+        check_out,
+        guestCount,
+        special_request || null,
+      ]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Room request submitted successfully.",
+      requestId: result.insertId,
+    });
+  } catch (err) {
+    console.error("Create customer request error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to submit the room request.",
+    });
+  }
+};
+
+
+exports.getHotelQrToken = async (req, res) => {
+  const hotelId = Number(req.dbUser.hotelId);
+
+  if (!Number.isInteger(hotelId) || hotelId < 1) {
+    return res.status(403).json({
+      success: false,
+      message: "Hotel context is unavailable.",
+    });
+  }
+
+  try {
+    const [rows] = await promisePool.query(
+      `
+        SELECT public_token, status
+        FROM qr_codes
+        WHERE hotel_id = ?
+        LIMIT 1
+      `,
+      [hotelId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "QR code is not configured for this hotel.",
+      });
+    }
+
+    if (rows[0].status !== "active") {
+      return res.status(409).json({
+        success: false,
+        message: "The hotel QR code is inactive.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        publicToken: rows[0].public_token,
+        status: rows[0].status,
+      },
+    });
+  } catch (err) {
+    console.error("Get hotel QR token error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to load the hotel QR code.",
+    });
+  }
 };
 
 // ===============================
 // Get All Requests
 // ===============================
-exports.getRequests = (req, res) => {
-  const sql = `
-    SELECT *
-    FROM customer_requests
-    ORDER BY created_at DESC
-  `;
+exports.getRequests = async (req, res) => {
+  const hotelId = Number(req.dbUser.hotelId);
 
-  db.query(sql, (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({
-        success: false,
-        message: "Database error",
-      });
-    }
+  try {
+    const [rows] = await promisePool.query(
+      `
+        SELECT
+          request_id,
+          hotel_id,
+          room_type,
+          full_name,
+          phone,
+          email,
+          gender,
+          nationality,
+          address,
+          DATE_FORMAT(check_in,'%Y-%m-%d') AS check_in,
+          DATE_FORMAT(check_out,'%Y-%m-%d') AS check_out,
+          guests,
+          special_request,
+          status,
+          assigned_room_id,
+          (
+            SELECT r.room_number
+            FROM rooms r
+            WHERE r.room_id = customer_requests.assigned_room_id
+              AND r.hotel_id = customer_requests.hotel_id
+            LIMIT 1
+          ) AS assigned_room_number,
+          handled_by_admin_id,
+          updated_by_admin_id,
+          handled_at,
+          seen,
+          created_at,
+          updated_at
+        FROM customer_requests
+        WHERE hotel_id = ?
+        ORDER BY created_at DESC
+      `,
+      [hotelId]
+    );
 
-    res.json({
+    return res.json({
       success: true,
-      data: results,
+      data: rows,
     });
-  });
+  } catch (err) {
+    console.error("Get customer requests error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to load customer requests.",
+    });
+  }
 };
 
 // ===============================
 // Get Single Request
 // ===============================
-exports.getRequestById = (req, res) => {
-  const sql = `
-    SELECT *
-    FROM customer_requests
-    WHERE request_id = ?
-  `;
+exports.getRequestById = async (req, res) => {
+  const hotelId = Number(req.dbUser.hotelId);
+  const requestId = Number(req.params.id);
 
-  db.query(sql, [req.params.id], (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({
-        success: false,
-        message: "Database error",
-      });
-    }
+  if (!Number.isInteger(requestId) || requestId < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request ID.",
+    });
+  }
 
-    if (results.length === 0) {
+  try {
+    const [rows] = await promisePool.query(
+      `
+        SELECT
+          request_id,
+          hotel_id,
+          room_type,
+          full_name,
+          phone,
+          email,
+          gender,
+          nationality,
+          address,
+          DATE_FORMAT(check_in,'%Y-%m-%d') AS check_in,
+          DATE_FORMAT(check_out,'%Y-%m-%d') AS check_out,
+          guests,
+          special_request,
+          status,
+          assigned_room_id,
+          (
+            SELECT r.room_number
+            FROM rooms r
+            WHERE r.room_id = customer_requests.assigned_room_id
+              AND r.hotel_id = customer_requests.hotel_id
+            LIMIT 1
+          ) AS assigned_room_number,
+          handled_by_admin_id,
+          updated_by_admin_id,
+          handled_at,
+          seen,
+          created_at,
+          updated_at
+        FROM customer_requests
+        WHERE hotel_id = ?
+          AND request_id = ?
+        LIMIT 1
+      `,
+      [hotelId, requestId]
+    );
+
+    if (!rows.length) {
       return res.status(404).json({
         success: false,
         message: "Request not found.",
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
-      data: results[0],
+      data: rows[0],
     });
-  });
+  } catch (err) {
+    console.error("Get customer request error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to load the customer request.",
+    });
+  }
 };
 
 // ===============================
 // Update Status (generic — kept for backward compatibility)
 // ===============================
-exports.updateStatus = (req, res) => {
-  const { status } = req.body;
+exports.updateStatus = async (req, res) => {
+  const hotelId = Number(req.dbUser.hotelId);
+  const adminId = Number(req.dbUser.adminId);
+  const requestId = Number(req.params.id);
+  const status = String(req.body?.status || "").trim().toLowerCase();
 
-  const sql = `
-    UPDATE customer_requests
-    SET status = ?
-    WHERE request_id = ?
-  `;
+  if (!Number.isInteger(requestId) || requestId < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request ID.",
+    });
+  }
 
-  db.query(sql, [status, req.params.id], (err) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({
+  if (!["pending", "declined"].includes(status)) {
+    return res.status(400).json({
+      success: false,
+      message: "Only pending or declined status can be set through this endpoint.",
+    });
+  }
+
+  try {
+    const [result] = await promisePool.query(
+      `
+        UPDATE customer_requests
+        SET
+          status = ?,
+          updated_by_admin_id = ?,
+          handled_by_admin_id = CASE WHEN ?='declined' THEN ? ELSE handled_by_admin_id END,
+          handled_at = CASE WHEN ?='declined' THEN NOW() ELSE handled_at END
+        WHERE hotel_id = ?
+          AND request_id = ?
+          AND status <> 'approved'
+      `,
+      [
+        status,
+        adminId,
+        status,
+        adminId,
+        status,
+        hotelId,
+        requestId,
+      ]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
         success: false,
-        message: "Database error",
+        message: "Request not found or cannot be changed.",
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       message: "Status updated successfully.",
     });
-  });
+  } catch (err) {
+    console.error("Update customer request status error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to update request status.",
+    });
+  }
 };
 
 // ===============================
@@ -186,201 +399,196 @@ exports.updateStatus = (req, res) => {
 // occupied, and marks the request approved — all in one transaction.
 // ===============================
 exports.approveRequest = async (req, res) => {
-  const { id } = req.params;
-  const { assignedRoom } = req.body;
-
-  if (!assignedRoom) {
-    return res.status(400).json({
-      success: false,
-      message: "assignedRoom is required to approve a request.",
-    });
-  }
-
-  let connection;
-
-  try {
-    // 1. Load the request
-    const [requestRows] = await promisePool.query(
-      `SELECT * FROM customer_requests WHERE request_id = ?`,
-      [id]
-    );
-
-    if (!requestRows.length) {
-      return res.status(404).json({ success: false, message: "Request not found." });
-    }
-
-    const request = requestRows[0];
-
-    // 2. Look up the room by the typed room number
-    const [roomRows] = await promisePool.query(
-      `SELECT room_id, price_per_night, status FROM rooms WHERE room_number = ?`,
-      [assignedRoom]
-    );
-
-    if (!roomRows.length) {
-      return res.status(400).json({
-        success: false,
-        message: `Room ${assignedRoom} does not exist.`,
-      });
-    }
-
-    const room = roomRows[0];
-
-    if (room.status === "occupied") {
-      return res.status(400).json({
-        success: false,
-        message: `Room ${assignedRoom} is already occupied.`,
-      });
-    }
-
-    connection = await promisePool.getConnection();
-    await connection.beginTransaction();
-
-    // 3. Find an existing customer by phone, or create one
-    let customerId;
-    const [existingCustomers] = await connection.query(
-      `SELECT customer_id FROM customers WHERE phone = ? LIMIT 1`,
-      [request.phone]
-    );
-
-    if (existingCustomers.length) {
-      customerId = existingCustomers[0].customer_id;
-    } else {
-      const [customerResult] = await connection.query(
-        `INSERT INTO customers (full_name, email, phone, gender, address)
-         VALUES (?, ?, ?, ?, ?)`,
-        [request.full_name, request.email, request.phone, request.gender, request.address]
-      );
-      customerId = customerResult.insertId;
-    }
-
-    // 4. Work out nights / total amount from the room's nightly rate
-    const nights = Math.max(
-      1,
-      Math.ceil(
-        (new Date(request.check_out) - new Date(request.check_in)) / (1000 * 60 * 60 * 24)
-      )
-    );
-    const totalAmount = room.price_per_night ? room.price_per_night * nights : null;
-    const bookingCode = `BK${Date.now()}`;
-
-    // 5. Create the booking
-    await connection.query(
-      `INSERT INTO bookings
-        (customer_id, room_id, booking_code, check_in, check_out, total_guests,
-         booking_status, payment_status, total_amount, special_request)
-       VALUES (?, ?, ?, ?, ?, ?, 'confirmed', 'unpaid', ?, ?)`,
-      [
-        customerId,
-        room.room_id,
-        bookingCode,
-        request.check_in,
-        request.check_out,
-        request.guests,
-        totalAmount,
-        request.special_request,
-      ]
-    );
-
-    // 6. Mark the room occupied — valid enum value
-    await connection.query(
-      `UPDATE rooms SET status = 'occupied' WHERE room_id = ?`,
-      [room.room_id]
-    );
-
-    // 7. Mark the request approved
-    await connection.query(
-      `UPDATE customer_requests SET status = 'approved', assigned_room = ? WHERE request_id = ?`,
-      [assignedRoom, id]
-    );
-
-    await connection.commit();
-    connection.release();
-
-    return res.json({
-      success: true,
-      message: "Request approved, customer and booking created.",
-      data: { customerId, roomId: room.room_id, bookingCode },
-    });
-  } catch (err) {
-    console.error(err);
-    if (connection) {
-      await connection.rollback();
-      connection.release();
-    }
-    return res.status(500).json({ success: false, message: "Database error" });
-  }
+  return res.status(409).json({
+    success: false,
+    code: "USE_CANONICAL_BOOKING_FLOW",
+    message: "Convert this request through the booking flow. Direct request approval is disabled.",
+  });
 };
 
 // ===============================
 // Decline Request
 // ===============================
-exports.declineRequest = (req, res) => {
-  const { id } = req.params;
+exports.declineRequest = async (req, res) => {
+  const hotelId = Number(req.dbUser.hotelId);
+  const adminId = Number(req.dbUser.adminId);
+  const requestId = Number(req.params.id);
 
-  const updateSql = `
-    UPDATE customer_requests
-    SET status = 'declined'
-    WHERE request_id = ?
-  `;
+  if (!Number.isInteger(requestId) || requestId < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request ID.",
+    });
+  }
 
-  db.query(updateSql, [id], (err) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ success: false, message: "Database error" });
+  try {
+    const [result] = await promisePool.query(
+      `
+        UPDATE customer_requests
+        SET
+          status = 'declined',
+          handled_by_admin_id = ?,
+          updated_by_admin_id = ?,
+          handled_at = NOW(),
+          seen = 1
+        WHERE hotel_id = ?
+          AND request_id = ?
+          AND status = 'pending'
+      `,
+      [adminId, adminId, hotelId, requestId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Pending request not found.",
+      });
     }
 
-    db.query(
-      `SELECT * FROM customer_requests WHERE request_id = ?`,
-      [id],
-      (fetchErr, rows) => {
-        if (fetchErr || rows.length === 0) {
-          return res.json({ success: true, message: "Request declined." });
-        }
-        res.json({ success: true, message: "Request declined.", data: rows[0] });
-      }
+    const [rows] = await promisePool.query(
+      `
+        SELECT
+          request_id,
+          hotel_id,
+          room_type,
+          full_name,
+          phone,
+          email,
+          gender,
+          nationality,
+          address,
+          DATE_FORMAT(check_in,'%Y-%m-%d') AS check_in,
+          DATE_FORMAT(check_out,'%Y-%m-%d') AS check_out,
+          guests,
+          special_request,
+          status,
+          assigned_room_id,
+          (
+            SELECT r.room_number
+            FROM rooms r
+            WHERE r.room_id = customer_requests.assigned_room_id
+              AND r.hotel_id = customer_requests.hotel_id
+            LIMIT 1
+          ) AS assigned_room_number,
+          handled_by_admin_id,
+          updated_by_admin_id,
+          handled_at,
+          seen,
+          created_at,
+          updated_at
+        FROM customer_requests
+        WHERE hotel_id = ?
+          AND request_id = ?
+        LIMIT 1
+      `,
+      [hotelId, requestId]
     );
-  });
+
+    return res.json({
+      success: true,
+      message: "Request declined.",
+      data: rows[0] || null,
+    });
+  } catch (err) {
+    console.error("Decline customer request error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to decline the request.",
+    });
+  }
 };
 
 // ===============================
 // Mark Seen
 // ===============================
-exports.markSeen = (req, res) => {
-  db.query(
-    `UPDATE customer_requests SET seen = 1 WHERE request_id = ?`,
-    [req.params.id],
-    (err) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ success: false, message: "Database error" });
-      }
-      res.json({ success: true });
+exports.markSeen = async (req, res) => {
+  const hotelId = Number(req.dbUser.hotelId);
+  const adminId = Number(req.dbUser.adminId);
+  const requestId = Number(req.params.id);
+
+  if (!Number.isInteger(requestId) || requestId < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request ID.",
+    });
+  }
+
+  try {
+    const [result] = await promisePool.query(
+      `
+        UPDATE customer_requests
+        SET
+          seen = 1,
+          updated_by_admin_id = ?
+        WHERE hotel_id = ?
+          AND request_id = ?
+      `,
+      [adminId, hotelId, requestId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Request not found.",
+      });
     }
-  );
+
+    return res.json({
+      success: true,
+    });
+  } catch (err) {
+    console.error("Mark customer request seen error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to update the request.",
+    });
+  }
 };
 
 // ===============================
 // Delete Request
 // ===============================
-exports.deleteRequest = (req, res) => {
-  const sql = `
-    DELETE FROM customer_requests
-    WHERE request_id = ?
-  `;
+exports.deleteRequest = async (req, res) => {
+  const hotelId = Number(req.dbUser.hotelId);
+  const requestId = Number(req.params.id);
 
-  db.query(sql, [req.params.id], (err) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({
+  if (!Number.isInteger(requestId) || requestId < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request ID.",
+    });
+  }
+
+  try {
+    const [result] = await promisePool.query(
+      `
+        DELETE FROM customer_requests
+        WHERE hotel_id = ?
+          AND request_id = ?
+          AND status IN ('pending','declined')
+      `,
+      [hotelId, requestId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
         success: false,
-        message: "Database error",
+        message: "Request not found or its history must be preserved.",
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       message: "Request deleted successfully.",
     });
-  });
+  } catch (err) {
+    console.error("Delete customer request error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to delete the request.",
+    });
+  }
 };

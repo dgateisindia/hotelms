@@ -98,7 +98,11 @@ const getSuperAdminStats = async (req, res) => {
 
     const [[revenueRow]] = await db.query(
       `
-        SELECT COALESCE(SUM(p.amount), 0) AS revenue
+        SELECT COALESCE(SUM(CASE
+          WHEN p.transaction_type='payment' THEN p.amount
+          WHEN p.transaction_type='refund' THEN -p.amount
+          ELSE 0
+        END),0) AS revenue
 
         FROM payments p
 
@@ -117,7 +121,11 @@ const getSuperAdminStats = async (req, res) => {
         SELECT
           YEAR(p.payment_date) AS year,
           MONTH(p.payment_date) AS month,
-          COALESCE(SUM(p.amount), 0) AS total
+          COALESCE(SUM(CASE
+            WHEN p.transaction_type='payment' THEN p.amount
+            WHEN p.transaction_type='refund' THEN -p.amount
+            ELSE 0
+          END),0) AS total
 
         FROM payments p
 
@@ -439,7 +447,11 @@ const getAdminDailyStats = async (req, res) => {
         `
           SELECT
             COALESCE(
-              SUM(amount),
+              SUM(CASE
+                WHEN transaction_type='payment' THEN amount
+                WHEN transaction_type='refund' THEN -amount
+                ELSE 0
+              END),
               0
             ) AS revenue
 
@@ -447,9 +459,7 @@ const getAdminDailyStats = async (req, res) => {
 
           WHERE hotel_id = ?
             AND payment_status = 'success'
-
             AND payment_date >= ?
-
             AND payment_date < DATE_ADD(
               ?,
               INTERVAL 1 DAY
@@ -486,8 +496,8 @@ const getAdminDailyStats = async (req, res) => {
             ) AS display_id,
 
             b.booking_code,
-            b.check_in,
-            b.check_out,
+            DATE_FORMAT(b.check_in,'%Y-%m-%d') AS check_in,
+            DATE_FORMAT(b.check_out,'%Y-%m-%d') AS check_out,
             b.booking_status,
             b.payment_status,
             b.total_guests,
@@ -560,8 +570,8 @@ const getAdminDailyStats = async (req, res) => {
             ) AS display_id,
 
             b.booking_code,
-            b.check_in,
-            b.check_out,
+            DATE_FORMAT(b.check_in,'%Y-%m-%d') AS check_in,
+            DATE_FORMAT(b.check_out,'%Y-%m-%d') AS check_out,
             b.booking_status,
             b.payment_status,
             b.total_guests,
@@ -637,8 +647,8 @@ const getAdminDailyStats = async (req, res) => {
             ) AS display_id,
 
             b.booking_code,
-            b.check_in,
-            b.check_out,
+            DATE_FORMAT(b.check_in,'%Y-%m-%d') AS check_in,
+            DATE_FORMAT(b.check_out,'%Y-%m-%d') AS check_out,
             b.booking_status,
             b.payment_status,
             b.total_amount,
@@ -692,21 +702,22 @@ const getAdminDailyStats = async (req, res) => {
               AS month,
 
             COALESCE(
-              SUM(amount),
+              SUM(CASE
+                WHEN transaction_type='payment' THEN amount
+                WHEN transaction_type='refund' THEN -amount
+                ELSE 0
+              END),
               0
             ) AS total
 
           FROM payments
 
           WHERE hotel_id = ?
-            AND payment_status =
-              'success'
-
-            AND payment_date >=
-              DATE_SUB(
-                CURDATE(),
-                INTERVAL 7 MONTH
-              )
+            AND payment_status = 'success'
+            AND payment_date >= DATE_SUB(
+              CURDATE(),
+              INTERVAL 7 MONTH
+            )
 
           GROUP BY
             YEAR(payment_date),

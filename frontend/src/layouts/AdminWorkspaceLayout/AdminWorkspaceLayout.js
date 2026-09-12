@@ -439,8 +439,13 @@ function AdminWorkspaceLayout() {
     useMemo(
       () => {
         if (
-          currentPath.startsWith(
-            "/bookings/groups/"
+          (
+            currentPath.startsWith(
+              "/reservations/"
+            ) ||
+            currentPath.startsWith(
+              "/bookings/groups/"
+            )
           )
         ) {
           return {

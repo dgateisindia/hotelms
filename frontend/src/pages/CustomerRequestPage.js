@@ -1,16 +1,14 @@
-// src/pages/CustomerRequestPage.js
-
 import React, { useState } from "react";
+import { useParams } from "react-router-dom";
 import axios from "axios";
 import Swal from "sweetalert2";
 
-// The customer's phone is on a different device than the admin dashboard,
-// so this page can't rely on a relative path / CRA proxy like the rest of
-// the app does — it needs the backend's reachable address explicitly.
-// Keep this in one place so it's easy to update when you deploy.
-const API_BASE_URL = "http://192.168.1.21:5000/api/customer-requests";
+const PUBLIC_API_URL = (process.env.REACT_APP_PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:5000`).replace(/\/+$/, "");
 
 const CustomerRequestPage = () => {
+
+  const { publicToken } = useParams();
+
   const [form, setForm] = useState({
     full_name: "",
     email: "",
@@ -63,7 +61,14 @@ const CustomerRequestPage = () => {
     setLoading(true);
 
     try {
-      await axios.post(API_BASE_URL, form);
+      if (!publicToken) {
+        throw new Error("Invalid QR request link.");
+      }
+
+      await axios.post(
+        `${PUBLIC_API_URL}/api/customer-requests/${encodeURIComponent(publicToken)}`,
+        form
+      );
 
       // Show the thank-you screen instead of the form. No need for the
       // success alert anymore since the page itself now confirms it.
@@ -88,6 +93,7 @@ const CustomerRequestPage = () => {
         title: "Submission Failed",
         text:
           err.response?.data?.message ||
+          err.message ||
           "Unable to submit your request.",
       });
     }

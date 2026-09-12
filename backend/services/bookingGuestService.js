@@ -2112,18 +2112,7 @@ async function checkoutBookingGuestWithConnection(
   }
 
 
-  if (
-    guest.actual_check_out
-  ) {
-    throw guestError(
-      409,
-      "ACTUAL_GUEST_CHECKOUT_ALREADY_RECORDED",
-      "An actual checkout time is already recorded for this guest."
-    );
-  }
-
-
-  const checkoutTime =
+const checkoutTime =
     await resolveGuestCheckoutTime(
       connection,
       actualCheckOut
@@ -2139,9 +2128,8 @@ async function checkoutBookingGuestWithConnection(
           guest_status =
             'checked_out',
 
-          actual_check_out = ?,
-
-          checked_out_by_admin_id = ?,
+          actual_check_out = COALESCE(actual_check_out, ?),
+          checked_out_by_admin_id = COALESCE(checked_out_by_admin_id, ?),
           updated_by_admin_id = ?
 
         WHERE hotel_id = ?
@@ -2174,6 +2162,16 @@ async function checkoutBookingGuestWithConnection(
     );
   }
 
+
+  await closeOpenBookingGuestStayWithConnection(
+    connection,
+    {
+      hotelId: hId,
+      bookingGuestId: guestId,
+      adminId: aId,
+      checkOutAt: checkoutTime,
+    }
+  );
 
   const [[counts]] =
     await connection.query(
@@ -2352,27 +2350,7 @@ async function closeBookingGuestsForRoomCheckoutWithConnection(
   }
 
 
-  const inconsistentCheckoutGuest =
-    guests.find(
-      (guest) =>
-        guest.guest_status ===
-          "checked_in" &&
-        guest.actual_check_out
-    );
-
-
-  if (
-    inconsistentCheckoutGuest
-  ) {
-    throw guestError(
-      409,
-      "GUEST_CHECKOUT_STATE_INVALID",
-      "A checked-in guest already has an actual checkout time. Review the guest lifecycle before checking out this room."
-    );
-  }
-
-
-  const checkedInCount =
+const checkedInCount =
     guests.filter(
       (guest) =>
         guest.guest_status ===
@@ -2391,6 +2369,17 @@ async function closeBookingGuestsForRoomCheckoutWithConnection(
   if (
     checkedInCount > 0
   ) {
+    for (const guest of guests) {
+      if (guest.guest_status !== "checked_in") continue;
+
+      await closeOpenBookingGuestStayWithConnection(connection, {
+        hotelId: hId,
+        bookingGuestId: Number(guest.booking_guest_id),
+        adminId: aId,
+        checkOutAt: checkoutTime,
+      });
+    }
+
     await connection.query(
       `
         UPDATE booking_guests
@@ -2399,9 +2388,8 @@ async function closeBookingGuestsForRoomCheckoutWithConnection(
           guest_status =
             'checked_out',
 
-          actual_check_out = ?,
-
-          checked_out_by_admin_id = ?,
+          actual_check_out = COALESCE(actual_check_out, ?),
+          checked_out_by_admin_id = COALESCE(checked_out_by_admin_id, ?),
           updated_by_admin_id = ?
 
         WHERE hotel_id = ?
@@ -2509,6 +2497,70 @@ async function replaceBookingGuestsWithConnection(
   );
 }
 
+
+function mapBookingGuestStayRow(
+  row
+) {
+  return {
+    guestStayId:
+      Number(
+        row.guest_stay_id
+      ),
+
+    staySequence:
+      Number(
+        row.stay_sequence
+      ),
+
+    checkInAt:
+      row.check_in_at ||
+      null,
+
+    checkOutAt:
+      row.check_out_at ||
+      null,
+
+    checkedInByAdminId:
+      row.checked_in_by_admin_id ===
+        null ||
+      row.checked_in_by_admin_id ===
+        undefined
+        ? null
+        : Number(
+            row.checked_in_by_admin_id
+          ),
+
+    checkedOutByAdminId:
+      row.checked_out_by_admin_id ===
+        null ||
+      row.checked_out_by_admin_id ===
+        undefined
+        ? null
+        : Number(
+            row.checked_out_by_admin_id
+          ),
+
+    entryType:
+      row.entry_type ||
+      null,
+
+    recordSource:
+      row.record_source ||
+      null,
+
+    reentryReason:
+      row.reentry_reason ||
+      null,
+
+    createdAt:
+      row.created_at ||
+      null,
+
+    updatedAt:
+      row.updated_at ||
+      null,
+  };
+}
 
 function mapBookingGuestRow(
   row
@@ -2701,8 +2753,144 @@ async function getBookingGuestsWithConnection(
       ]
     );
 
+  if (
+    rows.length === 0
+  ) {
+    return [];
+  }
+
+
+  /* ==========================================================
+     READ BOOKING GUEST STAY SESSIONS
+
+     booking_guest_stays is the immutable stay-session truth.
+
+     Scope remains:
+     hotel + booking + booking guest.
+
+     booking_guests.actual_check_in / actual_check_out remain
+     preserved historical first-stay projection fields.
+  ========================================================== */
+
+  const [stayRows] =
+    await connection.query(
+      `
+        SELECT
+          bgs.booking_guest_id,
+          bgs.guest_stay_id,
+          bgs.stay_sequence,
+          bgs.check_in_at,
+          bgs.check_out_at,
+          bgs.checked_in_by_admin_id,
+          bgs.checked_out_by_admin_id,
+          bgs.entry_type,
+          bgs.record_source,
+          bgs.reentry_reason,
+          bgs.created_at,
+          bgs.updated_at
+
+        FROM booking_guest_stays bgs
+
+        INNER JOIN booking_guests bg
+          ON bg.hotel_id =
+             bgs.hotel_id
+         AND bg.booking_guest_id =
+             bgs.booking_guest_id
+
+        WHERE bg.hotel_id = ?
+          AND bg.booking_id = ?
+
+        ORDER BY
+          bgs.booking_guest_id ASC,
+          bgs.stay_sequence ASC,
+          bgs.guest_stay_id ASC
+      `,
+      [
+        hId,
+        bId,
+      ]
+    );
+
+
+  const staysByGuestId =
+    new Map();
+
+
+  for (
+    const stayRow of
+    stayRows
+  ) {
+    const bookingGuestId =
+      Number(
+        stayRow.booking_guest_id
+      );
+
+    if (
+      !staysByGuestId.has(
+        bookingGuestId
+      )
+    ) {
+      staysByGuestId.set(
+        bookingGuestId,
+        []
+      );
+    }
+
+    staysByGuestId
+      .get(
+        bookingGuestId
+      )
+      .push(
+        mapBookingGuestStayRow(
+          stayRow
+        )
+      );
+  }
+
+
   return rows.map(
-    mapBookingGuestRow
+    (row) => {
+      const guest =
+        mapBookingGuestRow(
+          row
+        );
+
+      const stayHistory =
+        staysByGuestId.get(
+          Number(
+            row.booking_guest_id
+          )
+        ) ||
+        [];
+
+      const currentStay =
+        stayHistory.find(
+          (stay) =>
+            !stay.checkOutAt
+        ) ||
+        null;
+
+      const latestStay =
+        stayHistory.length > 0
+          ? stayHistory[
+              stayHistory.length -
+              1
+            ]
+          : null;
+
+      return {
+        ...guest,
+
+        stayCount:
+          stayHistory.length,
+
+        currentStay,
+
+        latestStay,
+
+        stayHistory,
+      };
+    }
   );
 }
 
@@ -2878,6 +3066,438 @@ async function countGroupPrimaryGuestsWithConnection(
    EXPORTS
 ============================================================ */
 
+
+/* ============================================================
+   BOOKING GUEST STAY SESSIONS
+
+   booking_guests:
+   - guest allocation / current lifecycle state
+
+   booking_guest_stays:
+   - immutable physical entry / exit sessions
+
+   One guest may therefore have:
+   stay_sequence 1 = initial stay
+   stay_sequence 2+ = re-entry stays
+============================================================ */
+
+async function openBookingGuestStayWithConnection(
+  connection,
+  {
+    hotelId,
+    bookingGuestId,
+    adminId,
+    entryType = "initial",
+    checkInAt = null,
+    reentryReason = null,
+  } = {}
+) {
+  const hId =
+    positiveId(
+      hotelId,
+      "Hotel ID"
+    );
+
+  const guestId =
+    positiveId(
+      bookingGuestId,
+      "Booking guest ID"
+    );
+
+  const aId =
+    positiveId(
+      adminId,
+      "Admin ID"
+    );
+
+  const normalizedEntryType =
+    String(
+      entryType || "initial"
+    )
+      .trim()
+      .toLowerCase();
+
+  if (
+    ![
+      "initial",
+      "re_entry",
+    ].includes(
+      normalizedEntryType
+    )
+  ) {
+    throw guestError(
+      400,
+      "INVALID_GUEST_STAY_ENTRY_TYPE",
+      "Guest stay entry type must be initial or re_entry."
+    );
+  }
+
+  const reason =
+    reentryReason === null ||
+    reentryReason === undefined
+      ? null
+      : String(
+          reentryReason
+        ).trim() || null;
+
+  if (
+    reason &&
+    reason.length > 500
+  ) {
+    throw guestError(
+      400,
+      "GUEST_REENTRY_REASON_TOO_LONG",
+      "Guest re-entry reason must not exceed 500 characters."
+    );
+  }
+
+  const [[guest]] =
+    await connection.query(
+      `
+        SELECT
+          booking_guest_id,
+          guest_status,
+          actual_check_in
+
+        FROM booking_guests
+
+        WHERE hotel_id = ?
+          AND booking_guest_id = ?
+
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [
+        hId,
+        guestId,
+      ]
+    );
+
+  if (!guest) {
+    throw guestError(
+      404,
+      "BOOKING_GUEST_NOT_FOUND",
+      "The selected guest could not be found."
+    );
+  }
+
+  if (
+    guest.guest_status !==
+    "checked_in"
+  ) {
+    throw guestError(
+      409,
+      "GUEST_STAY_OPEN_NOT_ALLOWED",
+      "A stay session can only be opened for a checked-in guest."
+    );
+  }
+
+  const [[openStay]] =
+    await connection.query(
+      `
+        SELECT
+          guest_stay_id,
+          stay_sequence
+
+        FROM booking_guest_stays
+
+        WHERE hotel_id = ?
+          AND booking_guest_id = ?
+          AND check_out_at IS NULL
+
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [
+        hId,
+        guestId,
+      ]
+    );
+
+  if (openStay) {
+    throw guestError(
+      409,
+      "GUEST_STAY_ALREADY_OPEN",
+      "This guest already has an active stay session."
+    );
+  }
+
+  const [[sequenceRow]] =
+    await connection.query(
+      `
+        SELECT
+          COALESCE(
+            MAX(stay_sequence),
+            0
+          ) + 1 AS next_sequence
+
+        FROM booking_guest_stays
+
+        WHERE hotel_id = ?
+          AND booking_guest_id = ?
+      `,
+      [
+        hId,
+        guestId,
+      ]
+    );
+
+  const staySequence =
+    Number(
+      sequenceRow
+        ?.next_sequence ||
+      1
+    );
+
+  if (
+    normalizedEntryType ===
+      "initial" &&
+    staySequence !== 1
+  ) {
+    throw guestError(
+      409,
+      "GUEST_INITIAL_STAY_ALREADY_EXISTS",
+      "This guest already has historical stay sessions."
+    );
+  }
+
+  if (
+    normalizedEntryType ===
+      "re_entry" &&
+    staySequence < 2
+  ) {
+    throw guestError(
+      409,
+      "GUEST_REENTRY_HISTORY_MISSING",
+      "A re-entry requires a previous guest stay session."
+    );
+  }
+
+  const effectiveCheckIn =
+    checkInAt ||
+    guest.actual_check_in;
+
+  if (!effectiveCheckIn) {
+    throw guestError(
+      409,
+      "GUEST_STAY_CHECKIN_TIME_MISSING",
+      "The guest stay session has no check-in time."
+    );
+  }
+
+  const [result] =
+    await connection.query(
+      `
+        INSERT INTO booking_guest_stays (
+          hotel_id,
+          booking_guest_id,
+          stay_sequence,
+          check_in_at,
+          check_out_at,
+          checked_in_by_admin_id,
+          checked_out_by_admin_id,
+          entry_type,
+          record_source,
+          reentry_reason
+        )
+
+        VALUES (
+          ?,
+          ?,
+          ?,
+          ?,
+          NULL,
+          ?,
+          NULL,
+          ?,
+          'lifecycle',
+          ?
+        )
+      `,
+      [
+        hId,
+        guestId,
+        staySequence,
+        effectiveCheckIn,
+        aId,
+        normalizedEntryType,
+        reason,
+      ]
+    );
+
+  return {
+    guestStayId:
+      Number(
+        result.insertId
+      ),
+
+    bookingGuestId:
+      guestId,
+
+    staySequence,
+
+    entryType:
+      normalizedEntryType,
+
+    checkInAt:
+      effectiveCheckIn,
+  };
+}
+
+
+async function closeOpenBookingGuestStayWithConnection(
+  connection,
+  {
+    hotelId,
+    bookingGuestId,
+    adminId,
+    checkOutAt,
+  } = {}
+) {
+  const hId =
+    positiveId(
+      hotelId,
+      "Hotel ID"
+    );
+
+  const guestId =
+    positiveId(
+      bookingGuestId,
+      "Booking guest ID"
+    );
+
+  const aId =
+    positiveId(
+      adminId,
+      "Admin ID"
+    );
+
+  if (!checkOutAt) {
+    throw guestError(
+      500,
+      "GUEST_STAY_CHECKOUT_TIME_MISSING",
+      "The guest stay checkout time is required."
+    );
+  }
+
+  const [[guest]] =
+    await connection.query(
+      `
+        SELECT
+          booking_guest_id,
+          guest_status
+
+        FROM booking_guests
+
+        WHERE hotel_id = ?
+          AND booking_guest_id = ?
+
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [
+        hId,
+        guestId,
+      ]
+    );
+
+  if (!guest) {
+    throw guestError(
+      404,
+      "BOOKING_GUEST_NOT_FOUND",
+      "The selected guest could not be found."
+    );
+  }
+
+  const [[openStay]] =
+    await connection.query(
+      `
+        SELECT
+          guest_stay_id,
+          stay_sequence,
+          check_in_at
+
+        FROM booking_guest_stays
+
+        WHERE hotel_id = ?
+          AND booking_guest_id = ?
+          AND check_out_at IS NULL
+
+        ORDER BY
+          stay_sequence DESC
+
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [
+        hId,
+        guestId,
+      ]
+    );
+
+  if (!openStay) {
+    throw guestError(
+      409,
+      "GUEST_OPEN_STAY_NOT_FOUND",
+      "No active stay session exists for this guest."
+    );
+  }
+
+  const [result] =
+    await connection.query(
+      `
+        UPDATE booking_guest_stays
+
+        SET
+          check_out_at = ?,
+          checked_out_by_admin_id = ?
+
+        WHERE hotel_id = ?
+          AND guest_stay_id = ?
+          AND check_out_at IS NULL
+      `,
+      [
+        checkOutAt,
+        aId,
+        hId,
+        openStay.guest_stay_id,
+      ]
+    );
+
+  if (
+    Number(
+      result.affectedRows ||
+      0
+    ) !== 1
+  ) {
+    throw guestError(
+      409,
+      "GUEST_STAY_CLOSE_STATE_CHANGED",
+      "The guest stay session changed before it could be closed."
+    );
+  }
+
+  return {
+    guestStayId:
+      Number(
+        openStay.guest_stay_id
+      ),
+
+    bookingGuestId:
+      guestId,
+
+    staySequence:
+      Number(
+        openStay.stay_sequence
+      ),
+
+    checkInAt:
+      openStay.check_in_at,
+
+    checkOutAt,
+  };
+}
+
 module.exports = {
   normalizeGuestPolicy,
 
@@ -2894,6 +3514,10 @@ module.exports = {
   insertBookingGuestsWithConnection,
 
   insertCheckedInGuestWithConnection,
+
+  openBookingGuestStayWithConnection,
+
+  closeOpenBookingGuestStayWithConnection,
 
   checkoutBookingGuestWithConnection,
 

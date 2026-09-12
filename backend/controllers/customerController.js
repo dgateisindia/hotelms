@@ -1196,6 +1196,33 @@ exports.getCustomer = async (
       );
     }
 
+    const [[guestStaySummary]] =
+      await db.query(
+        `
+          SELECT
+            COUNT(bg.booking_guest_id) AS guestsStayed
+
+          FROM bookings b
+
+          INNER JOIN booking_guests bg
+            ON bg.hotel_id = b.hotel_id
+           AND bg.booking_id = b.booking_id
+
+          WHERE b.hotel_id = ?
+            AND b.customer_id = ?
+            AND bg.actual_check_in IS NOT NULL
+        `,
+        [
+          hotelId,
+          customerId,
+        ]
+      );
+
+    customer.guestsStayed =
+      Number(
+        guestStaySummary?.guestsStayed || 0
+      );
+
     return res
       .status(200)
       .json({

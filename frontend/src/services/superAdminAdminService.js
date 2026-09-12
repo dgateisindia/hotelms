@@ -1,4 +1,4 @@
-import apiClient from "./apiClient";
+import apiClient from "../shared/api/apiClient";
 
 
 const HOTEL_DISPLAY_ID_PATTERN =

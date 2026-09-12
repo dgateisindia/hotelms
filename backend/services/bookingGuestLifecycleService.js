@@ -20,6 +20,8 @@ const {
   loadPrimaryCustomerWithConnection,
   insertCheckedInGuestWithConnection,
 
+  openBookingGuestStayWithConnection,
+
   checkoutBookingGuestWithConnection,
 
   countGroupPrimaryGuestsWithConnection,
@@ -692,6 +694,8 @@ async function checkInBookingGuest(
   let selectedExistingGuest =
     null;
 
+  let isReentry = false;
+
   let preparedNewGuest =
     null;
 
@@ -740,11 +744,49 @@ async function checkInBookingGuest(
         .guest_status ===
       "checked_out"
     ) {
-      throwHttp(
-        409,
-        "GUEST_ALREADY_CHECKED_OUT",
-        "This guest has already been checked out."
-      );
+      isReentry = true;
+
+      if (
+        booking.booking_status !==
+        "checked_in"
+      ) {
+        throwHttp(
+          409,
+          "GUEST_REENTRY_BOOKING_NOT_ACTIVE",
+          "A checked-out guest can re-enter only while the room booking is still checked in."
+        );
+      }
+
+      if (
+        activeGuestRows.length >=
+        capacity
+      ) {
+        throwHttp(
+          409,
+          "ROOM_GUEST_CAPACITY_REACHED",
+          `Room ${room.room_number} already has its maximum of ${capacity} active/expected guest(s).`
+        );
+      }
+
+      const reentryExtraBeds =
+        Number(
+          selectedExistingGuest
+            .extra_bed_used
+        ) === 1
+          ? 1
+          : 0;
+
+      if (
+        activeExtraBeds +
+          reentryExtraBeds >
+        maxExtraBeds
+      ) {
+        throwHttp(
+          409,
+          "ROOM_EXTRA_BED_LIMIT_EXCEEDED",
+          `Room ${room.room_number} allows a maximum of ${maxExtraBeds} extra bed${maxExtraBeds === 1 ? "" : "s"}.`
+        );
+      }
     }
 
 
@@ -762,9 +804,13 @@ async function checkInBookingGuest(
 
 
     if (
-      selectedExistingGuest
-        .guest_status !==
-      "expected"
+      ![
+        "expected",
+        "checked_out",
+      ].includes(
+        selectedExistingGuest
+          .guest_status
+      )
     ) {
       throwHttp(
         409,
@@ -1144,36 +1190,133 @@ async function checkInBookingGuest(
   if (
     selectedExistingGuest
   ) {
-    await connection.query(
-      `
-        UPDATE booking_guests
+    if (isReentry) {
+      const [[reentryClock]] =
+        await connection.query(
+          "SELECT NOW() AS check_in_at"
+        );
 
-        SET
-          guest_status =
-            'checked_in',
+      const reentryCheckInAt =
+        reentryClock?.check_in_at;
 
-          actual_check_in =
-            NOW(),
+      if (!reentryCheckInAt) {
+        throwHttp(
+          500,
+          "GUEST_REENTRY_CHECKIN_TIME_MISSING",
+          "The guest re-entry timestamp could not be resolved."
+        );
+      }
 
-          actual_check_out =
-            NULL,
+      const [reentryUpdate] =
+        await connection.query(
+          `
+            UPDATE booking_guests
 
-          checked_in_by_admin_id = ?,
-          checked_out_by_admin_id = NULL,
-          updated_by_admin_id = ?
+            SET
+              guest_status = 'checked_in',
+              updated_by_admin_id = ?
 
-        WHERE hotel_id = ?
-          AND booking_id = ?
-          AND booking_guest_id = ?
-      `,
-      [
-        adminId,
-        adminId,
-        hotelId,
-        bookingId,
-        requestedGuestId,
-      ]
-    );
+            WHERE hotel_id = ?
+              AND booking_id = ?
+              AND booking_guest_id = ?
+              AND guest_status = 'checked_out'
+          `,
+          [
+            adminId,
+            hotelId,
+            bookingId,
+            requestedGuestId,
+          ]
+        );
+
+      if (
+        Number(
+          reentryUpdate.affectedRows ||
+          0
+        ) !== 1
+      ) {
+        throwHttp(
+          409,
+          "GUEST_REENTRY_STATE_CHANGED",
+          "The guest state changed before re-entry could be completed."
+        );
+      }
+
+      await openBookingGuestStayWithConnection(
+        connection,
+        {
+          hotelId,
+          bookingGuestId:
+            requestedGuestId,
+          adminId,
+          entryType:
+            "re_entry",
+          checkInAt:
+            reentryCheckInAt,
+        }
+      );
+    } else {
+      const [initialUpdate] =
+        await connection.query(
+          `
+            UPDATE booking_guests
+
+            SET
+              guest_status = 'checked_in',
+              actual_check_in = NOW(),
+              actual_check_out = NULL,
+              checked_in_by_admin_id = ?,
+              checked_out_by_admin_id = NULL,
+              updated_by_admin_id = ?
+
+            WHERE hotel_id = ?
+              AND booking_id = ?
+              AND booking_guest_id = ?
+              AND guest_status = 'expected'
+          `,
+          [
+            adminId,
+            adminId,
+            hotelId,
+            bookingId,
+            requestedGuestId,
+          ]
+        );
+
+      if (
+        Number(
+          initialUpdate.affectedRows ||
+          0
+        ) !== 1
+      ) {
+        throwHttp(
+          409,
+          "GUEST_CHECK_IN_STATE_CHANGED",
+          "The guest state changed before check-in could be completed."
+        );
+      }
+
+      await openBookingGuestStayWithConnection(
+        connection,
+        {
+          hotelId,
+          bookingGuestId:
+            requestedGuestId,
+          adminId,
+          entryType:
+            "initial",
+        }
+      );
+    }
+
+
+    const nextTotalGuests =
+      activeGuestRows.length +
+      (
+        isReentry
+          ? 1
+          : 0
+      );
 
 
     const totalAmount =
@@ -1204,7 +1347,7 @@ async function checkInBookingGuest(
           AND booking_id = ?
       `,
       [
-        activeGuestRows.length,
+        nextTotalGuests,
 
         paymentState
           .paymentStatus,
@@ -1297,7 +1440,7 @@ async function checkInBookingGuest(
           .actual_check_in,
 
       totalGuests:
-        activeGuestRows.length,
+        nextTotalGuests,
 
       childChargeAmount:
         Number(
@@ -1407,6 +1550,18 @@ async function checkInBookingGuest(
     );
 
 
+
+  await openBookingGuestStayWithConnection(
+    connection,
+    {
+      hotelId,
+      bookingGuestId:
+        inserted.bookingGuestId,
+      adminId,
+      entryType:
+        "initial",
+    }
+  );
   const totalGuests =
     activeGuestRows.length +
     1;

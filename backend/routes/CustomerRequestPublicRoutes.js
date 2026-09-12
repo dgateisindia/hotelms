@@ -3,9 +3,8 @@ const router = express.Router();
 
 const { createRequest } = require("../controllers/customerRequestController");
 
-// Public: a guest scanning the QR code has no Clerk session.
-// This is the ONLY customer-request endpoint that should be reachable
-// without authentication.
-router.post("/", createRequest);
+// Public guest route.
+// Hotel identity is resolved ONLY from the active QR public token.
+router.post("/:publicToken", createRequest);
 
 module.exports = router;

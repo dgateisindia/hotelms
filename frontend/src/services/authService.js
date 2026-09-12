@@ -1,5 +1,5 @@
 // frontend/src/services/authService.js
-import apiClient from './apiClient';
+import apiClient from "../shared/api/apiClient";
 export const createHotel = (data) => apiClient.post("/auth/create-hotel", data);
 export const loginUser = (email, password) =>
   apiClient.post('/auth/login', { email, password });

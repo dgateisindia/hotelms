@@ -1,21 +1,11 @@
-// ============================================================
-//  attendanceRoute.js
-//  Mount in your main app/server file with:
-//    const attendanceRoute = require('./routes/attendanceRoute');
-//    app.use('/api/attendance', attendanceRoute);
-// ============================================================
-
-const express = require('express');
+﻿const express = require("express");
 const router = express.Router();
-const {
-  getAttendanceByDate,
-  upsertAttendance,
-} = require('../controllers/attendanceController'); // adjust path if your folder layout differs
+const { getAttendanceByDate, upsertAttendance } = require("../controllers/attendanceController");
+const { requireClerkSession, attachDbUser, requireRole } = require("../middleware/roleMiddleware");
 
-// GET /api/attendance?date=YYYY-MM-DD
-router.get('/', getAttendanceByDate);
+router.use(requireClerkSession, attachDbUser(), requireRole("admin"));
 
-// PUT /api/attendance/:staff_id
-router.put('/:staff_id', upsertAttendance);
+router.get("/", getAttendanceByDate);
+router.put("/:staff_id", upsertAttendance);
 
 module.exports = router;

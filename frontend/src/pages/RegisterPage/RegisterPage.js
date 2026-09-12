@@ -15,7 +15,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 
-import apiClient from "../../services/apiClient";
+import apiClient from "../../shared/api/apiClient";
 import "../../styles/RegisterPage.css";
 
 import {

@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const {
+  getHotelQrToken,
   getRequests,
   getRequestById,
   updateStatus,
@@ -14,6 +15,7 @@ const {
 // All of these are admin/staff actions — reviewing and acting on
 // requests — so they stay behind Clerk auth (mounted after
 // clerkMiddleware() in server.js).
+router.get("/qr-token", getHotelQrToken);
 router.get("/", getRequests);
 router.get("/:id", getRequestById);
 router.put("/:id", updateStatus);

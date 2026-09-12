@@ -14,11 +14,12 @@ const ROOM_TYPE_COLORS = {
 const FALLBACK_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899'];
 
 const STATUS_COLORS = {
-  Confirmed: '#3b82f6',
-  Pending: '#f59e0b',
-  'Checked-in': '#10b981',
-  'Checked-out': '#6b7280',
-  Cancelled: '#ef4444',
+  pending:'#f59e0b',
+  confirmed:'#3b82f6',
+  checked_in:'#10b981',
+  checked_out:'#6b7280',
+  cancelled:'#ef4444',
+  no_show:'#ef4444',
 };
 
 const ATT_STATUS_COLORS = { present: '#10b981', absent: '#ef4444', half_day: '#f59e0b', leave: '#8b5cf6' };
@@ -102,6 +103,8 @@ function futureLabels(period, count, lastBucket) {
 // GET /api/reports/overview?period=daily|weekly|monthly
 // ============================================================
 const getReportsOverview = async (req, res) => {
+  const hotelId = req.dbUser.hotelId;
+
   try {
     const period = ['daily', 'weekly', 'monthly'].includes(req.query.period) ? req.query.period : 'monthly';
 
@@ -122,7 +125,10 @@ const getReportsOverview = async (req, res) => {
     const prevRange = shiftBack(rangeStart, rangeEnd, count, unit);
 
     // ---- Total rooms (used for occupancy/RevPAR math) ----
-    const [[roomCountRow]] = await db.query(`SELECT COUNT(*) AS total FROM rooms`);
+    const [[roomCountRow]] = await db.query(
+      `SELECT COUNT(*) AS total FROM rooms WHERE hotel_id=?`,
+      [hotelId]
+    );
     const totalRooms = roomCountRow.total || 1;
 
     // ---- Revenue + booking trend, bucket by bucket (also fetches the
@@ -131,17 +137,21 @@ const getReportsOverview = async (req, res) => {
     const bookingTrend = [];
     for (const b of buckets) {
       const [[cur]] = await db.query(
-        `SELECT COALESCE(SUM(amount),0) AS revenue FROM payments WHERE DATE(payment_date) BETWEEN ? AND ?`,
-        [b.start, b.end]
+        `SELECT COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount WHEN transaction_type='refund' THEN -amount ELSE 0 END),0) AS revenue
+         FROM payments
+         WHERE hotel_id=? AND payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?`,
+        [hotelId, b.start, b.end]
       );
       const prevBucket = shiftBack(b.start, b.end, count, unit);
       const [[prev]] = await db.query(
-        `SELECT COALESCE(SUM(amount),0) AS revenue FROM payments WHERE DATE(payment_date) BETWEEN ? AND ?`,
-        [prevBucket.start, prevBucket.end]
+        `SELECT COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount WHEN transaction_type='refund' THEN -amount ELSE 0 END),0) AS revenue
+         FROM payments
+         WHERE hotel_id=? AND payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?`,
+        [hotelId, prevBucket.start, prevBucket.end]
       );
       const [[bkg]] = await db.query(
-        `SELECT COUNT(*) AS cnt FROM bookings WHERE DATE(check_in) BETWEEN ? AND ?`,
-        [b.start, b.end]
+        `SELECT COUNT(*) AS cnt FROM bookings WHERE hotel_id=? AND DATE(check_in) BETWEEN ? AND ?`,
+        [hotelId, b.start, b.end]
       );
       revenueTrend.push({ label: b.label, thisPeriod: Number(cur.revenue), lastPeriod: Number(prev.revenue) });
       bookingTrend.push({ label: b.label, count: bkg.cnt });
@@ -149,22 +159,26 @@ const getReportsOverview = async (req, res) => {
 
     // ---- Stat cards: current range vs previous equivalent range ----
     const [[revCur]] = await db.query(
-      `SELECT COALESCE(SUM(amount),0) AS revenue FROM payments WHERE DATE(payment_date) BETWEEN ? AND ?`,
-      [rangeStart, rangeEnd]
+      `SELECT COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount WHEN transaction_type='refund' THEN -amount ELSE 0 END),0) AS revenue
+       FROM payments
+       WHERE hotel_id=? AND payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?`,
+      [hotelId, rangeStart, rangeEnd]
     );
     const [[revPrev]] = await db.query(
-      `SELECT COALESCE(SUM(amount),0) AS revenue FROM payments WHERE DATE(payment_date) BETWEEN ? AND ?`,
-      [prevRange.start, prevRange.end]
+      `SELECT COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount WHEN transaction_type='refund' THEN -amount ELSE 0 END),0) AS revenue
+       FROM payments
+       WHERE hotel_id=? AND payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?`,
+      [hotelId, prevRange.start, prevRange.end]
     );
     const [[bkgCur]] = await db.query(
-      `SELECT COUNT(*) AS total, SUM(booking_status='Cancelled') AS cancelled
-       FROM bookings WHERE DATE(check_in) BETWEEN ? AND ?`,
-      [rangeStart, rangeEnd]
+      `SELECT COUNT(*) AS total, SUM(booking_status='cancelled') AS cancelled
+       FROM bookings WHERE hotel_id=? AND DATE(check_in) BETWEEN ? AND ?`,
+      [hotelId, rangeStart, rangeEnd]
     );
     const [[bkgPrev]] = await db.query(
-      `SELECT COUNT(*) AS total, SUM(booking_status='Cancelled') AS cancelled
-       FROM bookings WHERE DATE(check_in) BETWEEN ? AND ?`,
-      [prevRange.start, prevRange.end]
+      `SELECT COUNT(*) AS total, SUM(booking_status='cancelled') AS cancelled
+       FROM bookings WHERE hotel_id=? AND DATE(check_in) BETWEEN ? AND ?`,
+      [hotelId, prevRange.start, prevRange.end]
     );
 
     // Occupancy approximation: % of rooms with at least one confirmed/checked-in
@@ -173,10 +187,12 @@ const getReportsOverview = async (req, res) => {
     const occOverlapQuery = `
       SELECT COUNT(DISTINCT room_id) AS occupiedRooms
       FROM bookings
-      WHERE booking_status IN ('Confirmed','Checked-in')
+      WHERE hotel_id=?
+        AND booking_status IN ('confirmed','checked_in')
         AND check_in <= ? AND check_out >= ?`;
-    const [[occCur]] = await db.query(occOverlapQuery, [rangeEnd, rangeStart]);
-    const [[occPrev]] = await db.query(occOverlapQuery, [prevRange.end, prevRange.start]);
+
+    const [[occCur]] = await db.query(occOverlapQuery, [hotelId, rangeEnd, rangeStart]);
+    const [[occPrev]] = await db.query(occOverlapQuery, [hotelId, prevRange.end, prevRange.start]);
     const occupancyRate = Math.round((occCur.occupiedRooms / totalRooms) * 1000) / 10;
     const occupancyRatePrev = Math.round((occPrev.occupiedRooms / totalRooms) * 1000) / 10;
 
@@ -202,14 +218,16 @@ const getReportsOverview = async (req, res) => {
 
     // ---- Revenue by room type (within range) ----
     const [revByRoomRows] = await db.query(
-      `SELECT r.room_type AS label, COALESCE(SUM(p.amount),0) AS revenue
+      `SELECT r.room_type AS label,
+              COALESCE(SUM(CASE WHEN p.transaction_type='payment' THEN p.amount WHEN p.transaction_type='refund' THEN -p.amount ELSE 0 END),0) AS revenue
        FROM payments p
-       JOIN bookings b ON p.booking_id = b.booking_id
-       JOIN rooms r ON b.room_id = r.room_id
-       WHERE DATE(p.payment_date) BETWEEN ? AND ?
+       JOIN bookings b ON p.booking_id=b.booking_id AND b.hotel_id=p.hotel_id
+       JOIN rooms r ON b.room_id=r.room_id AND r.hotel_id=b.hotel_id
+       WHERE p.hotel_id=? AND p.payment_status='success'
+         AND DATE(p.payment_date) BETWEEN ? AND ?
        GROUP BY r.room_type
        ORDER BY revenue DESC`,
-      [rangeStart, rangeEnd]
+      [hotelId, rangeStart, rangeEnd]
     );
     const revByRoomTotal = revByRoomRows.reduce((s, r) => s + Number(r.revenue), 0) || 1;
     const revenueByRoom = revByRoomRows.map((r, i) => ({
@@ -219,16 +237,24 @@ const getReportsOverview = async (req, res) => {
     }));
 
     // ---- Occupancy by room type (overlap approximation, per room type) ----
-    const [roomTypes] = await db.query(`SELECT DISTINCT room_type FROM rooms`);
+    const [roomTypes] = await db.query(
+      `SELECT DISTINCT room_type FROM rooms WHERE hotel_id=?`,
+      [hotelId]
+    );
     const occupancyByRoom = [];
     for (const rt of roomTypes) {
-      const [[totalOfType]] = await db.query(`SELECT COUNT(*) AS cnt FROM rooms WHERE room_type = ?`, [rt.room_type]);
+      const [[totalOfType]] = await db.query(
+        `SELECT COUNT(*) AS cnt FROM rooms WHERE hotel_id=? AND room_type=?`,
+        [hotelId, rt.room_type]
+      );
       const [[occOfType]] = await db.query(
         `SELECT COUNT(DISTINCT b.room_id) AS occupiedRooms
-         FROM bookings b JOIN rooms r ON b.room_id = r.room_id
-         WHERE r.room_type = ? AND b.booking_status IN ('Confirmed','Checked-in')
+         FROM bookings b
+         JOIN rooms r ON b.room_id=r.room_id AND r.hotel_id=b.hotel_id
+         WHERE b.hotel_id=? AND r.room_type=?
+           AND b.booking_status IN ('confirmed','checked_in')
            AND b.check_in <= ? AND b.check_out >= ?`,
-        [rt.room_type, rangeEnd, rangeStart]
+        [hotelId, rt.room_type, rangeEnd, rangeStart]
       );
       occupancyByRoom.push({
         label: rt.room_type,
@@ -241,9 +267,11 @@ const getReportsOverview = async (req, res) => {
     // there's no source/channel column in `bookings` to compute real channel data from) ----
     const [statusRows] = await db.query(
       `SELECT booking_status AS label, COUNT(*) AS cnt
-       FROM bookings WHERE DATE(check_in) BETWEEN ? AND ?
-       GROUP BY booking_status ORDER BY cnt DESC`,
-      [rangeStart, rangeEnd]
+       FROM bookings
+       WHERE hotel_id=? AND DATE(check_in) BETWEEN ? AND ?
+       GROUP BY booking_status
+       ORDER BY cnt DESC`,
+      [hotelId, rangeStart, rangeEnd]
     );
     const statusTotal = statusRows.reduce((s, r) => s + r.cnt, 0) || 1;
     const bookingStatusBreakdown = statusRows.map((r, i) => ({
@@ -264,14 +292,16 @@ const getReportsOverview = async (req, res) => {
       const daysInMonth = mEnd.getDate();
 
       const [[mRev]] = await db.query(
-        `SELECT COALESCE(SUM(amount),0) AS revenue FROM payments WHERE DATE(payment_date) BETWEEN ? AND ?`,
-        [sStart, sEnd]
+        `SELECT COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount WHEN transaction_type='refund' THEN -amount ELSE 0 END),0) AS revenue
+         FROM payments
+         WHERE hotel_id=? AND payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?`,
+        [hotelId, sStart, sEnd]
       );
       const [[mBkg]] = await db.query(
-        `SELECT COUNT(*) AS cnt FROM bookings WHERE DATE(check_in) BETWEEN ? AND ?`,
-        [sStart, sEnd]
+        `SELECT COUNT(*) AS cnt FROM bookings WHERE hotel_id=? AND DATE(check_in) BETWEEN ? AND ?`,
+        [hotelId, sStart, sEnd]
       );
-      const [[mOcc]] = await db.query(occOverlapQuery, [sEnd, sStart]);
+      const [[mOcc]] = await db.query(occOverlapQuery, [hotelId, sEnd, sStart]);
 
       const mOccPct = Math.round((mOcc.occupiedRooms / totalRooms) * 1000) / 10;
       const mAdr = mBkg.cnt > 0 ? Math.round(Number(mRev.revenue) / mBkg.cnt) : 0;
@@ -329,12 +359,19 @@ const getReportsOverview = async (req, res) => {
     // ---- Staff overview ----
     // ============================================================
     const [[staffCountRow]] = await db.query(
-      `SELECT COUNT(*) AS total, SUM(status='Active') AS active, SUM(status='On Leave') AS onLeave FROM staff`
+      `SELECT COUNT(*) AS total,
+              SUM(status='Active') AS active,
+              SUM(status='On Leave') AS onLeave
+       FROM staff WHERE hotel_id=?`,
+      [hotelId]
     );
     const totalStaff = staffCountRow.total || 0;
 
     const [deptRows] = await db.query(
-      `SELECT department AS label, COUNT(*) AS cnt FROM staff GROUP BY department ORDER BY cnt DESC`
+      `SELECT department AS label, COUNT(*) AS cnt
+       FROM staff WHERE hotel_id=?
+       GROUP BY department ORDER BY cnt DESC`,
+      [hotelId]
     );
     const deptTotal = deptRows.reduce((s, r) => s + r.cnt, 0) || 1;
     const staffByDept = deptRows.map((r, i) => ({
@@ -350,8 +387,10 @@ const getReportsOverview = async (req, res) => {
     for (const b of buckets) {
       const bucketDays = Math.round((new Date(b.end) - new Date(b.start)) / 86400000) + 1;
       const [[att]] = await db.query(
-        `SELECT SUM(status='present') AS present FROM attendance WHERE attendance_date BETWEEN ? AND ?`,
-        [b.start, b.end]
+        `SELECT SUM(status='present') AS present
+         FROM attendance
+         WHERE hotel_id=? AND attendance_date BETWEEN ? AND ?`,
+        [hotelId, b.start, b.end]
       );
       const expected = totalStaff * bucketDays;
       const rate = expected > 0 ? Math.round(((att.present || 0) / expected) * 1000) / 10 : 0;
@@ -360,8 +399,11 @@ const getReportsOverview = async (req, res) => {
 
     // Attendance status breakdown within the selected range
     const [attStatusRows] = await db.query(
-      `SELECT status AS label, COUNT(*) AS cnt FROM attendance WHERE attendance_date BETWEEN ? AND ? GROUP BY status ORDER BY cnt DESC`,
-      [rangeStart, rangeEnd]
+      `SELECT status AS label, COUNT(*) AS cnt
+       FROM attendance
+       WHERE hotel_id=? AND attendance_date BETWEEN ? AND ?
+       GROUP BY status ORDER BY cnt DESC`,
+      [hotelId, rangeStart, rangeEnd]
     );
     const attStatusTotal = attStatusRows.reduce((s, r) => s + r.cnt, 0) || 1;
     const attendanceStatusBreakdown = attStatusRows.map((r, i) => ({
@@ -381,8 +423,10 @@ const getReportsOverview = async (req, res) => {
       const sStart = fmt(mStart), sEnd = fmt(mEnd);
       const daysInMonth = mEnd.getDate();
       const [[mAtt]] = await db.query(
-        `SELECT SUM(status='present') AS present FROM attendance WHERE attendance_date BETWEEN ? AND ?`,
-        [sStart, sEnd]
+        `SELECT SUM(status='present') AS present
+         FROM attendance
+         WHERE hotel_id=? AND attendance_date BETWEEN ? AND ?`,
+        [hotelId, sStart, sEnd]
       );
       const expected = totalStaff * daysInMonth;
       staffMonthlySummary.push({
@@ -394,8 +438,10 @@ const getReportsOverview = async (req, res) => {
 
     // Attendance rate for the current range (for the insight line + a stat)
     const [[rangeAtt]] = await db.query(
-      `SELECT SUM(status='present') AS present FROM attendance WHERE attendance_date BETWEEN ? AND ?`,
-      [rangeStart, rangeEnd]
+      `SELECT SUM(status='present') AS present
+       FROM attendance
+       WHERE hotel_id=? AND attendance_date BETWEEN ? AND ?`,
+      [hotelId, rangeStart, rangeEnd]
     );
     const staffAttendanceRate = totalStaff > 0
       ? Math.round(((rangeAtt.present || 0) / (totalStaff * daysInRange)) * 1000) / 10

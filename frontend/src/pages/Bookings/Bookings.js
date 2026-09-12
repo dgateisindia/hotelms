@@ -1,14 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import apiClient from "../../services/apiClient";
-import ExtendStayDialog from "./components/ExtendStayDialog";
-import CollectPaymentDialog from "./components/CollectPaymentDialog";
-import NoShowRefundDialog from "./components/NoShowRefundDialog";
-import CancellationDialog from "./components/CancellationDialog";
-import FinancialSettlementReviewDialog from "./components/FinancialSettlementReviewDialog";
-import ManageGuestsDialog from "./components/ManageGuestsDialog";
-import AppAlert from "../../components/common/AppAlert";
+import apiClient, { getApiErrorMessage } from "../../shared/api/apiClient";
+import AppAlert from "../../shared/components/ui/AppAlert";
+import { formatCurrency } from "../../shared/utils/money";
+import { formatDate, formatDateTime } from "../../shared/utils/dates";
+import {
+  CancellationDialog,
+  CollectPaymentDialog,
+  ExtendStayDialog,
+  FinancialSettlementReviewDialog,
+  LifecycleRefundDialog,
+  ManageGuestsDialog,
+} from "../../features/reservations";
+
 
 import "../../styles/Bookings.css";
 
@@ -169,27 +174,6 @@ function getPaymentClass(
 }
 
 
-function formatCurrency(value) {
-  const amount =
-    Number(value);
-
-  if (
-    !Number.isFinite(amount)
-  ) {
-    return "₹0.00";
-  }
-
-  return new Intl.NumberFormat(
-    "en-IN",
-    {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }
-  ).format(amount);
-}
-
 function formatFinancialChargeRule(
   booking
 ) {
@@ -243,62 +227,6 @@ function formatFinancialChargeRule(
       return "Pending review";
   }
 }
-
-function formatDate(value) {
-  if (!value) {
-    return "—";
-  }
-
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return "—";
-  }
-
-  return date.toLocaleDateString(
-    "en-IN",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }
-  );
-}
-
-
-function formatDateTime(value) {
-  if (!value) {
-    return "—";
-  }
-
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return "—";
-  }
-
-  return date.toLocaleString(
-    "en-IN",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }
-  );
-}
-
 
 function getStartOfToday() {
   const today =
@@ -565,15 +493,6 @@ function bookingMatchesDateFilter(
 }
 
 
-function getApiMessage(
-  error,
-  fallback
-) {
-  return (
-    error?.message ||
-    fallback
-  );
-}
 
 
 function getNextDateValue(
@@ -1726,10 +1645,7 @@ function Bookings() {
           });
         } catch (loadError) {
           setError(
-            getApiMessage(
-              loadError,
-              "Bookings could not be loaded."
-            )
+            getApiErrorMessage(loadError)
           );
         } finally {
           setLoading(false);
@@ -1982,10 +1898,7 @@ function Bookings() {
       * could not be verified.
       */
       setEditGuardMessage(
-        getApiMessage(
-          requestError,
-          "The latest booking status could not be verified. Please try again."
-        )
+        getApiErrorMessage(requestError)
       );
 
       await loadBookings();
@@ -2020,10 +1933,7 @@ function Bookings() {
       );
     } catch (viewLoadError) {
       setViewError(
-        getApiMessage(
-          viewLoadError,
-          "Booking details could not be loaded."
-        )
+        getApiErrorMessage(viewLoadError)
       );
     } finally {
       setViewLoading(false);
@@ -2155,10 +2065,7 @@ function Bookings() {
       cancellationRequestError
     ) {
       setCancellationError(
-        getApiMessage(
-          cancellationRequestError,
-          "The booking could not be cancelled."
-        )
+        getApiErrorMessage(cancellationRequestError)
       );
     } finally {
       setCancellationProcessing(
@@ -2196,10 +2103,7 @@ function Bookings() {
       );
     } catch (reviewLoadError) {
       setFinancialReviewError(
-        getApiMessage(
-          reviewLoadError,
-          "The financial settlement review could not be loaded."
-        )
+        getApiErrorMessage(reviewLoadError)
       );
     } finally {
       setFinancialReviewLoading(false);
@@ -2277,10 +2181,7 @@ function Bookings() {
       await loadBookings();
     } catch (reviewFinalizeError) {
       setFinancialReviewError(
-        getApiMessage(
-          reviewFinalizeError,
-          "The financial settlement review could not be finalized."
-        )
+        getApiErrorMessage(reviewFinalizeError)
       );
     } finally {
       setFinancialReviewProcessing(false);
@@ -2339,10 +2240,7 @@ function Bookings() {
       await loadBookings();
     } catch (actionRequestError) {
       setActionError(
-        getApiMessage(
-          actionRequestError,
-          "The booking could not be updated."
-        )
+        getApiErrorMessage(actionRequestError)
       );
     } finally {
       setActionProcessing(false);
@@ -2425,10 +2323,7 @@ function Bookings() {
       await loadBookings();
     } catch (extendRequestError) {
       setExtendError(
-        getApiMessage(
-          extendRequestError,
-          "The stay could not be extended."
-        )
+        getApiErrorMessage(extendRequestError)
       );
     } finally {
       setExtendProcessing(false);
@@ -2620,10 +2515,7 @@ function Bookings() {
       paymentRequestError
     ) {
       setPaymentError(
-        getApiMessage(
-          paymentRequestError,
-          "The payment could not be recorded."
-        )
+        getApiErrorMessage(paymentRequestError)
       );
     } finally {
       setPaymentProcessing(
@@ -2764,12 +2656,7 @@ function Bookings() {
       await loadBookings();
     } catch (requestError) {
       setRefundError(
-        getApiMessage(
-          requestError,
-          status === "cancelled"
-            ? "The cancellation refund could not be processed."
-            : "The No Show refund could not be processed."
-        )
+        getApiErrorMessage(requestError)
       );
     } finally {
       setRefundProcessing(false);
@@ -3900,7 +3787,7 @@ function Bookings() {
         }
       />
 
-      <NoShowRefundDialog
+      <LifecycleRefundDialog
         booking={refundBooking}
 
         method={refundMethod}

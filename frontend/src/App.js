@@ -37,14 +37,19 @@ import ForgotPassword from "./pages/ForgotPassword/ForgotPassword";
  * Kept temporarily for operational pages that have not yet
  * been migrated into the new Admin Workspace.
  */
-import Dashboard from "./pages/Dashboard/Dashboard";
 
-import AdminDashboard from "./pages/AdminDashboard/AdminDashboard";
+
+import { AdminDashboard } from "./features/dashboard";
+import { Billing } from "./features/billing";
+import { Staff } from "./features/staff";
+import { Attendance } from "./features/attendance";
+import { Payroll } from "./features/payroll";
+import { Reports } from "./features/reports";
+import { CustomerRequests } from "./features/customer-requests";
 
 import QRCodePage from "./pages/QRCodePage";
 
 import CustomerRequestPage from "./pages/CustomerRequestPage";
-
 
 /* ============================================================
    ADMIN LAYOUTS
@@ -52,17 +57,18 @@ import CustomerRequestPage from "./pages/CustomerRequestPage";
 
 import AdminWorkspaceLayout from "./layouts/AdminWorkspaceLayout/AdminWorkspaceLayout";
 
-import Rooms from "./pages/Rooms/Rooms";
+import { Rooms } from "./features/rooms";
 
-import Customers from "./pages/Customers/Customers";
+import { Customers } from "./features/customers";
 
 import Bookings from "./pages/Bookings/Bookings";
 
-import BookingDesk from "./pages/BookingDesk/BookingDesk";
+import { BookingDesk } from "./features/booking-desk";
 
 import ReservationGroupDetails from "./pages/ReservationGroupDetails/ReservationGroupDetails";
+import { ReservationWorkspace } from "./features/reservations";
 
-import Settings from "./pages/Settings";
+import { Settings } from "./features/settings";
 
 /* ============================================================
    SUPER ADMIN PAGES
@@ -95,9 +101,7 @@ import RequireSuperAdmin from "./routes/RequireSuperAdmin";
    API
 ============================================================ */
 
-import {
-  setupApiClientAuth,
-} from "./services/apiClient";
+import { setupApiClientAuth } from "./shared/api/apiClient";
 
 
 /* ============================================================
@@ -155,29 +159,6 @@ function ApiClientAuthBridge() {
    These pages will be migrated one-by-one.
 ============================================================ */
 
-function ProtectedDashboard({
-  page,
-}) {
-  return (
-    <>
-      <SignedIn>
-        <Dashboard
-          page={
-            page
-          }
-        />
-      </SignedIn>
-
-
-      <SignedOut>
-        <Navigate
-          to="/login"
-          replace
-        />
-      </SignedOut>
-    </>
-  );
-}
 
 
 /* ============================================================
@@ -429,6 +410,13 @@ function App() {
               }
             />
 
+              <Route
+                path="/reservations/:groupId"
+                element={
+                  <ReservationWorkspace />
+                }
+              />
+
             <Route
               path="/rooms"
               element={
@@ -443,7 +431,36 @@ function App() {
               }
             />
 
+            
             <Route
+              path="/billing"
+              element={<Billing />}
+            />
+
+            <Route
+              path="/staff"
+              element={<Staff />}
+            />
+
+            <Route
+              path="/attendance"
+              element={<Attendance />}
+            />
+
+            <Route
+              path="/payroll"
+              element={<Payroll />}
+            />
+
+            <Route
+              path="/reports"
+              element={<Reports />}
+            />
+            <Route
+              path="/notifications"
+              element={<CustomerRequests />}
+            />
+<Route
               path="/settings"
               element={
                 <Settings />
@@ -476,65 +493,6 @@ function App() {
               These remain working while each page is migrated
               into AdminWorkspaceLayout one-by-one.
           ================================================== */}
-
-          <Route
-            path="/billing"
-            element={
-              <ProtectedDashboard
-                page="billing"
-              />
-            }
-          />
-
-
-          <Route
-            path="/staff"
-            element={
-              <ProtectedDashboard
-                page="staff"
-              />
-            }
-          />
-
-
-          <Route
-            path="/attendance"
-            element={
-              <ProtectedDashboard
-                page="attendance"
-              />
-            }
-          />
-
-
-          <Route
-            path="/payroll"
-            element={
-              <ProtectedDashboard
-                page="payroll"
-              />
-            }
-          />
-
-
-          <Route
-            path="/reports"
-            element={
-              <ProtectedDashboard
-                page="reports"
-              />
-            }
-          />
-
-
-          <Route
-            path="/notifications"
-            element={
-              <ProtectedDashboard
-                page="notifications"
-              />
-            }
-          />
 
 
           {/* ==================================================
@@ -588,7 +546,7 @@ function App() {
           ================================================== */}
 
           <Route
-            path="/customer-request"
+            path="/customer-request/:publicToken"
             element={
               <CustomerRequestPage />
             }

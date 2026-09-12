@@ -10,7 +10,7 @@ import {
   useLocation,
 } from "react-router-dom";
 
-import PageBreadcrumbs from "../../components/navigation/PageBreadcrumbs/PageBreadcrumbs";
+import PageBreadcrumbs from "../../shared/components/navigation/PageBreadcrumbs/PageBreadcrumbs";
 
 import "./AdminLayout.css";
 
