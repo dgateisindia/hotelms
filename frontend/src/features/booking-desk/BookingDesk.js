@@ -11,7 +11,21 @@ import {
   useNavigate,
 } from "react-router-dom";
 
-import apiClient, { getApiErrorMessage } from "../../shared/api/apiClient";
+import { getApiErrorMessage } from "../../shared/api/apiClient";
+
+import {
+  addReservationGroupRooms,
+  createBooking,
+  getAvailableRooms,
+  getBooking,
+  getReservationGroup,
+  lookupCustomer,
+  quoteBooking,
+  quoteBookingEdit,
+  quoteReservationGroupRooms,
+  saveBookingEdit,
+  updateCustomer,
+} from "./api/bookingDeskApi";
 
 import { formatCurrency } from "../../shared/utils/money";
 
@@ -46,6 +60,11 @@ import {
   IcoPlus,
 } from "../../utils/icons/BookingIcons";
 
+import BookingDeskHeader from "./components/BookingDeskHeader";
+import BookingDeskStepper from "./components/BookingDeskStepper";
+import BookingDeskFooter from "./components/BookingDeskFooter";
+import BookingDeskSuccess from "./components/BookingDeskSuccess";
+import BookingDeskLoadState from "./components/BookingDeskLoadState";
 import GuestStep from "./components/GuestStep";
 
 import StayRoomsStep from "./components/StayRoomsStep";
@@ -58,24 +77,7 @@ import ReviewStep from "./components/ReviewStep";
    CONSTANTS
 ============================================================ */
 
-const STEPS = [
-  {
-    id: 1,
-    label: "Guest",
-  },
-  {
-    id: 2,
-    label: "Stay & Rooms",
-  },
-  {
-    id: 3,
-    label: "Booking Details",
-  },
-  {
-    id: 4,
-    label: "Review",
-  },
-];
+
 
 
 const EMPTY_GUEST = {
@@ -1290,9 +1292,7 @@ function BookingDesk() {
 
       try {
         const response =
-          await apiClient.get(
-            `/bookings/groups/${addRoomGroupId}`
-          );
+          await getReservationGroup(addRoomGroupId);
 
         const data =
           response.data?.data;
@@ -1543,9 +1543,7 @@ function BookingDesk() {
 
       try {
         const response =
-          await apiClient.get(
-            `/bookings/${editBookingId}`
-          );
+          await getBooking(editBookingId);
 
 
         const data =
@@ -1880,9 +1878,7 @@ function BookingDesk() {
         ) {
           try {
             const groupResponse =
-              await apiClient.get(
-                `/bookings/groups/${reservationGroupId}`
-              );
+              await getReservationGroup(reservationGroupId);
 
 
             if (!active) {
@@ -2022,8 +2018,7 @@ function BookingDesk() {
         async () => {
           try {
             const response =
-              await apiClient.get(
-                "/customers/lookup",
+              await lookupCustomer(
                 {
                   params: {
                     phone,
@@ -2227,9 +2222,7 @@ function BookingDesk() {
 
 
           const response =
-            await apiClient.get(
-              `/rooms/available?${params.toString()}`
-            );
+            await getAvailableRooms(params.toString());
 
 
           const rooms =
@@ -2335,6 +2328,47 @@ function BookingDesk() {
       return;
     }
 
+    if (
+      policyLoading
+    ) {
+      setPricingQuote(null);
+      setQuoteLoading(false);
+      setQuoteError("");
+
+      return;
+    }
+
+
+    const quoteReadinessError =
+      validateStayRoomsStep({
+        booking,
+        nights,
+        selectedRooms,
+
+        guestRequirementsPolicy,
+
+        reservationContact:
+          guest,
+
+        isEditMode,
+        isAddRoomMode,
+
+        groupPrimaryGuestAllocated,
+
+        editPrimaryGuestAllocatedElsewhere,
+      });
+
+
+    if (
+      quoteReadinessError
+    ) {
+      setPricingQuote(null);
+      setQuoteLoading(false);
+      setQuoteError("");
+
+      return;
+    }
+
 
     let active =
       true;
@@ -2360,8 +2394,8 @@ function BookingDesk() {
 
 
               response =
-                await apiClient.post(
-                  `/bookings/${editBookingId}/quote`,
+                await quoteBookingEdit(
+                  editBookingId,
                   {
                     customer_id:
                       existingCustomerId,
@@ -2422,9 +2456,9 @@ function BookingDesk() {
                 isAddRoomMode
               ) {
                 response =
-                  await apiClient.post(
-                    `/bookings/groups/${addRoomGroupId}/rooms/quote`,
-                    {
+                  await quoteReservationGroupRooms(
+                      addRoomGroupId,
+                      {
                       stay_type:
                         booking.stay_type,
 
@@ -2447,8 +2481,7 @@ function BookingDesk() {
 
 
                 response =
-                  await apiClient.post(
-                    "/bookings/quote",
+                  await quoteBooking(
                     {
                       stay_type:
                         booking.stay_type,
@@ -2558,6 +2591,13 @@ function BookingDesk() {
 
     isAddRoomMode,
     addRoomGroupId,
+
+    policyLoading,
+    nights,
+    guestRequirementsPolicy,
+    groupPrimaryGuestAllocated,
+    editPrimaryGuestAllocatedElsewhere,
+
     matchedCustomer,
     guest.phone,
     guest.guest_name,
@@ -3067,9 +3107,9 @@ function BookingDesk() {
 
 
     try {
-      await apiClient.put(
-        `/customers/${matchedCustomer.customer_id}`,
-        {
+      await updateCustomer(
+          matchedCustomer.customer_id,
+          {
           full_name:
             fullName,
 
@@ -4091,9 +4131,7 @@ function BookingDesk() {
       isAddRoomMode &&
       step === 2
     ) {
-      navigate(
-        `/bookings/groups/${addRoomGroupId}`
-      );
+      navigate(`/reservations/${addRoomGroupId}`);
 
       return;
     }
@@ -4271,9 +4309,9 @@ function BookingDesk() {
         }
 
         const response =
-          await apiClient.put(
-            `/bookings/${editBookingId}`,
-            editPayload
+          await saveBookingEdit(
+              editBookingId,
+              editPayload
           );
 
         const result =
@@ -4489,9 +4527,9 @@ function BookingDesk() {
         }
 
         const response =
-          await apiClient.post(
-            `/bookings/groups/${addRoomGroupId}/rooms`,
-            payload
+          await addReservationGroupRooms(
+              addRoomGroupId,
+              payload
           );
 
         const result =
@@ -4674,8 +4712,7 @@ function BookingDesk() {
 
 
       const response =
-        await apiClient.post(
-          "/bookings",
+        await createBooking(
           payload
         );
 
@@ -4822,13 +4859,9 @@ function BookingDesk() {
     loading
   ) {
     return (
-      <div className="booking-desk-page">
-
-        <div className="booking-desk-state">
-          Loading booking...
-        </div>
-
-      </div>
+      <BookingDeskLoadState
+        loading
+      />
     );
   }
 
@@ -4837,36 +4870,17 @@ function BookingDesk() {
     loadError
   ) {
     return (
-      <div className="booking-desk-page">
-
-        <div className="booking-desk-load-error">
-
-          <h2>
-            Reservation Locked
-          </h2>
-
-          <p>
-            {loadError}
-          </p>
-
-          <button
-            type="button"
-            onClick={() =>
-              navigate(
-                isAddRoomMode
-                  ? `/bookings/groups/${addRoomGroupId}`
-                  : "/bookings"
-              )
-            }
-          >
-            {isAddRoomMode
-              ? "Back to Reservation Group"
-              : "Back to Bookings"}
-          </button>
-
-        </div>
-
-      </div>
+      <BookingDeskLoadState
+        loadError={loadError}
+        isAddRoomMode={isAddRoomMode}
+        onBack={() =>
+          navigate(
+            isAddRoomMode
+              ? `/reservations/${addRoomGroupId}`
+              : "/bookings"
+          )
+        }
+      />
     );
   }
 
@@ -4875,460 +4889,31 @@ function BookingDesk() {
      SUCCESS
   ========================================================== */
 
-  if (
+    if (
     success
   ) {
-    const paid =
-      Number(
-        success.amountReceived ||
-        0
-      );
-
-
-    const total =
-      Number(
-        success.grandTotal ||
-        0
-      );
-
-
-    const due =
-      Number(
-        success.balanceDue ||
-        0
-      );
-
-
-    const status =
-      success.paymentStatus
-        ? String(
-            success.paymentStatus
-          )
-            .replaceAll(
-              "_",
-              " "
-            )
-        : getPaymentDisplayStatus(
-            paid,
-            total
-          );
-
-    const successBookings =
-      Array.isArray(
-        success.bookings
-      )
-        ? success.bookings
-        : [];
-
-
-    const hasMultipleSuccessRooms =
-      successBookings.length > 1;
-
     return (
-      <div className="booking-desk-page">
-
-        <div className="booking-desk-success">
-
-          <div className="booking-desk-success__icon">
-            <IcoCheck />
-          </div>
-
-
-          <h1>
-            {success.title}
-          </h1>
-
-
-          <p>
-            {success.message}
-          </p>
-
-
-          <div className="booking-desk-review-grid">
-
-            <section className="booking-desk-review-card">
-
-              <h3>Stay Summary</h3>
-
-              <div>
-                <span>
-                  Guest
-                </span>
-
-                <strong>
-                  {success.guestName ||
-                    "—"}
-                </strong>
-              </div>
-
-              {success.addRoomMode && (
-                <div>
-                  <span>
-                    Reservation Group
-                  </span>
-
-                  <strong>
-                    {success.groupCode ||
-                      "—"}
-                  </strong>
-                </div>
-              )}
-
-              <div>
-                <span>
-                  Stay Type
-                </span>
-
-                <strong>
-                  {success.stayType ===
-                    "day_use"
-                    ? "Day Use / Short Stay"
-                    : "Overnight Stay"}
-                </strong>
-              </div>
-
-
-              {hasMultipleSuccessRooms ? (
-
-                <div>
-
-                  <span>
-                    Stay Timing
-                  </span>
-
-                  <strong>
-                    Room-specific timings shown below
-                  </strong>
-
-                </div>
-
-              ) : (
-                <>
-
-                  <div>
-
-                    <span>
-                      Check In
-                    </span>
-
-                    <strong>
-                      {success.stayType ===
-                      "day_use"
-                        ? formatStayDateTime(
-                            success.checkIn
-                          )
-                        : formatDate(
-                            success.checkIn
-                          )}
-                    </strong>
-
-                  </div>
-
-
-                  <div>
-
-                    <span>
-                      {success.stayType ===
-                      "day_use"
-                        ? "Check Out"
-                        : "Expected Check Out"}
-                    </span>
-
-                    <strong>
-                      {success.stayType ===
-                      "day_use"
-                        ? formatStayDateTime(
-                            success.checkOut
-                          )
-                        : formatDate(
-                            success.checkOut
-                          )}
-                    </strong>
-
-                  </div>
-
-
-                  <div>
-
-                    <span>
-                      {success.stayType ===
-                      "day_use"
-                        ? "Stay Duration"
-                        : "Nights"}
-                    </span>
-
-                    <strong>
-                      {success.stayType ===
-                      "day_use"
-                        ? formatStayDuration(
-                            success.durationMinutes
-                          )
-                        : success.nights ||
-                          nights}
-                    </strong>
-
-                  </div>
-
-                </>
-              )}
-
-            </section>
-
-
-            <section className="booking-desk-review-card">
-
-              <h3>
-                {success.addRoomMode
-                  ? "Added Room Payment Summary"
-                  : "Payment Summary"}
-              </h3>
-
-              <div>
-                <span>
-                  {success.addRoomMode
-                    ? success.bookings?.length > 1
-                      ? "Added Rooms Total"
-                      : "Added Room Total"
-                    : "Booking Total"}
-                </span>
-
-                <strong>
-                  {formatCurrency(
-                    total
-                  )}
-                </strong>
-              </div>
-
-              {success.refund ? (
-                <>
-                  <div>
-                    <span>
-                      Refund Processed
-                    </span>
-
-                    <strong>
-                      -{formatCurrency(
-                        success.refund.amount
-                      )}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>
-                      Refund Method
-                    </span>
-
-                    <strong className="booking-desk-capitalize">
-                      {String(
-                        success.refund.payment_method ||
-                        ""
-                      ).replaceAll(
-                        "_",
-                        " "
-                      )}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>
-                      Net Paid
-                    </span>
-
-                    <strong>
-                      {formatCurrency(
-                        paid
-                      )}
-                    </strong>
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <span>
-                    Amount Received
-                  </span>
-
-                  <strong>
-                    {formatCurrency(
-                      paid
-                    )}
-                  </strong>
-                </div>
-              )}
-
-              <div>
-                <span>
-                  Balance Due
-                </span>
-
-                <strong>
-                  {formatCurrency(
-                    due
-                  )}
-                </strong>
-              </div>
-
-              <div>
-                <span>
-                  Payment Status
-                </span>
-
-                <strong className="booking-desk-capitalize">
-                  {status}
-                </strong>
-              </div>
-
-            </section>
-
-          </div>
-
-
-          {successBookings.length >
-            0 && (
-              <div className="booking-desk-success__bookings">
-
-                {successBookings.map(
-                  (
-                    created
-                  ) => {
-                    const roomStayType =
-                      created.stayType ||
-                      success.stayType;
-
-                    const roomCheckIn =
-                      created.checkIn ||
-                      created.check_in ||
-                      success.checkIn ||
-                      "";
-
-                    const roomCheckOut =
-                      created.checkOut ||
-                      created.check_out ||
-                      success.checkOut ||
-                      "";
-
-                    const roomNights =
-                      Number(
-                        created.nights ??
-                        calculateNights(
-                          roomCheckIn,
-                          roomCheckOut
-                        )
-                      );
-
-                    const roomDurationMinutes =
-                      Number(
-                        created.durationMinutes ??
-                        created.duration_minutes ??
-                        0
-                      );
-
-                    const roomTotal =
-                      Number(
-                        created.totalAmount ??
-                        created.total_amount ??
-                        0
-                      );
-
-                    return (
-                      <div
-                        key={
-                          created.bookingId
-                        }
-                      >
-
-                        <strong>
-                          {created.bookingCode}
-                          {" · "}
-                          Room{" "}
-                          {created.roomNumber}
-                        </strong>
-
-
-                        <span>
-
-                          {created.roomType
-                            ? `${created.roomType} · `
-                            : ""}
-
-                          {roomStayType ===
-                          "day_use"
-                            ? (
-                                `${formatStayDateTime(
-                                  roomCheckIn
-                                )} → ${formatStayDateTime(
-                                  roomCheckOut
-                                )} · ${formatStayDuration(
-                                  roomDurationMinutes
-                                )}`
-                              )
-                            : (
-                                `${formatDate(
-                                  roomCheckIn
-                                )} → ${formatDate(
-                                  roomCheckOut
-                                )} · ${roomNights} night${
-                                  roomNights === 1
-                                    ? ""
-                                    : "s"
-                                }`
-                              )}
-
-                          {" · "}
-
-                          {formatCurrency(
-                            roomTotal
-                          )}
-
-                        </span>
-
-                      </div>
-                    );
-                  }
-                )}
-
-              </div>
-            )}
-
-
-          <div className="booking-desk-success__actions">
-
-            <button
-              type="button"
-              className="booking-desk-btn booking-desk-btn--secondary"
-              onClick={() =>
-                navigate(
-                  isAddRoomMode
-                    ? `/bookings/groups/${addRoomGroupId}`
-                    : "/bookings"
-                )
-              }
-            >
-              {isAddRoomMode
-                ? "Back to Reservation Group"
-                : "View Bookings"}
-            </button>
-
-
-            {!isEditMode &&
-              !isAddRoomMode && (
-              <button
-                type="button"
-                className="booking-desk-btn booking-desk-btn--primary"
-                onClick={
-                  resetDesk
-                }
-              >
-                <IcoPlus />
-
-                New Booking
-              </button>
-            )}
-
-          </div>
-
-        </div>
-
-      </div>
+      <BookingDeskSuccess
+        success={success}
+        fallbackNights={nights}
+        isEditMode={isEditMode}
+        isAddRoomMode={isAddRoomMode}
+        successIcon={<IcoCheck />}
+        newBookingIcon={<IcoPlus />}
+        formatCurrency={formatCurrency}
+        formatDate={formatDate}
+        formatStayDateTime={formatStayDateTime}
+        formatStayDuration={formatStayDuration}
+        getPaymentDisplayStatus={getPaymentDisplayStatus}
+        onBack={() =>
+          navigate(
+            isAddRoomMode
+              ? `/reservations/${addRoomGroupId}`
+              : "/bookings"
+          )
+        }
+        onNewBooking={resetDesk}
+      />
     );
   }
 
@@ -5345,107 +4930,31 @@ function BookingDesk() {
           HEADER
       ====================================================== */}
 
-      <div className="booking-desk-header">
-
-        <div>
-          <h1>
-            {isEditMode
-              ? "Edit Reservation"
-              : isAddRoomMode
-                ? `Add Room to ${reservationGroup?.group_code || "Reservation"}`
-                : "Booking Desk"}
-          </h1>
-
-          <p>
-            {isEditMode
-              ? "Update this reservation before the guest checks in."
-              : isAddRoomMode
-                ? `Add additional room reservations for ${guest.guest_name || "this guest"}.`
-                : "Create a hotel reservation using the guided front-desk flow."}
-          </p>
-        </div>
-
-
-        <button
-          type="button"
-          className="booking-desk-back-link"
-          onClick={() =>
+        <BookingDeskHeader
+          isEditMode={isEditMode}
+          isAddRoomMode={isAddRoomMode}
+          reservationGroup={reservationGroup}
+          guest={guest}
+          backIcon={<IcoChevL />}
+          onBack={() =>
             navigate(
               isAddRoomMode
-                ? `/bookings/groups/${addRoomGroupId}`
+                ? `/reservations/${addRoomGroupId}`
                 : "/bookings"
             )
           }
-        >
-          <IcoChevL />
+        />
 
-          {isAddRoomMode
-            ? "Back to Reservation Group"
-            : "Back to Bookings"}
-        </button>
-
-      </div>
-
-
-      {/* ======================================================
+{/* ======================================================
           STEPS
       ====================================================== */}
 
-      <div className="booking-desk-steps">
+        <BookingDeskStepper
+          step={step}
+          completeIcon={<IcoCheck />}
+        />
 
-        {STEPS.map(
-          (
-            item
-          ) => (
-            <div
-              key={
-                item.id
-              }
-              className={
-                [
-                  "booking-desk-step",
-
-                  item.id ===
-                  step
-                    ? "booking-desk-step--active"
-                    : "",
-
-                  item.id <
-                  step
-                    ? "booking-desk-step--complete"
-                    : "",
-                ]
-                  .filter(
-                    Boolean
-                  )
-                  .join(" ")
-              }
-            >
-
-              <span className="booking-desk-step__number">
-
-                {item.id <
-                step ? (
-                  <IcoCheck />
-                ) : (
-                  item.id
-                )}
-
-              </span>
-
-
-              <span className="booking-desk-step__label">
-                {item.label}
-              </span>
-
-            </div>
-          )
-        )}
-
-      </div>
-
-
-      {formError && (
+{formError && (
         <div
           ref={
             formErrorRef
@@ -5758,111 +5267,30 @@ function BookingDesk() {
             FOOTER
         ==================================================== */}
 
-        <div className="booking-desk-footer">
-
-          <div>
-
-            {step > 1 && (
-              <button
-                type="button"
-                className="booking-desk-btn booking-desk-btn--secondary"
-                disabled={
-                  submitting
-                }
-                onClick={
-                  goBack
-                }
-              >
-                <IcoChevL />
-
-                Back
-              </button>
-            )}
-
-          </div>
-
-
-          <div className="booking-desk-footer__right">
-
-            <button
-              type="button"
-              className="booking-desk-btn booking-desk-btn--ghost"
-              disabled={
-                submitting
-              }
-              onClick={() =>
-                navigate(
-                  isAddRoomMode
-                    ? `/bookings/groups/${addRoomGroupId}`
-                    : "/bookings"
-                )
-              }
-            >
-              Cancel
-            </button>
-
-
-            {step < 4 ? (
-              <button
-                type="button"
-                className="booking-desk-btn booking-desk-btn--primary"
-                disabled={
-                  submitting ||
-                  (
-                    step === 2 &&
-                    (
-                      quoteLoading ||
-                      pricingSaveBlocked
-                    )
-                  )
-                }
-                title={
-                  pricingSaveBlocked
-                    ? (
-                        pricingQuote
-                          ?.payment_message ||
-                        "Resolve the payment adjustment before continuing."
-                      )
-                    : undefined
-                }
-                onClick={
-                  goNext
-                }
-              >
-                Continue
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="booking-desk-btn booking-desk-btn--primary"
-                disabled={
-                  submitting ||
-                  quoteLoading ||
-                  pricingSaveBlocked
-                }
-                onClick={() =>
-                  void handleSubmit()
-                }
-              >
-                <IcoCheck />
-
-                {submitting
-                  ? "Saving..."
-                  : isEditMode
-                    ? "Save Changes"
-                    : isAddRoomMode
-                      ? selectedRooms.length > 1
-                        ? "Add Rooms"
-                        : "Add Room"
-                      : selectedRooms.length > 1
-                        ? "Confirm Reservations"
-                        : "Confirm Reservation"}
-              </button>
-            )}
-
-          </div>
-
-        </div>
+                <BookingDeskFooter
+          step={step}
+          submitting={submitting}
+          quoteLoading={quoteLoading}
+          pricingSaveBlocked={pricingSaveBlocked}
+          pricingMessage={pricingQuote?.payment_message}
+          isEditMode={isEditMode}
+          isAddRoomMode={isAddRoomMode}
+          selectedRoomCount={selectedRooms.length}
+          backIcon={<IcoChevL />}
+          submitIcon={<IcoCheck />}
+          onBack={goBack}
+          onCancel={() =>
+            navigate(
+              isAddRoomMode
+                ? `/reservations/${addRoomGroupId}`
+                : "/bookings"
+            )
+          }
+          onContinue={goNext}
+          onSubmit={() =>
+            void handleSubmit()
+          }
+        />
 
       </div>
 

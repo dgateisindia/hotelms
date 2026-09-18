@@ -36,7 +36,7 @@ const PERIODS = [
 const PERIOD_TITLE = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 
 const VIEWS = [
-  { value: 'revenue', label: 'Revenue' },
+  { value: 'revenue', label: 'Collections' },
   { value: 'bookings', label: 'Bookings' },
   { value: 'rooms', label: 'Rooms' },
   { value: 'staff', label: 'Staff' },
@@ -240,33 +240,33 @@ function buildReportCsv(data, anchorDate, view) {
   lines.push('Summary Stats');
   lines.push('Metric,Value,Change vs Previous Period');
   if (view === 'bookings') {
-    lines.push(`Rooms Occupied,${stats.occupiedRooms} / ${stats.totalRoomsCount},`);
+    lines.push(`Distinct Booked Rooms,${stats.occupiedRooms} / ${stats.totalRoomsCount},`);
   } else {
-    lines.push(`Total Revenue,${stats.totalRevenue},${stats.totalRevenueChangePct}%`);
+    lines.push(`Net Collections,${stats.netCollections},${stats.netCollectionsChangePct}%`);
   }
-  lines.push(`Occupancy Rate,${stats.occupancyRate}%,${stats.occupancyRateChangePct}%`);
+  lines.push(`Overnight Occupancy Rate,${stats.occupancyRate}%,${stats.occupancyRateChangePct}%`);
   lines.push(`Total Bookings,${stats.totalBookings},${stats.totalBookingsChangePct}%`);
   lines.push(`Cancellation Rate,${stats.cancellationRate}%,${stats.cancellationRateChangePp} pts`);
-  lines.push(`RevPAR,${stats.revpar},`);
+  lines.push(`Collections / Available Room-Night,${stats.collectionsPerAvailableRoomNight},`);
   lines.push('');
 
   if (view === 'revenue') {
-    lines.push('Revenue Trend');
+    lines.push('Net Collections Trend');
     lines.push('Label,This Period,Last Period');
     revenueTrend.forEach(r => lines.push(`${escapeCsv(r.label)},${r.thisPeriod},${r.lastPeriod}`));
     lines.push('');
 
-    lines.push('Revenue by Room Type');
-    lines.push('Room Type,Percent of Revenue');
+    lines.push('Net Collections by Current Room Type');
+    lines.push('Room Type,Percent of Net Collections');
     revenueByRoom.forEach(r => lines.push(`${escapeCsv(r.label)},${r.pct}%`));
     lines.push('');
 
     lines.push('Monthly Performance Summary (last 6 calendar months)');
-    lines.push('Month,Total Revenue,Occupancy Rate,Average Daily Rate,RevPAR,Total Bookings');
-    monthlySummary.forEach(m => lines.push(`${escapeCsv(m.month)},${m.revenue},${m.occ}%,${m.adr},${m.revpar},${m.bookings}`));
+    lines.push('Month,Net Collections,Overnight Occupancy Rate,Collections / Sold Room-Night,Collections / Available Room-Night,Total Bookings');
+    monthlySummary.forEach(m => lines.push(`${escapeCsv(m.month)},${m.netCollections},${m.occ}%,${m.collectionsPerSoldRoomNight},${m.collectionsPerAvailableRoomNight},${m.bookings}`));
     lines.push('');
 
-    lines.push('Revenue Forecast');
+    lines.push('Net Collections Projection');
     lines.push('Label,Actual,Forecast');
     forecast.forEach(f => lines.push(`${escapeCsv(f.label)},${f.actual ?? ''},${f.forecast}`));
     lines.push('');
@@ -285,26 +285,26 @@ function buildReportCsv(data, anchorDate, view) {
     lines.push('');
 
     lines.push('Monthly Performance Summary (last 6 calendar months)');
-    lines.push('Month,Total Bookings,Occupancy Rate');
+    lines.push('Month,Total Bookings,Overnight Occupancy Rate');
     monthlySummary.forEach(m => lines.push(`${escapeCsv(m.month)},${m.bookings},${m.occ}%`));
     lines.push('');
 
     lines.push('Insights');
     insights.forEach(i => lines.push(escapeCsv(i.text)));
   } else if (view === 'rooms') {
-    lines.push('Occupancy by Room Type');
-    lines.push('Room Type,Occupancy %');
+    lines.push('Booked Overnight Occupancy by Current Room Type');
+    lines.push('Current Room Type,Booked Overnight Occupancy %');
     occupancyByRoom.forEach(r => lines.push(`${escapeCsv(r.label)},${r.pct}%`));
     lines.push('');
 
-    lines.push('Revenue by Room Type');
-    lines.push('Room Type,Percent of Revenue');
+    lines.push('Net Collections by Current Room Type');
+    lines.push('Room Type,Percent of Net Collections');
     revenueByRoom.forEach(r => lines.push(`${escapeCsv(r.label)},${r.pct}%`));
     lines.push('');
 
     lines.push('Monthly Performance Summary (last 6 calendar months)');
-    lines.push('Month,Occupancy Rate,RevPAR');
-    monthlySummary.forEach(m => lines.push(`${escapeCsv(m.month)},${m.occ}%,${m.revpar}`));
+    lines.push('Month,Overnight Occupancy Rate,Collections / Available Room-Night');
+    monthlySummary.forEach(m => lines.push(`${escapeCsv(m.month)},${m.occ}%,${m.collectionsPerAvailableRoomNight}`));
     lines.push('');
 
     lines.push('Insights');
@@ -584,19 +584,19 @@ function Reports() {
           <>
             <div className="repstat-card">
               <div className="repstat-icon blue"><IcoOccupancy /></div>
-              <div><div className="repstat-label">Occupancy Rate</div><div className="repstat-value">{stats.occupancyRate}%</div>{changeBadge(stats.occupancyRateChangePct)}</div>
+              <div><div className="repstat-label">Overnight Occupancy Rate</div><div className="repstat-value">{stats.occupancyRate}%</div>{changeBadge(stats.occupancyRateChangePct)}</div>
             </div>
             <div className="repstat-card">
               <div className="repstat-icon purple"><IcoBookings /></div>
-              <div><div className="repstat-label">Rooms Occupied</div><div className="repstat-value">{stats.occupiedRooms} / {stats.totalRoomsCount}</div></div>
+              <div><div className="repstat-label">Distinct Booked Rooms</div><div className="repstat-value">{stats.occupiedRooms} / {stats.totalRoomsCount}</div></div>
             </div>
             <div className="repstat-card">
               <div className="repstat-icon teal"><IcoUsers /></div>
-              <div><div className="repstat-label">RevPAR</div><div className="repstat-value">{formatINR(stats.revpar)}</div></div>
+              <div><div className="repstat-label">Collections / Available Room-Night</div><div className="repstat-value">{formatINR(stats.collectionsPerAvailableRoomNight)}</div></div>
             </div>
             <div className="repstat-card">
               <div className="repstat-icon green"><IcoRevenue /></div>
-              <div><div className="repstat-label">Room Revenue</div><div className="repstat-value">{formatINR(stats.totalRevenue)}</div>{changeBadge(stats.totalRevenueChangePct)}</div>
+              <div><div className="repstat-label">Net Collections</div><div className="repstat-value">{formatINR(stats.netCollections)}</div>{changeBadge(stats.netCollectionsChangePct)}</div>
             </div>
             <div className="repstat-card">
               <div className="repstat-icon red"><IcoCancel /></div>
@@ -612,14 +612,14 @@ function Reports() {
             <div className="repstat-card">
               <div className="repstat-icon purple"><IcoBookings /></div>
               <div>
-                <div className="repstat-label">Rooms Occupied</div>
+                <div className="repstat-label">Distinct Booked Rooms</div>
                 <div className="repstat-value">{stats.occupiedRooms} / {stats.totalRoomsCount}</div>
-                <div className="repstat-change">{stats.occupancyRate}% of rooms occupied</div>
+                <div className="repstat-change">{stats.occupancyRate}% booked overnight occupancy</div>
               </div>
             </div>
             <div className="repstat-card">
               <div className="repstat-icon blue"><IcoOccupancy /></div>
-              <div><div className="repstat-label">Occupancy Rate</div><div className="repstat-value">{stats.occupancyRate}%</div>{changeBadge(stats.occupancyRateChangePct)}</div>
+              <div><div className="repstat-label">Overnight Occupancy Rate</div><div className="repstat-value">{stats.occupancyRate}%</div>{changeBadge(stats.occupancyRateChangePct)}</div>
             </div>
             <div className="repstat-card">
               <div className="repstat-icon purple"><IcoBookings /></div>
@@ -635,18 +635,18 @@ function Reports() {
             </div>
             <div className="repstat-card">
               <div className="repstat-icon teal"><IcoUsers /></div>
-              <div><div className="repstat-label">RevPAR</div><div className="repstat-value">{formatINR(stats.revpar)}</div></div>
+              <div><div className="repstat-label">Collections / Available Room-Night</div><div className="repstat-value">{formatINR(stats.collectionsPerAvailableRoomNight)}</div></div>
             </div>
           </>
         ) : (
           <>
             <div className="repstat-card">
               <div className="repstat-icon green"><IcoRevenue /></div>
-              <div><div className="repstat-label">Total Revenue</div><div className="repstat-value">{formatINR(stats.totalRevenue)}</div>{changeBadge(stats.totalRevenueChangePct)}</div>
+              <div><div className="repstat-label">Net Collections</div><div className="repstat-value">{formatINR(stats.netCollections)}</div>{changeBadge(stats.netCollectionsChangePct)}</div>
             </div>
             <div className="repstat-card">
               <div className="repstat-icon blue"><IcoOccupancy /></div>
-              <div><div className="repstat-label">Occupancy Rate</div><div className="repstat-value">{stats.occupancyRate}%</div>{changeBadge(stats.occupancyRateChangePct)}</div>
+              <div><div className="repstat-label">Overnight Occupancy Rate</div><div className="repstat-value">{stats.occupancyRate}%</div>{changeBadge(stats.occupancyRateChangePct)}</div>
             </div>
             <div className="repstat-card">
               <div className="repstat-icon purple"><IcoBookings /></div>
@@ -662,7 +662,7 @@ function Reports() {
             </div>
             <div className="repstat-card">
               <div className="repstat-icon teal"><IcoUsers /></div>
-              <div><div className="repstat-label">RevPAR</div><div className="repstat-value">{formatINR(stats.revpar)}</div></div>
+              <div><div className="repstat-label">Collections / Available Room-Night</div><div className="repstat-value">{formatINR(stats.collectionsPerAvailableRoomNight)}</div></div>
             </div>
           </>
         )}
@@ -673,10 +673,10 @@ function Reports() {
 
         {view === 'revenue' && (
           <>
-            {/* Revenue Overview */}
+            {/* Net Collections Overview */}
             <div className="rep-card">
               <CardHeader
-                title="Revenue Overview"
+                title="Net Collections Overview"
                 chartType={chartTypes.revenue}
                 onChartTypeChange={(v) => setChartType('revenue', v)}
                 options={[{ value: 'line', label: 'Line' }, { value: 'area', label: 'Area' }, { value: 'bar', label: 'Bar' }]}
@@ -688,10 +688,10 @@ function Reports() {
               </div>
             </div>
 
-            {/* Revenue by Room Type */}
+            {/* Net Collections by Current Room Type */}
             <div className="rep-card">
               <CardHeader
-                title="Revenue by Room Type"
+                title="Net Collections by Current Room Type"
                 chartType={chartTypes.revenueByRoom}
                 onChartTypeChange={(v) => setChartType('revenueByRoom', v)}
                 options={[{ value: 'donut', label: 'Donut' }, { value: 'bar', label: 'Bar' }]}
@@ -703,8 +703,8 @@ function Reports() {
                     size={110} stroke={20}
                     centerContent={
                       <div className="donut-center-rep">
-                        <span className="donut-amt-rep">{formatINR(stats.totalRevenue)}</span>
-                        <span className="donut-sub-rep">Total Revenue</span>
+                        <span className="donut-amt-rep">{formatINR(stats.netCollections)}</span>
+                        <span className="donut-sub-rep">Net Collections</span>
                       </div>
                     }
                   />
@@ -723,9 +723,9 @@ function Reports() {
               )}
             </div>
 
-            {/* Occupancy Overview */}
+            {/* Overnight Occupancy Overview */}
             <div className="rep-card">
-              <div className="rep-card-title">Occupancy Overview</div>
+              <div className="rep-card-title">Overnight Occupancy Overview</div>
               <div className="occ-donut-wrap">
                 <DonutChart
                   segments={[{ pct: stats.occupancyRate, color: '#10b981' }, { pct: Math.max(0, 100 - stats.occupancyRate), color: '#f1f4f9' }]}
@@ -733,7 +733,7 @@ function Reports() {
                   centerContent={
                     <div className="occ-center">
                       <span className="occ-pct">{stats.occupancyRate}%</span>
-                      <span className="occ-label">Occupancy Rate</span>
+                      <span className="occ-label">Overnight Occupancy Rate</span>
                     </div>
                   }
                 />
@@ -785,9 +785,9 @@ function Reports() {
               )}
             </div>
 
-            {/* Occupancy Overview */}
+            {/* Overnight Occupancy Overview */}
             <div className="rep-card">
-              <div className="rep-card-title">Occupancy Overview</div>
+              <div className="rep-card-title">Overnight Occupancy Overview</div>
               <div className="occ-donut-wrap">
                 <DonutChart
                   segments={[{ pct: stats.occupancyRate, color: '#10b981' }, { pct: Math.max(0, 100 - stats.occupancyRate), color: '#f1f4f9' }]}
@@ -795,7 +795,7 @@ function Reports() {
                   centerContent={
                     <div className="occ-center">
                       <span className="occ-pct">{stats.occupancyRate}%</span>
-                      <span className="occ-label">Occupancy Rate</span>
+                      <span className="occ-label">Overnight Occupancy Rate</span>
                     </div>
                   }
                 />
@@ -809,9 +809,9 @@ function Reports() {
 
         {view === 'rooms' && (
           <>
-            {/* Occupancy Overview */}
+            {/* Overnight Occupancy Overview */}
             <div className="rep-card">
-              <div className="rep-card-title">Occupancy Overview</div>
+              <div className="rep-card-title">Overnight Occupancy Overview</div>
               <div className="occ-donut-wrap">
                 <DonutChart
                   segments={[{ pct: stats.occupancyRate, color: '#10b981' }, { pct: Math.max(0, 100 - stats.occupancyRate), color: '#f1f4f9' }]}
@@ -819,7 +819,7 @@ function Reports() {
                   centerContent={
                     <div className="occ-center">
                       <span className="occ-pct">{stats.occupancyRate}%</span>
-                      <span className="occ-label">Occupancy Rate</span>
+                      <span className="occ-label">Overnight Occupancy Rate</span>
                     </div>
                   }
                 />
@@ -829,10 +829,10 @@ function Reports() {
               </div>
             </div>
 
-            {/* Occupancy by Room Type */}
+            {/* Booked Overnight Occupancy by Current Room Type */}
             <div className="rep-card">
               <CardHeader
-                title="Occupancy by Room Type"
+                title="Booked Overnight Occupancy by Current Room Type"
                 chartType={chartTypes.occupancyByRoom}
                 onChartTypeChange={(v) => setChartType('occupancyByRoom', v)}
                 options={[{ value: 'bar', label: 'Bar' }, { value: 'donut', label: 'Donut' }]}
@@ -855,10 +855,10 @@ function Reports() {
               )}
             </div>
 
-            {/* Revenue by Room Type */}
+            {/* Net Collections by Current Room Type */}
             <div className="rep-card">
               <CardHeader
-                title="Revenue by Room Type"
+                title="Net Collections by Current Room Type"
                 chartType={chartTypes.revenueByRoom}
                 onChartTypeChange={(v) => setChartType('revenueByRoom', v)}
                 options={[{ value: 'donut', label: 'Donut' }, { value: 'bar', label: 'Bar' }]}
@@ -870,8 +870,8 @@ function Reports() {
                     size={110} stroke={20}
                     centerContent={
                       <div className="donut-center-rep">
-                        <span className="donut-amt-rep">{formatINR(stats.totalRevenue)}</span>
-                        <span className="donut-sub-rep">Total Revenue</span>
+                        <span className="donut-amt-rep">{formatINR(stats.netCollections)}</span>
+                        <span className="donut-sub-rep">Net Collections</span>
                       </div>
                     }
                   />
@@ -945,10 +945,10 @@ function Reports() {
       {view === 'revenue' && (
         <div className="rep-row-2" ref={row2Ref}>
 
-          {/* Occupancy by Room Type */}
+          {/* Booked Overnight Occupancy by Current Room Type */}
           <div className="rep-card">
             <CardHeader
-              title="Occupancy by Room Type"
+              title="Booked Overnight Occupancy by Current Room Type"
               chartType={chartTypes.occupancyByRoom}
               onChartTypeChange={(v) => setChartType('occupancyByRoom', v)}
               options={[{ value: 'bar', label: 'Bar' }, { value: 'donut', label: 'Donut' }]}
@@ -1021,18 +1021,18 @@ function Reports() {
               <table className="perf-table">
                 <thead>
                   <tr>
-                    <th>Month</th><th>Total Revenue (₹)</th><th>Occupancy Rate</th>
-                    <th>Average Daily Rate (₹)</th><th>RevPAR (₹)</th><th>Total Bookings</th>
+                    <th>Month</th><th>Net Collections (₹)</th><th>Overnight Occupancy Rate</th>
+                    <th>Collections / Sold Room-Night (₹)</th><th>Collections / Available Room-Night (₹)</th><th>Total Bookings</th>
                   </tr>
                 </thead>
                 <tbody>
                   {monthlySummary.map(m => (
                     <tr key={m.month}>
                       <td style={{ fontWeight: 600 }}>{m.month}</td>
-                      <td>{m.revenue.toLocaleString('en-IN')}</td>
+                      <td>{m.netCollections.toLocaleString('en-IN')}</td>
                       <td>{m.occ}%</td>
-                      <td>{m.adr.toLocaleString('en-IN')}</td>
-                      <td>{m.revpar.toLocaleString('en-IN')}</td>
+                      <td>{m.collectionsPerSoldRoomNight.toLocaleString('en-IN')}</td>
+                      <td>{m.collectionsPerAvailableRoomNight.toLocaleString('en-IN')}</td>
                       <td>{m.bookings}</td>
                     </tr>
                   ))}
@@ -1042,7 +1042,7 @@ function Reports() {
 
             <div className="rep-card">
               <CardHeader
-                title={`Revenue Forecast (Next ${forecast.length - revenueTrend.length} ${period === 'daily' ? 'Days' : period === 'weekly' ? 'Weeks' : 'Months'})`}
+                title={`Net Collections Projection (Next ${forecast.length - revenueTrend.length} ${period === 'daily' ? 'Days' : period === 'weekly' ? 'Weeks' : 'Months'})`}
                 chartType={chartTypes.forecast}
                 onChartTypeChange={(v) => setChartType('forecast', v)}
                 options={[{ value: 'line', label: 'Line' }, { value: 'bar', label: 'Bar' }]}
@@ -1077,7 +1077,7 @@ function Reports() {
               <div className="rep-card-title">Monthly Performance Summary</div>
               <table className="perf-table">
                 <thead>
-                  <tr><th>Month</th><th>Total Bookings</th><th>Occupancy Rate</th></tr>
+                  <tr><th>Month</th><th>Total Bookings</th><th>Overnight Occupancy Rate</th></tr>
                 </thead>
                 <tbody>
                   {monthlySummary.map(m => (
@@ -1111,14 +1111,14 @@ function Reports() {
               <div className="rep-card-title">Monthly Performance Summary</div>
               <table className="perf-table">
                 <thead>
-                  <tr><th>Month</th><th>Occupancy Rate</th><th>RevPAR (₹)</th></tr>
+                  <tr><th>Month</th><th>Overnight Occupancy Rate</th><th>Collections / Available Room-Night (₹)</th></tr>
                 </thead>
                 <tbody>
                   {monthlySummary.map(m => (
                     <tr key={m.month}>
                       <td style={{ fontWeight: 600 }}>{m.month}</td>
                       <td>{m.occ}%</td>
-                      <td>{m.revpar.toLocaleString('en-IN')}</td>
+                      <td>{m.collectionsPerAvailableRoomNight.toLocaleString('en-IN')}</td>
                     </tr>
                   ))}
                 </tbody>

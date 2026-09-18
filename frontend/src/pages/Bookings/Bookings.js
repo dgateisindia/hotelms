@@ -3166,7 +3166,7 @@ function Bookings() {
                                   className="booking-clear-filters"
                                   onClick={() =>
                                     navigate(
-                                      `/bookings/groups/${booking.reservation_group_id}`
+                                      `/reservations/${booking.reservation_group_id}`
                                     )
                                   }
                                   title={`Open reservation ${booking.group_code}`}

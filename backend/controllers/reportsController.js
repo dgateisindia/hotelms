@@ -181,39 +181,353 @@ const getReportsOverview = async (req, res) => {
       [hotelId, prevRange.start, prevRange.end]
     );
 
-    // Occupancy approximation: % of rooms with at least one confirmed/checked-in
-    // booking overlapping the range (mirrors the approach already used in
-    // getAdminDailyStats for monthly occupancy trend).
-    const occOverlapQuery = `
-      SELECT COUNT(DISTINCT room_id) AS occupiedRooms
-      FROM bookings
-      WHERE hotel_id=?
-        AND booking_status IN ('confirmed','checked_in')
-        AND check_in <= ? AND check_out >= ?`;
+      // ============================================================
+      // CANONICAL ROOM-NIGHT KPIs
+      // ============================================================
 
-    const [[occCur]] = await db.query(occOverlapQuery, [hotelId, rangeEnd, rangeStart]);
-    const [[occPrev]] = await db.query(occOverlapQuery, [hotelId, prevRange.end, prevRange.start]);
-    const occupancyRate = Math.round((occCur.occupiedRooms / totalRooms) * 1000) / 10;
-    const occupancyRatePrev = Math.round((occPrev.occupiedRooms / totalRooms) * 1000) / 10;
+      // Backward-compatible unique-room count used by Reports.js.
+      // This value is NOT used to calculate occupancy percentage.
+      // Distinct currently-associated booked rooms touched by
+      // overnight stays in the selected range.
+      //
+      // This field is informational only. Occupancy percentage is
+      // calculated from sold room-nights below.
+      const occupiedRoomsInRangeQuery = `
+        SELECT
+          COUNT(DISTINCT room_id) AS occupiedRooms
 
-    const daysInRange = Math.max(1, Math.round((new Date(rangeEnd) - new Date(rangeStart)) / 86400000) + 1);
-    const revpar = Math.round(Number(revCur.revenue) / (totalRooms * daysInRange));
+        FROM bookings
+
+        WHERE hotel_id = ?
+
+          AND stay_type =
+              'overnight'
+
+          AND booking_status IN (
+            'confirmed',
+            'checked_in',
+            'checked_out'
+          )
+
+          AND DATE(check_in) <
+              DATE_ADD(
+                ?,
+                INTERVAL 1 DAY
+              )
+
+          AND DATE(check_out) >
+              ?`;
+      const [[occupiedRoomCur]] =
+        await db.query(
+          occupiedRoomsInRangeQuery,
+          [
+            hotelId,
+            rangeEnd,
+            rangeStart,
+          ]
+        );
+
+
+      // ------------------------------------------------------------
+      // SOLD ROOM-NIGHTS
+      //
+      // Includes:
+      // confirmed
+      // checked_in
+      // checked_out
+      //
+      // Excludes:
+      // pending
+      // cancelled
+      // no_show
+      // ------------------------------------------------------------
+
+      // ============================================================
+      // SOLD OVERNIGHT ROOM-NIGHTS
+      //
+      // Occupancy denominator/numerator is based on scheduled
+      // overnight stay dates.
+      //
+      // Day-use stays are intentionally excluded from standard
+      // overnight Occupancy / ADR / RevPAR.
+      // ============================================================
+
+      const soldRoomNightsQuery = `
+        SELECT
+          COALESCE(
+            SUM(
+              GREATEST(
+                0,
+
+                DATEDIFF(
+                  LEAST(
+                    DATE(check_out),
+
+                    DATE_ADD(
+                      ?,
+                      INTERVAL 1 DAY
+                    )
+                  ),
+
+                  GREATEST(
+                    DATE(check_in),
+                    ?
+                  )
+                )
+              )
+            ),
+
+            0
+          ) AS soldRoomNights
+
+        FROM bookings
+
+        WHERE hotel_id = ?
+
+          AND stay_type =
+              'overnight'
+
+          AND booking_status IN (
+            'confirmed',
+            'checked_in',
+            'checked_out'
+          )
+
+          AND DATE(check_in) <
+              DATE_ADD(
+                ?,
+                INTERVAL 1 DAY
+              )
+
+          AND DATE(check_out) >
+              ?`;
+
+
+      // ============================================================
+      // STAY-BASED ROOM REVENUE
+      // ============================================================
+      // ============================================================
+      // FINANCIAL REPORTING CONTRACT
+      //
+      // payments is the canonical cash ledger available here.
+      // Successful payments minus successful refunds are therefore
+      // reported as NET COLLECTIONS.
+      //
+      // booking_room_history is physical room-assignment history.
+      // Its segment duration must not be multiplied by
+      // rate_per_night and presented as billed room revenue.
+      // ============================================================
+      const [[soldCur]] =
+        await db.query(
+          soldRoomNightsQuery,
+          [
+            rangeEnd,
+            rangeStart,
+            hotelId,
+            rangeEnd,
+            rangeStart,
+          ]
+        );
+
+
+      const [[soldPrev]] =
+        await db.query(
+          soldRoomNightsQuery,
+          [
+            prevRange.end,
+            prevRange.start,
+            hotelId,
+            prevRange.end,
+            prevRange.start,
+          ]
+        );
+
+
+      const daysInRange =
+        Math.max(
+          1,
+          Math.round(
+            (
+              new Date(rangeEnd) -
+              new Date(rangeStart)
+            ) /
+            86400000
+          ) + 1
+        );
+
+
+      const prevDaysInRange =
+        Math.max(
+          1,
+          Math.round(
+            (
+              new Date(prevRange.end) -
+              new Date(prevRange.start)
+            ) /
+            86400000
+          ) + 1
+        );
+
+
+      const availableRoomNights =
+        totalRooms *
+        daysInRange;
+
+
+      const previousAvailableRoomNights =
+        totalRooms *
+        prevDaysInRange;
+
+
+      const soldRoomNights =
+        Number(
+          soldCur.soldRoomNights ||
+          0
+        );
+
+
+      const previousSoldRoomNights =
+        Number(
+          soldPrev.soldRoomNights ||
+          0
+        );
+
+
+      const netCollections =
+        Number(
+          revCur.revenue ||
+          0
+        );
+
+
+      const netCollectionsPrev =
+        Number(
+          revPrev.revenue ||
+          0
+        );
+
+      const occupancyRate =
+        availableRoomNights > 0
+          ? Math.round(
+              (
+                soldRoomNights /
+                availableRoomNights
+              ) *
+              1000
+            ) / 10
+          : 0;
+
+
+      const occupancyRatePrev =
+        previousAvailableRoomNights > 0
+          ? Math.round(
+              (
+                previousSoldRoomNights /
+                previousAvailableRoomNights
+              ) *
+              1000
+            ) / 10
+          : 0;
+
+
+      // ============================================================
+      // CASH COLLECTION RATIOS
+      //
+      // These are intentionally NOT ADR or RevPAR.
+      //
+      // Collections / Sold Room-Night:
+      // net cash collected in range / sold overnight room-nights.
+      //
+      // Collections / Available Room-Night:
+      // net cash collected in range / available room-nights.
+      // ============================================================
+
+      const collectionsPerSoldRoomNight =
+        soldRoomNights > 0
+
+          ? Math.round(
+              netCollections /
+              soldRoomNights
+            )
+
+          : 0;
+
+
+      const collectionsPerAvailableRoomNight =
+        availableRoomNights > 0
+
+          ? Math.round(
+              netCollections /
+              availableRoomNights
+            )
+
+          : 0;
 
     const pctChange = (curr, prev) => (prev > 0 ? Math.round(((curr - prev) / prev) * 1000) / 10 : (curr > 0 ? 100 : 0));
 
-    const stats = {
-      totalRevenue: Number(revCur.revenue),
-      totalRevenueChangePct: pctChange(Number(revCur.revenue), Number(revPrev.revenue)),
-      occupancyRate,
-      occupancyRateChangePct: pctChange(occupancyRate, occupancyRatePrev),
-      totalBookings: bkgCur.total,
-      totalBookingsChangePct: pctChange(bkgCur.total, bkgPrev.total),
-      cancellationRate: bkgCur.total > 0 ? Math.round((bkgCur.cancelled / bkgCur.total) * 1000) / 10 : 0,
-      cancellationRatePrev: bkgPrev.total > 0 ? Math.round((bkgPrev.cancelled / bkgPrev.total) * 1000) / 10 : 0,
-      revpar,
-      occupiedRooms: occCur.occupiedRooms,
-      totalRoomsCount: totalRooms,
-    };
+      const stats = {
+        netCollections,
+
+        netCollectionsChangePct:
+          pctChange(
+            netCollections,
+            netCollectionsPrev
+          ),
+
+        occupancyRate,
+
+        occupancyRateChangePct:
+          pctChange(
+            occupancyRate,
+            occupancyRatePrev
+          ),
+
+        totalBookings:
+          bkgCur.total,
+
+        totalBookingsChangePct:
+          pctChange(
+            bkgCur.total,
+            bkgPrev.total
+          ),
+
+        cancellationRate:
+          bkgCur.total > 0
+            ? Math.round(
+                (
+                  bkgCur.cancelled /
+                  bkgCur.total
+                ) *
+                1000
+              ) / 10
+            : 0,
+
+        cancellationRatePrev:
+          bkgPrev.total > 0
+            ? Math.round(
+                (
+                  bkgPrev.cancelled /
+                  bkgPrev.total
+                ) *
+                1000
+              ) / 10
+            : 0,
+
+        collectionsPerAvailableRoomNight,
+
+        occupiedRooms:
+          Number(
+            occupiedRoomCur.occupiedRooms ||
+            0
+          ),
+
+        soldRoomNights,
+        availableRoomNights,
+        collectionsPerSoldRoomNight,
+
+        totalRoomsCount:
+          totalRooms,
+      };
     stats.cancellationRateChangePp = Math.round((stats.cancellationRate - stats.cancellationRatePrev) * 10) / 10;
 
     // ---- Revenue by room type (within range) ----
@@ -236,32 +550,151 @@ const getReportsOverview = async (req, res) => {
       color: colorFor(r.label, i, ROOM_TYPE_COLORS),
     }));
 
-    // ---- Occupancy by room type (overlap approximation, per room type) ----
-    const [roomTypes] = await db.query(
-      `SELECT DISTINCT room_type FROM rooms WHERE hotel_id=?`,
-      [hotelId]
-    );
-    const occupancyByRoom = [];
-    for (const rt of roomTypes) {
-      const [[totalOfType]] = await db.query(
-        `SELECT COUNT(*) AS cnt FROM rooms WHERE hotel_id=? AND room_type=?`,
-        [hotelId, rt.room_type]
+      // ---- Booked overnight occupancy by CURRENT room type ----
+      //
+      // Numerator   = sold overnight room-nights for bookings
+      //               currently associated with that room type.
+      //
+      // Denominator = room inventory of that type * days in range.
+      //
+      // booking_room_history is deliberately not used for financial
+      // or room-night multiplication here.
+      const [roomTypes] = await db.query(
+        `SELECT DISTINCT room_type
+         FROM rooms
+         WHERE hotel_id=?`,
+        [hotelId]
       );
-      const [[occOfType]] = await db.query(
-        `SELECT COUNT(DISTINCT b.room_id) AS occupiedRooms
-         FROM bookings b
-         JOIN rooms r ON b.room_id=r.room_id AND r.hotel_id=b.hotel_id
-         WHERE b.hotel_id=? AND r.room_type=?
-           AND b.booking_status IN ('confirmed','checked_in')
-           AND b.check_in <= ? AND b.check_out >= ?`,
-        [hotelId, rt.room_type, rangeEnd, rangeStart]
+
+      const occupancyByRoom = [];
+
+      for (const rt of roomTypes) {
+
+        const [[totalOfType]] =
+          await db.query(
+            `SELECT COUNT(*) AS cnt
+             FROM rooms
+             WHERE hotel_id=?
+               AND room_type=?`,
+            [
+              hotelId,
+              rt.room_type,
+            ]
+          );
+
+
+        const [[soldOfType]] =
+          await db.query(
+            `
+              SELECT
+                COALESCE(
+                  SUM(
+                    GREATEST(
+                      0,
+
+                      DATEDIFF(
+                        LEAST(
+                          DATE(b.check_out),
+
+                          DATE_ADD(
+                            ?,
+                            INTERVAL 1 DAY
+                          )
+                        ),
+
+                        GREATEST(
+                          DATE(b.check_in),
+                          ?
+                        )
+                      )
+                    )
+                  ),
+
+                  0
+                ) AS soldRoomNights
+
+              FROM bookings b
+
+              INNER JOIN rooms r
+                ON r.hotel_id =
+                   b.hotel_id
+
+               AND r.room_id =
+                   b.room_id
+
+              WHERE b.hotel_id = ?
+
+                AND r.room_type = ?
+
+                AND b.stay_type =
+                    'overnight'
+
+                AND b.booking_status IN (
+                  'confirmed',
+                  'checked_in',
+                  'checked_out'
+                )
+
+                AND DATE(b.check_in) <
+                    DATE_ADD(
+                      ?,
+                      INTERVAL 1 DAY
+                    )
+
+                AND DATE(b.check_out) >
+                    ?
+            `,
+            [
+              rangeEnd,
+              rangeStart,
+              hotelId,
+              rt.room_type,
+              rangeEnd,
+              rangeStart,
+            ]
+          );
+
+
+        const availableRoomNightsOfType =
+          Number(
+            totalOfType.cnt ||
+            0
+          ) *
+          daysInRange;
+
+
+        const soldRoomNightsOfType =
+          Number(
+            soldOfType.soldRoomNights ||
+            0
+          );
+
+
+        occupancyByRoom.push({
+          label:
+            rt.room_type,
+
+          pct:
+            availableRoomNightsOfType > 0
+
+              ? Math.round(
+                  (
+                    soldRoomNightsOfType /
+                    availableRoomNightsOfType
+                  ) *
+                  1000
+                ) / 10
+
+              : 0,
+        });
+      }
+
+
+      occupancyByRoom.sort(
+        (a, b) =>
+          b.pct -
+          a.pct
       );
-      occupancyByRoom.push({
-        label: rt.room_type,
-        pct: totalOfType.cnt > 0 ? Math.round((occOfType.occupiedRooms / totalOfType.cnt) * 1000) / 10 : 0,
-      });
-    }
-    occupancyByRoom.sort((a, b) => b.pct - a.pct);
 
     // ---- Booking status breakdown (replaces the old hardcoded "channels" card —
     // there's no source/channel column in `bookings` to compute real channel data from) ----
@@ -301,18 +734,79 @@ const getReportsOverview = async (req, res) => {
         `SELECT COUNT(*) AS cnt FROM bookings WHERE hotel_id=? AND DATE(check_in) BETWEEN ? AND ?`,
         [hotelId, sStart, sEnd]
       );
-      const [[mOcc]] = await db.query(occOverlapQuery, [hotelId, sEnd, sStart]);
+        const [[mSold]] =
+          await db.query(
+            soldRoomNightsQuery,
+            [
+              sEnd,
+              sStart,
+              hotelId,
+              sEnd,
+              sStart,
+            ]
+          );
 
-      const mOccPct = Math.round((mOcc.occupiedRooms / totalRooms) * 1000) / 10;
-      const mAdr = mBkg.cnt > 0 ? Math.round(Number(mRev.revenue) / mBkg.cnt) : 0;
-      const mRevpar = Math.round(Number(mRev.revenue) / (totalRooms * daysInMonth));
+
+        const mSoldRoomNights =
+          Number(
+            mSold.soldRoomNights ||
+            0
+          );
+
+
+        const mAvailableRoomNights =
+          totalRooms *
+          daysInMonth;
+
+
+        const mNetCollections =
+          Number(
+            mRev.revenue ||
+            0
+          );
+
+
+        const mOccPct =
+          mAvailableRoomNights > 0
+
+            ? Math.round(
+                (
+                  mSoldRoomNights /
+                  mAvailableRoomNights
+                ) *
+                1000
+              ) / 10
+
+            : 0;
+
+
+        const mCollectionsPerSoldRoomNight =
+          mSoldRoomNights > 0
+
+            ? Math.round(
+                mNetCollections /
+                mSoldRoomNights
+              )
+
+            : 0;
+
+
+        const mCollectionsPerAvailableRoomNight =
+          mAvailableRoomNights > 0
+
+            ? Math.round(
+                mNetCollections /
+                mAvailableRoomNights
+              )
+
+            : 0;
 
       monthlySummary.push({
         month: mStart.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
-        revenue: Number(mRev.revenue),
+        netCollections: mNetCollections,
         occ: mOccPct,
-        adr: mAdr,
-        revpar: mRevpar,
+        collectionsPerSoldRoomNight: mCollectionsPerSoldRoomNight,
+        collectionsPerAvailableRoomNight: mCollectionsPerAvailableRoomNight,
         bookings: mBkg.cnt,
       });
     }
@@ -340,15 +834,15 @@ const getReportsOverview = async (req, res) => {
     // ---- Insights, generated from the numbers above instead of hardcoded text ----
     const insights = [];
     insights.push({
-      type: stats.totalRevenueChangePct >= 0 ? 'up' : 'down',
-      text: `Revenue is ${stats.totalRevenueChangePct >= 0 ? 'up' : 'down'} by ${Math.abs(stats.totalRevenueChangePct)}% compared to the previous period.`,
+      type: stats.netCollectionsChangePct >= 0 ? 'up' : 'down',
+      text: `Net collections are ${stats.netCollectionsChangePct >= 0 ? 'up' : 'down'} by ${Math.abs(stats.netCollectionsChangePct)}% compared to the previous period.`,
     });
     insights.push({
       type: stats.occupancyRateChangePct >= 0 ? 'up' : 'down',
       text: `Occupancy rate ${stats.occupancyRateChangePct >= 0 ? 'improved' : 'declined'} by ${Math.abs(stats.occupancyRateChangePct)}% compared to the previous period.`,
     });
     if (revenueByRoom.length) {
-      insights.push({ type: 'top', text: `${revenueByRoom[0].label}s are generating the highest revenue (${revenueByRoom[0].pct}% of total).` });
+      insights.push({ type: 'top', text: `${revenueByRoom[0].label}s account for the highest net collections (${revenueByRoom[0].pct}% of total).` });
     }
     insights.push({
       type: stats.cancellationRateChangePp >= 0 ? 'down' : 'up',
