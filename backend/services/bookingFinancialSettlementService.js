@@ -19,6 +19,13 @@
    CONSTANTS
 ============================================================ */
 
+const {
+  ensureFinalizedSettlementInvoiceWithConnection,
+} = require(
+  "./billing/finalizedSettlementInvoiceService"
+);
+
+
 const SETTLEMENT_TYPE_NO_SHOW =
   "no_show";
 
@@ -1320,6 +1327,34 @@ async function ensureNoShowSettlementWithConnection(
       500,
       "NO_SHOW_SETTLEMENT_CREATE_FAILED",
       "The No Show financial settlement could not be loaded after creation."
+    );
+  }
+
+
+  /*
+   * Newly-created finalized No Show settlement and
+   * invoice share the caller-owned transaction.
+   *
+   * Existing historical settlements return earlier
+   * and remain reserved for the guarded C2 backfill.
+   */
+  if (
+    createdSettlement
+      .settlement_status ===
+    STATUS_FINALIZED
+  ) {
+
+    await ensureFinalizedSettlementInvoiceWithConnection(
+      connection,
+      {
+        hotelId:
+          safeHotelId,
+
+        bookingId:
+          safeBookingId,
+
+        settlementId,
+      }
     );
   }
 

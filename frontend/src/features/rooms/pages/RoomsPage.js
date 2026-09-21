@@ -19,9 +19,15 @@ import React, {
   useState,
 } from "react";
 
-import apiClient from "../../shared/api/apiClient";
+import {
+  useNavigate,
+} from "react-router-dom";
 
-import "./Rooms.css";
+import roomsApi from "../api/roomsApi";
+import RoomFormModal from "../components/RoomFormModal";
+import AppAlert from "../../../shared/components/ui/AppAlert";
+
+import "../Rooms.css";
 
 import {
   IcoPlus,
@@ -37,7 +43,7 @@ import {
   IcoUser2,
   IcoBrush,
   IcoWrench,
-} from "../../utils/icons/RoomsIcons";
+} from "../../../utils/icons/RoomsIcons";
 
 /* ============================================================
    CONSTANTS
@@ -53,14 +59,6 @@ const EMPTY_FORM = {
   price: "",
   status: "available",
 };
-
-const COMMON_ROOM_TYPES = [
-  "Deluxe Room",
-  "Premium Room",
-  "Suite Room",
-  "Executive Room",
-  "Presidential Suite",
-];
 
 const ROOM_STATUS_OPTIONS = [
   {
@@ -232,264 +230,12 @@ function validateRoomForm(form) {
 }
 
 /* ============================================================
-   REUSABLE ROOM FORM MODAL
-
-   Defined outside Rooms() so it does not get recreated on
-   every keystroke.
-============================================================ */
-
-function RoomFormModal({
-  title,
-  submitLabel,
-  form,
-  onChange,
-  onSave,
-  onClose,
-  isSaving,
-  error,
-}) {
-  const handleOverlayMouseDown = (
-    event
-  ) => {
-    if (
-      event.target ===
-        event.currentTarget &&
-      !isSaving
-    ) {
-      onClose();
-    }
-  };
-
-  return (
-    <div
-      className="modal-overlay"
-      onMouseDown={
-        handleOverlayMouseDown
-      }
-    >
-      <div
-        className="modal-box"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onMouseDown={(event) =>
-          event.stopPropagation()
-        }
-      >
-        <div className="modal-header">
-          <h3>{title}</h3>
-
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            disabled={isSaving}
-            aria-label="Close room form"
-          >
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={onSave}>
-          <div className="modal-body">
-            {error && (
-              <div
-                className="room-form-error"
-                role="alert"
-              >
-                {error}
-              </div>
-            )}
-
-            <div className="modal-grid">
-              <div className="form-group">
-                <label
-                  className="form-label"
-                  htmlFor="room-number"
-                >
-                  Room No.
-                </label>
-
-                <input
-                  id="room-number"
-                  className="form-input"
-                  name="roomNo"
-                  value={form.roomNo}
-                  onChange={onChange}
-                  placeholder="e.g. 101"
-                  maxLength={20}
-                  disabled={isSaving}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label
-                  className="form-label"
-                  htmlFor="room-floor"
-                >
-                  Floor
-                </label>
-
-                <input
-                  id="room-floor"
-                  className="form-input"
-                  type="number"
-                  name="floor"
-                  min="0"
-                  step="1"
-                  value={form.floor}
-                  onChange={onChange}
-                  placeholder="e.g. 1"
-                  disabled={isSaving}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label
-                  className="form-label"
-                  htmlFor="room-type"
-                >
-                  Room Type
-                </label>
-
-                <input
-                  id="room-type"
-                  className="form-input"
-                  name="type"
-                  list="room-type-options"
-                  value={form.type}
-                  onChange={onChange}
-                  placeholder="e.g. Deluxe Room"
-                  maxLength={100}
-                  disabled={isSaving}
-                  required
-                />
-
-                <datalist id="room-type-options">
-                  {COMMON_ROOM_TYPES.map(
-                    (type) => (
-                      <option
-                        key={type}
-                        value={type}
-                      />
-                    )
-                  )}
-                </datalist>
-              </div>
-
-              <div className="form-group">
-                <label
-                  className="form-label"
-                  htmlFor="room-capacity"
-                >
-                  Capacity
-                </label>
-
-                <input
-                  id="room-capacity"
-                  className="form-input"
-                  type="number"
-                  name="capacity"
-                  min="1"
-                  step="1"
-                  value={form.capacity}
-                  onChange={onChange}
-                  placeholder="e.g. 2"
-                  disabled={isSaving}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label
-                  className="form-label"
-                  htmlFor="room-price"
-                >
-                  Price / Night
-                </label>
-
-                <input
-                  id="room-price"
-                  className="form-input"
-                  type="number"
-                  name="price"
-                  min="0"
-                  step="0.01"
-                  value={form.price}
-                  onChange={onChange}
-                  placeholder="e.g. 4000"
-                  disabled={isSaving}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label
-                  className="form-label"
-                  htmlFor="room-status"
-                >
-                  Status
-                </label>
-
-                <select
-                  id="room-status"
-                  className="form-select"
-                  name="status"
-                  value={form.status}
-                  onChange={onChange}
-                  disabled={isSaving}
-                  required
-                >
-                  {ROOM_STATUS_OPTIONS.map(
-                    (option) => (
-                      <option
-                        key={option.value}
-                        value={
-                          option.value
-                        }
-                      >
-                        {option.label}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="modal-footer">
-            <button
-              type="button"
-              className="btn-cancel"
-              onClick={onClose}
-              disabled={isSaving}
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              className="btn-save"
-              disabled={isSaving}
-            >
-              {isSaving
-                ? "Saving..."
-                : submitLabel}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-/* ============================================================
    MAIN COMPONENT
 ============================================================ */
 
-function Rooms() {
+function RoomsPage() {
+  const navigate =
+    useNavigate();
   const [
     rooms,
     setRooms,
@@ -534,10 +280,6 @@ function Rooms() {
     setShowEdit,
   ] = useState(false);
 
-  const [
-    showView,
-    setShowView,
-  ] = useState(false);
 
   const [
     showDelete,
@@ -590,6 +332,10 @@ function Rooms() {
     setFormError,
   ] = useState("");
 
+  const [
+    successMessage,
+    setSuccessMessage,
+  ] = useState("");
   /* ==========================================================
      LOAD ROOMS
   ========================================================== */
@@ -601,9 +347,7 @@ function Rooms() {
 
       try {
         const response =
-          await apiClient.get(
-            "/rooms"
-          );
+          await roomsApi.getRooms();
 
         const sourceRooms =
           Array.isArray(
@@ -955,8 +699,17 @@ function Rooms() {
   };
 
   const openView = (room) => {
-    setSelected(room);
-    setShowView(true);
+    if (!room?.id) {
+      setActionError(
+        "Room details cannot be opened because the room ID is missing."
+      );
+
+      return;
+    }
+
+    navigate(
+      `/rooms/${room.id}`
+    );
   };
 
   const openDelete = (
@@ -1016,8 +769,7 @@ function Rooms() {
     setActionError("");
 
     try {
-      await apiClient.post(
-        "/rooms",
+      await roomsApi.createRoom(
         {
           roomNo:
             form.roomNo.trim(),
@@ -1046,6 +798,10 @@ function Rooms() {
       );
 
       await fetchRooms();
+
+      setSuccessMessage(
+        `Room ${form.roomNo.trim()} added successfully.`
+      );
 
       setShowAdd(false);
 
@@ -1101,8 +857,8 @@ function Rooms() {
     setActionError("");
 
     try {
-      await apiClient.put(
-        `/rooms/${selected.id}`,
+      await roomsApi.updateRoom(
+        selected.id,
         {
           roomNo:
             form.roomNo.trim(),
@@ -1131,6 +887,10 @@ function Rooms() {
       );
 
       await fetchRooms();
+
+      setSuccessMessage(
+        `Room ${form.roomNo.trim()} updated successfully.`
+      );
 
       setShowEdit(false);
       setSelected(null);
@@ -1168,11 +928,15 @@ function Rooms() {
       setActionError("");
 
       try {
-        await apiClient.delete(
-          `/rooms/${selected.id}`
+        await roomsApi.deleteRoom(
+          selected.id
         );
 
         await fetchRooms();
+
+        setSuccessMessage(
+          `Room ${selected.roomNo} deleted successfully.`
+        );
 
         setShowDelete(false);
         setSelected(null);
@@ -1273,6 +1037,15 @@ function Rooms() {
             {actionError}
           </div>
         )}
+      <AppAlert
+        type="success"
+        message={successMessage}
+        onClose={() =>
+          setSuccessMessage("")
+        }
+        autoClose
+        duration={3500}
+      />
 
 
       {/* ======================================================
@@ -1782,6 +1555,7 @@ function Rooms() {
           }}
           isSaving={isSaving}
           error={formError}
+          statusOptions={ROOM_STATUS_OPTIONS}
         />
       )}
 
@@ -1801,136 +1575,9 @@ function Rooms() {
           }}
           isSaving={isSaving}
           error={formError}
+          statusOptions={ROOM_STATUS_OPTIONS}
         />
       )}
-
-      {/* ======================================================
-          VIEW MODAL
-
-          No fake amenities are shown because the finalized
-          rooms table does not store room amenities.
-      ====================================================== */}
-
-      {showView &&
-        selected && (
-          <div
-            className="modal-overlay"
-            onMouseDown={(
-              event
-            ) => {
-              if (
-                event.target ===
-                event.currentTarget
-              ) {
-                setShowView(
-                  false
-                );
-              }
-            }}
-          >
-            <div
-              className="modal-box"
-              role="dialog"
-              aria-modal="true"
-              aria-label={`Room ${selected.roomNo} details`}
-              onMouseDown={(
-                event
-              ) =>
-                event.stopPropagation()
-              }
-            >
-              <div className="modal-header">
-                <h3>
-                  Room Details —{" "}
-                  {selected.roomNo}
-                </h3>
-
-                <button
-                  type="button"
-                  className="modal-close"
-                  onClick={() =>
-                    setShowView(
-                      false
-                    )
-                  }
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="modal-body">
-                {[
-                  [
-                    "Room No.",
-                    selected.roomNo,
-                  ],
-                  [
-                    "Room Type",
-                    selected.type,
-                  ],
-                  [
-                    "Floor",
-                    selected.floor ??
-                      "—",
-                  ],
-                  [
-                    "Capacity",
-                    `${selected.capacity} ${
-                      selected.capacity ===
-                      1
-                        ? "Guest"
-                        : "Guests"
-                    }`,
-                  ],
-                  [
-                    "Price / Night",
-                    formatCurrency(
-                      selected.price
-                    ),
-                  ],
-                  [
-                    "Status",
-                    statusLabel(
-                      selected.status
-                    ),
-                  ],
-                ].map(
-                  ([
-                    key,
-                    value,
-                  ]) => (
-                    <div
-                      className="detail-row"
-                      key={key}
-                    >
-                      <span className="detail-key">
-                        {key}
-                      </span>
-
-                      <span className="detail-value">
-                        {value}
-                      </span>
-                    </div>
-                  )
-                )}
-              </div>
-
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn-save"
-                  onClick={() =>
-                    setShowView(
-                      false
-                    )
-                  }
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
       {/* ======================================================
           DELETE MODAL
@@ -2052,4 +1699,4 @@ function Rooms() {
   );
 }
 
-export default Rooms;
+export default RoomsPage;

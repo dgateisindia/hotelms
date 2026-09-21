@@ -57,7 +57,10 @@ import CustomerRequestPage from "./pages/CustomerRequestPage";
 
 import AdminWorkspaceLayout from "./layouts/AdminWorkspaceLayout/AdminWorkspaceLayout";
 
-import { Rooms } from "./features/rooms";
+import {
+  Rooms,
+  RoomDetailsPage,
+} from "./features/rooms";
 
 import { Customers } from "./features/customers";
 
@@ -421,6 +424,13 @@ function App() {
               path="/rooms"
               element={
                 <Rooms />
+              }
+            />
+
+            <Route
+              path="/rooms/:roomId"
+              element={
+                <RoomDetailsPage />
               }
             />
 

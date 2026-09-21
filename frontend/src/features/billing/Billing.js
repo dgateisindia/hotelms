@@ -14,7 +14,60 @@ const initials = (name) => (name || '').split(' ').filter(Boolean).map(n => n[0]
 const emptyItem = () => ({desc:'', qty:1, rate:'', amount:0});
 const EMPTY_FORM = {guest:'', bookingId:'', room:'', checkIn:'', checkOut:'', items:[emptyItem()]};
 
+const toInvoiceItemPayload = (items = []) =>
+  items.map((item) => ({
+    description:
+      String(item.desc || '').trim(),
+
+    quantity:
+      Number(item.qty),
+
+    unit_rate:
+      Number(item.rate),
+  }));
+
+
 const invoiceDetailToItems = (invoice = {}) => {
+  if (
+    Array.isArray(invoice.items) &&
+    invoice.items.length
+  ) {
+    return invoice.items.map((item) => {
+      const qty =
+        Number(
+          item.qty ??
+          item.quantity ??
+          1
+        );
+
+      const rate =
+        Number(
+          item.rate ??
+          item.unitRate ??
+          item.unit_rate ??
+          0
+        );
+
+      return {
+        desc:
+          item.desc ??
+          item.description ??
+          '',
+
+        qty,
+
+        rate,
+
+        amount:
+          Number(
+            item.amount ??
+            item.lineAmount ??
+            qty * rate
+          ),
+      };
+    });
+  }
+
   const items = [
     ['Room Charges', invoice.roomCharges],
     ['Food Charges', invoice.foodCharges],
@@ -43,13 +96,44 @@ const getInvoiceNights = (invoice = {}) => {
   return Math.max(1, Math.round((Date.UTC(y2,m2-1,d2)-Date.UTC(y1,m1-1,d1))/86400000));
 };
 const PER_PAGE = 8;
-const TABS = ['All Bills','Paid','Partial','Unpaid','Cancelled'];
+const TABS = ['All Bills','Paid','Partial','Unpaid'];
+const getPaginationPages = (currentPage, totalPages) => {
+  if (totalPages <= 0) return [];
+
+  return [...new Set([
+    1,
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    totalPages,
+  ])]
+    .filter((n) => n >= 1 && n <= totalPages)
+    .sort((a, b) => a - b);
+};
 
 // ── Date range helpers ──────────────────────────────────────
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const localISODate = (date) =>
+  `${date.getFullYear()}-${String(
+    date.getMonth() + 1
+  ).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
+
+const todayISO = () =>
+  localISODate(
+    new Date()
+  );
+
 const firstOfMonthISO = () => {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+
+  return localISODate(
+    new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      1
+    )
+  );
 };
 const fmtDateBadge = (isoStr) => {
   if (!isoStr) return '';
@@ -71,24 +155,44 @@ const calcTotal = (items) => items.reduce((s,i)=>s+(parseFloat(i.rate)||0)*(pars
 // ── Revenue Line Chart ────────────────────────────────────────
 const RevenueChart = ({data}) => {
   if (!data || data.length === 0) {
-    return <div style={{padding:'24px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No revenue data yet.</div>;
+    return <div style={{padding:'24px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No collection data yet.</div>;
   }
   const W=340,H=100,PAD={top:10,right:10,bottom:24,left:40};
   const iW=W-PAD.left-PAD.right, iH=H-PAD.top-PAD.bottom;
-  const max=Math.max(...data.map(d=>d.val), 1);
-  const x=(i)=>PAD.left+(data.length>1?(i/(data.length-1))*iW:iW/2);
-  const y=(v)=>PAD.top+iH-((v/max)*iH);
-  const line=data.map((d,i)=>`${i===0?'M':'L'}${x(i)},${y(d.val)}`).join(' ');
-  const area=`${line} L${x(data.length-1)},${PAD.top+iH} L${x(0)},${PAD.top+iH} Z`;
-  const ticks=[0,max*0.25,max*0.5,max*0.75,max].map(v=>Math.round(v));
+  const chartData=data.map(d=>({
+    ...d,
+    val:Number.isFinite(Number(d?.val))?Number(d.val):0,
+  }));
+  const values=chartData.map(d=>d.val);
+  let minValue=Math.min(0,...values);
+  let maxValue=Math.max(0,...values);
+  if (minValue===maxValue) {
+    minValue-=1;
+    maxValue+=1;
+  }
+  const range=maxValue-minValue;
+  const x=(i)=>PAD.left+(chartData.length>1?(i/(chartData.length-1))*iW:iW/2);
+  const y=(v)=>PAD.top+((maxValue-v)/range)*iH;
+  const zeroY=y(0);
+  const line=chartData.map((d,i)=>`${i===0?'M':'L'}${x(i)},${y(d.val)}`).join(' ');
+  const area=`${line} L${x(chartData.length-1)},${zeroY} L${x(0)},${zeroY} Z`;
+  const ticks=[0,0.25,0.5,0.75,1].map(ratio=>minValue+(range*ratio));
+  const formatTick=(v)=>{
+    if (Math.abs(v)<1e-9) return '0';
+    if (Math.abs(v)>=1000) {
+      const scaled=v/1000;
+      return `${Number.isInteger(scaled)?scaled:scaled.toFixed(1)}k`;
+    }
+    return `${Number.isInteger(v)?v:Number(v.toFixed(2))}`;
+  };
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto'}}>
       <defs><linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity="0.2"/><stop offset="100%" stopColor="#3b82f6" stopOpacity="0.01"/></linearGradient></defs>
-      {ticks.map(t=><g key={t}><line x1={PAD.left} y1={y(t)} x2={W-PAD.right} y2={y(t)} stroke="#f1f4f9" strokeWidth="1"/><text x={PAD.left-4} y={y(t)+4} textAnchor="end" fontSize="9" fill="#9ca3af">{t===0?'0':`${Math.round(t/1000)}k`}</text></g>)}
+      {ticks.map((t,i)=><g key={i}><line x1={PAD.left} y1={y(t)} x2={W-PAD.right} y2={y(t)} stroke="#f1f4f9" strokeWidth="1"/><text x={PAD.left-4} y={y(t)+4} textAnchor="end" fontSize="9" fill="#9ca3af">{formatTick(t)}</text></g>)}
       <path d={area} fill="url(#revGrad)"/>
       <path d={line} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
-      {data.map((d,i)=><circle key={i} cx={x(i)} cy={y(d.val)} r="4" fill="#fff" stroke="#3b82f6" strokeWidth="2.5"/>)}
-      {data.map((d,i)=><text key={i} x={x(i)} y={H-4} textAnchor="middle" fontSize="10" fill="#9ca3af">{d.month}</text>)}
+      {chartData.map((d,i)=><circle key={i} cx={x(i)} cy={y(d.val)} r="4" fill="#fff" stroke="#3b82f6" strokeWidth="2.5"/>)}
+      {chartData.map((d,i)=><text key={i} x={x(i)} y={H-4} textAnchor="middle" fontSize="10" fill="#9ca3af">{d.month}</text>)}
     </svg>
   );
 };
@@ -234,7 +338,7 @@ const InvoiceModal = ({invoice, onClose}) => {
 
           <div style={{marginTop:12,borderTop:'1px solid #e4e8f0',paddingTop:10}}>
             <div className="invoice-total-row"><span>Subtotal</span><span>₹ {subtotal.toLocaleString('en-IN')}</span></div>
-            <div className="invoice-total-row"><span>Tax (12%)</span><span>₹ {tax.toLocaleString('en-IN')}</span></div>
+            <div className="invoice-total-row"><span>Tax</span><span>₹ {tax.toLocaleString('en-IN')}</span></div>
             <div className="invoice-total-row"><span style={{color:'#10b981'}}>Discount</span><span style={{color:'#10b981'}}>- ₹ {discount.toLocaleString('en-IN')}</span></div>
             <div className="invoice-total-row total"><span>Total Amount</span><span>₹ {total.toLocaleString('en-IN')}</span></div>
           </div>
@@ -263,7 +367,7 @@ const BillFormModal = ({
   onSave, onClose, taxOverride = null, submitLabel = 'Generate Bill',
 }) => {
   const total = calcTotal(form.items);
-  const tax = taxOverride === null || taxOverride === undefined ? Math.round(total * 0.12) : Number(taxOverride);
+  const tax = taxOverride === null || taxOverride === undefined ? 0 : Number(taxOverride);
   const grand = total + tax;
   const errs = formErrors;
 
@@ -360,7 +464,7 @@ const BillFormModal = ({
           </div>
           <div className="bill-total-box">
             <div className="bill-total-row"><span>Subtotal</span><span>{fmtCurrency(total)}</span></div>
-            <div className="bill-total-row"><span>Tax (GST 12%)</span><span>{fmtCurrency(tax)}</span></div>
+            <div className="bill-total-row"><span>Tax (Hotel Settings)</span><span>{fmtCurrency(tax)}</span></div>
             <div className="bill-total-row bill-grand-total"><span>Total Amount</span><span>{fmtCurrency(grand)}</span></div>
           </div>
         </div>
@@ -386,7 +490,7 @@ function Billing() {
   const [tableError, setTableError]   = useState(null);
 
   // Dashboard widgets
-  const [stats, setStats] = useState({ totalBills:0, totalRevenue:0, paidAmount:0, outstanding:0, changes:{} });
+  const [stats, setStats] = useState({ totalBills:0, billedAmount:0, netCollections:0, outstanding:0, changes:{} });
   const [revenueData, setRevenueData]         = useState([]);
   const [paymentMethods, setPaymentMethods]   = useState([]);
   const [recentPayments, setRecentPayments]   = useState([]);
@@ -494,8 +598,8 @@ function Billing() {
       const rawStats = statsRes.data?.stats ?? statsRes.data ?? {};
       setStats({
         totalBills: 0,
-        totalRevenue: 0,
-        paidAmount: 0,
+        billedAmount: 0,
+        netCollections: 0,
         outstanding: 0,
         changes: {},
         ...rawStats,
@@ -542,6 +646,18 @@ function Billing() {
 
     try {
       const { data } = await apiClient.get(`/billing/invoices/${inv.invoice_id}`);
+
+      if (data?.isLocked) {
+        setSelected(data);
+
+        setTableError(
+          data.lockReason === 'finalized_settlement'
+            ? 'This invoice is locked because its booking has a finalized financial settlement.'
+            : 'This invoice is locked because successful financial activity has already been recorded.'
+        );
+
+        return;
+      }
       setSelected(data);
       setForm({
         guest:data.guest,
@@ -622,7 +738,7 @@ function Billing() {
             0
         );
 
-        const tax = subtotal * 0.12;
+        const tax = 0;
 
         const payload = {
             booking_id: form.bookingId,
@@ -645,6 +761,11 @@ function Billing() {
                             i.desc !== "Laundry Charges"
                     )
                     .reduce((s, i) => s + Number(i.amount), 0),
+
+            items:
+                toInvoiceItemPayload(
+                    form.items
+                ),
 
             tax_amount: tax,
         };
@@ -683,7 +804,7 @@ function Billing() {
         0
       );
       const tax = selected?.tax === null || selected?.tax === undefined
-        ? subtotal * 0.12
+        ? 0
         : Number(selected.tax);
 
       const payload = {
@@ -703,7 +824,12 @@ function Billing() {
             .filter(i => !["Room Charges", "Food Charges", "Laundry Charges"].includes(i.desc))
             .reduce((s, i) => s + Number(i.amount), 0),
 
-        tax_amount: tax,
+        items:
+            toInvoiceItemPayload(
+              form.items
+            ),
+
+          tax_amount: tax,
       };
 
       await apiClient.put(`/billing/invoices/${selected.invoice_id}`, payload);
@@ -747,7 +873,7 @@ function Billing() {
   const fmtChange = (pct) => {
     if (pct === undefined || pct === null) return null;
     const up = pct >= 0;
-    return <span className={up ? '' : 'neg'}>{up ? '↑' : '↓'} {Math.abs(pct)}% from last month</span>;
+    return <span className={up ? '' : 'neg'}>{up ? '↑' : '↓'} {Math.abs(pct)}% from previous period</span>;
   };
 
   const handleBookingChange = async (e) => {
@@ -862,8 +988,8 @@ function Billing() {
       {/* Stat Cards */}
       <div className="bill-stats">
         <div className="bstat-card"><div className="bstat-icon blue"><IcoBill/></div><div className="bstat-info"><div className="bstat-label">Total Bills</div><div className="bstat-value">{loadingWidgets ? '—' : Number(stats.totalBills||0).toLocaleString('en-IN')}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.totalBills)}</div></div></div>
-        <div className="bstat-card"><div className="bstat-icon green"><IcoRevenue/></div><div className="bstat-info"><div className="bstat-label">Total Revenue</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.totalRevenue)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.totalRevenue)}</div></div></div>
-        <div className="bstat-card"><div className="bstat-icon teal"><IcoPaid/></div><div className="bstat-info"><div className="bstat-label">Paid Amount</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.paidAmount)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.paidAmount)}</div></div></div>
+        <div className="bstat-card"><div className="bstat-icon green"><IcoRevenue/></div><div className="bstat-info"><div className="bstat-label">Billed Amount</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.billedAmount)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.billedAmount)}</div></div></div>
+        <div className="bstat-card"><div className="bstat-icon teal"><IcoPaid/></div><div className="bstat-info"><div className="bstat-label">Net Collections</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.netCollections)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.netCollections)}</div></div></div>
         <div className="bstat-card"><div className="bstat-icon red"><IcoOutstand/></div><div className="bstat-info"><div className="bstat-label">Outstanding</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.outstanding)}</div><div className="bstat-change neg">{loadingWidgets ? '' : fmtChange(stats.changes?.outstanding)}</div></div></div>
       </div>
 
@@ -930,10 +1056,14 @@ function Billing() {
           <span className="pagination-info">Showing {totalInvoices===0?0:(page-1)*PER_PAGE+1} to {Math.min(page*PER_PAGE,totalInvoices)} of {totalInvoices} invoices</span>
           <div className="pagination-btns">
             <button className="pg-btn" onClick={()=>setPage(p=>p-1)} disabled={page===1}><IcoChevL/></button>
-            {Array.from({length:Math.min(totalPages,3)},(_,i)=>i+1).map(n=>(
-              <button key={n} className={`pg-btn ${page===n?'active':''}`} onClick={()=>setPage(n)}>{n}</button>
+            {getPaginationPages(page,totalPages).map((n,i,pages)=>(
+              <React.Fragment key={n}>
+                {i>0 && n-pages[i-1]>1 && (
+                  <button type="button" className="pg-btn dots" disabled>…</button>
+                )}
+                <button className={`pg-btn ${page===n?'active':''}`} onClick={()=>setPage(n)}>{n}</button>
+              </React.Fragment>
             ))}
-            {totalPages>3&&<><button className="pg-btn dots">…</button><button className={`pg-btn ${page===totalPages?'active':''}`} onClick={()=>setPage(totalPages)}>{totalPages}</button></>}
             <button className="pg-btn" onClick={()=>setPage(p=>p+1)} disabled={page===totalPages||totalPages===0}><IcoChevR/></button>
           </div>
         </div>
@@ -941,9 +1071,9 @@ function Billing() {
 
       {/* Bottom 3-col */}
       <div className="bill-bottom">
-        <div className="revenue-card"><div className="revenue-title">Revenue Overview</div><RevenueChart data={revenueData}/></div>
+        <div className="revenue-card"><div className="revenue-title">Net Collections Overview</div><RevenueChart data={revenueData}/></div>
         <div className="payment-methods-card">
-          <div className="pm-title">Payment Methods</div>
+          <div className="pm-title">Gross Payments by Method</div>
           {paymentMethods.length===0 ? (
             <div style={{padding:'16px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No payment data yet.</div>
           ) : (
@@ -954,7 +1084,7 @@ function Billing() {
           )}
         </div>
         <div className="recent-pay-card">
-          <div className="rp-title">Recent Payments</div>
+          <div className="rp-title">Recent Transactions</div>
           {recentPayments.length===0 ? (
             <div style={{padding:'16px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No recent payments.</div>
           ) : recentPayments.map((rp,i)=>(

@@ -2,6 +2,13 @@ const {
   getBookingFinancialSettlementWithConnection,
 } = require("./bookingFinancialSettlementService");
 
+const {
+  ensureFinalizedSettlementInvoiceWithConnection,
+} = require(
+  "./billing/finalizedSettlementInvoiceService"
+);
+
+
 const SETTLEMENT_TYPE = "cancellation";
 const STATUS_FINALIZED = "finalized";
 const STATUS_MANUAL_REVIEW = "manual_review_required";
@@ -1275,6 +1282,38 @@ async function ensureCancellationSettlementWithConnection(
       500,
       "CANCELLATION_SETTLEMENT_CREATE_FAILED",
       "The cancellation financial settlement could not be loaded after creation."
+    );
+  }
+
+
+  /*
+   * Newly-created finalized cancellation settlement
+   * and its invoice share the caller-owned transaction.
+   *
+   * Existing historical settlements return earlier and
+   * remain reserved for the guarded C2 backfill.
+   */
+  if (
+    createdSettlement
+      .settlement_status ===
+    STATUS_FINALIZED
+  ) {
+
+    await ensureFinalizedSettlementInvoiceWithConnection(
+      connection,
+      {
+        hotelId:
+          safeHotelId,
+
+        bookingId:
+          safeBookingId,
+
+        settlementId:
+          Number(
+            createdSettlement
+              .settlement_id
+          ),
+      }
     );
   }
 

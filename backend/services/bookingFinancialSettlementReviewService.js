@@ -5,6 +5,13 @@ const {
 );
 
 
+const {
+  ensureFinalizedSettlementInvoiceWithConnection,
+} = require(
+  "./billing/finalizedSettlementInvoiceService"
+);
+
+
 const SETTLEMENT_BY_STATUS = {
   no_show: {
     type: "no_show",
@@ -731,6 +738,29 @@ async function finalizeFinancialSettlementReviewWithConnection(
         review.settlementType,
       ]
     );
+
+
+  /*
+   * Manual financial review has finalized the
+   * authoritative settlement. Ensure its canonical
+   * invoice inside the same caller-owned transaction.
+   */
+  await ensureFinalizedSettlementInvoiceWithConnection(
+    connection,
+    {
+      hotelId:
+        hId,
+
+      bookingId:
+        bId,
+
+      settlementId:
+        Number(
+          finalizedSettlement
+            .settlement_id
+        ),
+    }
+  );
 
 
   return {
