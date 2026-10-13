@@ -1,6 +1,13 @@
 import React from "react";
 import { formatCurrency } from "../../../shared/utils/money";
 
+const PAYMENT_METHODS = [
+  ["cash", "Cash"],
+  ["upi", "UPI"],
+  ["card", "Card"],
+  ["bank_transfer", "Bank Transfer"],
+];
+
 function CollectPaymentDialog({
   booking,
   amount,
@@ -16,6 +23,98 @@ function CollectPaymentDialog({
   onClose,
   onConfirm,
 }) {
+  const policyMethods =
+    Array.isArray(
+      booking?.payment_policy
+        ?.allowed_methods
+    )
+      ? booking.payment_policy.allowed_methods
+      : null;
+
+  const allowedMethodSet =
+    policyMethods
+      ? new Set(
+          policyMethods.map(
+            (value) =>
+              String(value || "")
+                .trim()
+                .toLowerCase()
+          )
+        )
+      : null;
+
+  const availablePaymentMethods =
+    allowedMethodSet
+      ? PAYMENT_METHODS.filter(
+          ([value]) =>
+            allowedMethodSet.has(
+              value
+            )
+        )
+      : PAYMENT_METHODS;
+
+  const availableMethodKey =
+    availablePaymentMethods
+      .map(
+        ([value]) => value
+      )
+      .join("|");
+
+  const methodAllowed =
+    availablePaymentMethods.some(
+      ([value]) =>
+        value === method
+    );
+
+
+  /*
+   * Legacy bookings without an immutable payment policy retain
+   * historical partial-payment behavior.
+   */
+  const allowPartialPayment =
+    booking?.payment_policy
+      ?.allow_partial_payment !==
+    false;
+
+
+  React.useEffect(() => {
+
+    if (
+      !booking ||
+      typeof onChangeMethod !==
+        "function"
+    ) {
+      return;
+    }
+
+
+    if (
+      availablePaymentMethods.length ===
+        0
+    ) {
+
+      if (method !== "") {
+        onChangeMethod("");
+      }
+
+      return;
+    }
+
+
+    if (!methodAllowed) {
+      onChangeMethod(
+        availablePaymentMethods[0][0]
+      );
+    }
+  }, [
+    booking?.booking_id,
+    availableMethodKey,
+    method,
+    methodAllowed,
+    onChangeMethod,
+  ]);
+
+
   if (!booking) return null;
 
   const status = String(
@@ -68,6 +167,48 @@ function CollectPaymentDialog({
       booking.financial_review_required || 0
     ) === 1;
 
+
+  React.useEffect(() => {
+
+    if (
+      allowPartialPayment ||
+      financialReviewRequired ||
+      outstanding <= 0.009
+    ) {
+      return;
+    }
+
+
+    const currentAmount =
+      Number(
+        amount
+      );
+
+
+    if (
+      !Number.isFinite(
+        currentAmount
+      ) ||
+      Math.abs(
+        currentAmount -
+        outstanding
+      ) >
+        0.009
+    ) {
+
+      onChangeAmount(
+        outstanding.toFixed(2)
+      );
+    }
+  }, [
+    allowPartialPayment,
+    amount,
+    financialReviewRequired,
+    onChangeAmount,
+    outstanding,
+  ]);
+
+
   const enteredAmount =
     Number(amount);
 
@@ -85,11 +226,20 @@ function CollectPaymentDialog({
     ) &&
     enteredAmount > 0 &&
     enteredAmount <=
-      outstanding + 0.009;
+      outstanding + 0.009 &&
+    (
+      allowPartialPayment ||
+      Math.abs(
+        enteredAmount -
+        outstanding
+      ) <=
+        0.009
+    );
 
   const canSubmit =
     !processing &&
     !financialReviewRequired &&
+    methodAllowed &&
     validAmount &&
     (
       isCash ||
@@ -225,7 +375,8 @@ function CollectPaymentDialog({
                 value={amount}
                 disabled={
                   processing ||
-                  financialReviewRequired
+                  financialReviewRequired ||
+                  !allowPartialPayment
                 }
                 onChange={(event) =>
                   onChangeAmount(
@@ -238,6 +389,23 @@ function CollectPaymentDialog({
             </div>
           </div>
 
+
+          {!allowPartialPayment &&
+            !financialReviewRequired &&
+            outstanding > 0.009 && (
+              <div className="booking-special-request">
+                Partial payments are disabled for this booking.
+                The complete outstanding amount of{" "}
+                <strong>
+                  {formatCurrency(
+                    outstanding
+                  )}
+                </strong>
+                {" "}must be collected in one payment.
+              </div>
+            )}
+
+
           <div className="booking-detail-row">
             <span>
               Payment Method
@@ -246,7 +414,10 @@ function CollectPaymentDialog({
             <div className="booking-filter-control">
               <select
                 value={method}
-                disabled={processing}
+                disabled={
+                  processing ||
+                  availablePaymentMethods.length === 0
+                }
                 onChange={(event) =>
                   onChangeMethod(
                     event.target.value
@@ -254,21 +425,22 @@ function CollectPaymentDialog({
                 }
                 aria-label="Payment method"
               >
-                <option value="cash">
-                  Cash
-                </option>
-
-                <option value="upi">
-                  UPI
-                </option>
-
-                <option value="card">
-                  Card
-                </option>
-
-                <option value="bank_transfer">
-                  Bank Transfer
-                </option>
+                {availablePaymentMethods.length === 0 ? (
+                  <option value="">
+                    No payment methods available
+                  </option>
+                ) : (
+                  availablePaymentMethods.map(
+                    ([value, label]) => (
+                      <option
+                        key={value}
+                        value={value}
+                      >
+                        {label}
+                      </option>
+                    )
+                  )
+                )}
               </select>
             </div>
           </div>

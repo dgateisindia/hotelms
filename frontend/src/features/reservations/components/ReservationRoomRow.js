@@ -2,7 +2,18 @@ import React from "react";
 import { formatCurrency } from "../../../shared/utils/money";
 import { formatDateTime } from "../../../shared/utils/dates";
 import { formatStatus, formatPaymentStatus } from "../../../shared/utils/status";
-import { IcoEye, IcoEdit, IcoCheck } from "../../../utils/icons/BookingIcons";
+import {
+  IcoEye,
+  IcoEdit,
+  IcoCheck,
+  IcoRupee,
+  IcoWarn,
+} from "../../../utils/icons/BookingIcons";
+
+import {
+  IcoBill,
+} from "../../../utils/icons/Billingicons";
+
 import ReservationGuestDetails from "./ReservationGuestDetails";
 
 function ReservationRoomRow({
@@ -11,6 +22,11 @@ function ReservationRoomRow({
   onToggleExpanded,
   onManageGuests,
   onEdit,
+  onReviewSettlement,
+  onCollectPayment,
+  onRefund,
+  hideInvoiceAction = false,
+  onViewInvoice,
 }) {
                 const roomGuests =
                   Array.isArray(
@@ -68,6 +84,61 @@ function ReservationRoomRow({
                     "pending" ||
                   bookingStatus ===
                     "confirmed";
+
+                const outstandingAmount =
+                  Number(
+                    booking.outstanding_amount ||
+                    0
+                  );
+
+                const financialReviewRequired =
+                  Number(
+                    booking.financial_review_required ||
+                    0
+                  ) === 1;
+
+                const overpaidAmount =
+                  Number(
+                    booking.overpaid_amount ||
+                    0
+                  );
+
+                const refundedAmount =
+                  Number(
+                    booking.refunded_amount ||
+                    0
+                  );
+
+                const isLifecycleSettlement =
+                  bookingStatus === "no_show" ||
+                  bookingStatus === "cancelled";
+
+                const canReviewFinancialSettlement =
+                  isLifecycleSettlement &&
+                  financialReviewRequired;
+
+                const canCollectPayment =
+                  (
+                    bookingStatus === "confirmed" ||
+                    bookingStatus === "checked_in" ||
+                    (
+                      isLifecycleSettlement &&
+                      !financialReviewRequired
+                    )
+                  ) &&
+                  outstandingAmount > 0.009;
+
+                const canRefundLifecycle =
+                  isLifecycleSettlement &&
+                  !financialReviewRequired &&
+                  overpaidAmount > 0.009;
+
+                const hasInvoice =
+                  !hideInvoiceAction &&
+                  Number(
+                    booking.invoice_id ||
+                    0
+                  ) > 0;
 
 
 return (
@@ -165,11 +236,41 @@ return (
                           </strong>
 
                           <span>
-                            Paid{" "}
-                            {formatCurrency(
-                              booking.amount_paid
-                            )}
+                            {refundedAmount > 0.009
+                              ? `Net ${formatCurrency(
+                                  booking.amount_paid
+                                )} · Refunded ${formatCurrency(
+                                  refundedAmount
+                                )}`
+                              : `Paid ${formatCurrency(
+                                  booking.amount_paid
+                                )}`}
                           </span>
+
+                          {financialReviewRequired && (
+                            <span>
+                              Settlement review required
+                            </span>
+                          )}
+
+                          {!financialReviewRequired &&
+                            outstandingAmount > 0.009 && (
+                              <span>
+                                Due{" "}
+                                {formatCurrency(
+                                  outstandingAmount
+                                )}
+                              </span>
+                            )}
+
+                          {canRefundLifecycle && (
+                            <span>
+                              Refund due{" "}
+                              {formatCurrency(
+                                overpaidAmount
+                              )}
+                            </span>
+                          )}
 
                         </div>
                       </td>
@@ -233,6 +334,18 @@ return (
                             <IcoEye />
                           </button>
 
+                          {canReviewFinancialSettlement && (
+                            <button
+                              type="button"
+                              className="booking-action-button booking-action-button--edit"
+                              onClick={onReviewSettlement}
+                              title="Review financial settlement"
+                              aria-label={`Review financial settlement for ${booking.booking_code}`}
+                            >
+                              <IcoWarn />
+                            </button>
+                          )}
+
 
                           {/* MANAGE GUESTS / CHECK-IN */}
                           {canManageGuests && (
@@ -244,6 +357,51 @@ return (
                               aria-label={`Manage guests for ${booking.booking_code}`}
                             >
                               <IcoCheck />
+                            </button>
+                          )}
+
+                          {canCollectPayment && (
+                            <button
+                              type="button"
+                              className="booking-action-button booking-action-button--edit"
+                              onClick={onCollectPayment}
+                              title={`Collect ${formatCurrency(
+                                outstandingAmount
+                              )}`}
+                              aria-label={`Collect payment for ${booking.booking_code}`}
+                            >
+                              <IcoRupee />
+                            </button>
+                          )}
+
+                          {canRefundLifecycle && (
+                            <button
+                              type="button"
+                              className="booking-action-button booking-action-button--cancel"
+                              onClick={onRefund}
+                              title={`Refund ${formatCurrency(
+                                overpaidAmount
+                              )}`}
+                              aria-label={`Process refund for ${booking.booking_code}`}
+                            >
+                              <IcoRupee />
+                            </button>
+                          )}
+
+
+                          {hasInvoice && (
+                            <button
+                              type="button"
+                              className="booking-action-button booking-action-button--view"
+                              onClick={onViewInvoice}
+                              title={
+                                booking.invoice_number
+                                  ? `View invoice ${booking.invoice_number}`
+                                  : "View invoice"
+                              }
+                              aria-label={`View invoice for ${booking.booking_code}`}
+                            >
+                              <IcoBill />
                             </button>
                           )}
 

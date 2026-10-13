@@ -824,6 +824,688 @@ exports.getRoomDetails = async (
         hotelId,
         roomId
       );
+
+    /* ========================================================
+       REAL MAINTENANCE / CLEANING HISTORY
+
+       These histories are additive Room Details fields.
+       They are derived from workflow-owned task/event tables.
+       No history is duplicated into the rooms table.
+    ======================================================== */
+
+    const [maintenanceTaskRows] =
+      await db.query(
+        `
+          SELECT
+            mt.maintenance_task_id,
+            mt.booking_id,
+            mt.booking_adjustment_id,
+            mt.source_type,
+            mt.source_key,
+            mt.issue_title,
+            mt.issue_description,
+            mt.priority,
+            mt.task_status,
+            mt.active_slot,
+            mt.release_status,
+            mt.assigned_staff_id,
+
+            s.staff_code
+              AS assigned_staff_code,
+
+            s.full_name
+              AS assigned_staff_name,
+
+            s.department
+              AS assigned_staff_department,
+
+            s.status
+              AS assigned_staff_status,
+
+            mt.created_by_admin_id,
+            mt.assigned_by_admin_id,
+            mt.completed_by_admin_id,
+            mt.cancelled_by_admin_id,
+            mt.assigned_at,
+            mt.started_at,
+            mt.completed_at,
+            mt.cancelled_at,
+            mt.resolution_notes,
+            mt.cancellation_reason,
+            mt.created_at,
+            mt.updated_at
+
+          FROM maintenance_tasks mt
+
+          LEFT JOIN staff s
+            ON s.hotel_id =
+                 mt.hotel_id
+
+           AND s.staff_id =
+                 mt.assigned_staff_id
+
+          WHERE mt.hotel_id = ?
+            AND mt.room_id = ?
+
+          ORDER BY
+            mt.created_at DESC,
+            mt.maintenance_task_id DESC
+        `,
+        [
+          hotelId,
+          roomId,
+        ]
+      );
+
+    const [maintenanceEventRows] =
+      await db.query(
+        `
+          SELECT
+            me.maintenance_event_id,
+            me.maintenance_task_id,
+            me.event_type,
+            me.from_status,
+            me.to_status,
+            me.staff_id,
+
+            s.staff_code,
+
+            s.full_name
+              AS staff_name,
+
+            me.admin_id,
+            me.notes,
+            me.created_at
+
+          FROM maintenance_task_events me
+
+          INNER JOIN maintenance_tasks mt
+            ON mt.hotel_id =
+                 me.hotel_id
+
+           AND mt.maintenance_task_id =
+                 me.maintenance_task_id
+
+          LEFT JOIN staff s
+            ON s.hotel_id =
+                 me.hotel_id
+
+           AND s.staff_id =
+                 me.staff_id
+
+          WHERE me.hotel_id = ?
+            AND mt.room_id = ?
+
+          ORDER BY
+            me.maintenance_task_id DESC,
+            me.maintenance_event_id ASC
+        `,
+        [
+          hotelId,
+          roomId,
+        ]
+      );
+
+    const maintenanceEventsByTask =
+      new Map();
+
+    maintenanceEventRows.forEach(
+      (row) => {
+        const taskId = Number(
+          row.maintenance_task_id
+        );
+
+        const event = {
+          maintenanceEventId:
+            Number(
+              row.maintenance_event_id
+            ),
+
+          eventType:
+            row.event_type,
+
+          fromStatus:
+            row.from_status || null,
+
+          toStatus:
+            row.to_status || null,
+
+          staff:
+            row.staff_id === null
+              ? null
+              : {
+                  staffId:
+                    Number(
+                      row.staff_id
+                    ),
+
+                  staffCode:
+                    row.staff_code ||
+                    "",
+
+                  fullName:
+                    row.staff_name ||
+                    "",
+                },
+
+          adminId:
+            row.admin_id === null
+              ? null
+              : Number(
+                  row.admin_id
+                ),
+
+          notes:
+            row.notes || null,
+
+          createdAt:
+            row.created_at || null,
+        };
+
+        if (
+          !maintenanceEventsByTask
+            .has(taskId)
+        ) {
+          maintenanceEventsByTask
+            .set(
+              taskId,
+              []
+            );
+        }
+
+        maintenanceEventsByTask
+          .get(taskId)
+          .push(event);
+      }
+    );
+
+    const maintenanceHistory =
+      maintenanceTaskRows.map(
+        (row) => {
+          const taskId = Number(
+            row.maintenance_task_id
+          );
+
+          return {
+            maintenanceTaskId:
+              taskId,
+
+            bookingId:
+              row.booking_id === null
+                ? null
+                : Number(
+                    row.booking_id
+                  ),
+
+            bookingAdjustmentId:
+              row.booking_adjustment_id ===
+              null
+                ? null
+                : Number(
+                    row.booking_adjustment_id
+                  ),
+
+            sourceType:
+              row.source_type,
+
+            sourceKey:
+              row.source_key || null,
+
+            issueTitle:
+              row.issue_title || "",
+
+            issueDescription:
+              row.issue_description ||
+              null,
+
+            priority:
+              row.priority,
+
+            taskStatus:
+              row.task_status,
+
+            activeSlot:
+              row.active_slot === null
+                ? null
+                : Number(
+                    row.active_slot
+                  ),
+
+            releaseStatus:
+              row.release_status,
+
+            assignedStaffId:
+              row.assigned_staff_id ===
+              null
+                ? null
+                : Number(
+                    row.assigned_staff_id
+                  ),
+
+            assignedStaff:
+              row.assigned_staff_id ===
+              null
+                ? null
+                : {
+                    staffId:
+                      Number(
+                        row.assigned_staff_id
+                      ),
+
+                    staffCode:
+                      row.assigned_staff_code ||
+                      "",
+
+                    fullName:
+                      row.assigned_staff_name ||
+                      "",
+
+                    department:
+                      row.assigned_staff_department ||
+                      "",
+
+                    status:
+                      row.assigned_staff_status ||
+                      "",
+                  },
+
+            audit:
+              {
+                createdByAdminId:
+                  row.created_by_admin_id ===
+                  null
+                    ? null
+                    : Number(
+                        row.created_by_admin_id
+                      ),
+
+                assignedByAdminId:
+                  row.assigned_by_admin_id ===
+                  null
+                    ? null
+                    : Number(
+                        row.assigned_by_admin_id
+                      ),
+
+                completedByAdminId:
+                  row.completed_by_admin_id ===
+                  null
+                    ? null
+                    : Number(
+                        row.completed_by_admin_id
+                      ),
+
+                cancelledByAdminId:
+                  row.cancelled_by_admin_id ===
+                  null
+                    ? null
+                    : Number(
+                        row.cancelled_by_admin_id
+                      ),
+              },
+
+            assignedAt:
+              row.assigned_at || null,
+
+            startedAt:
+              row.started_at || null,
+
+            completedAt:
+              row.completed_at || null,
+
+            cancelledAt:
+              row.cancelled_at || null,
+
+            resolutionNotes:
+              row.resolution_notes || null,
+
+            cancellationReason:
+              row.cancellation_reason ||
+              null,
+
+            createdAt:
+              row.created_at || null,
+
+            updatedAt:
+              row.updated_at || null,
+
+            events:
+              maintenanceEventsByTask
+                .get(taskId) || [],
+          };
+        }
+      );
+
+    const [cleaningTaskRows] =
+      await db.query(
+        `
+          SELECT
+            ht.housekeeping_task_id,
+            ht.booking_id,
+            ht.booking_adjustment_id,
+            ht.task_type,
+            ht.source_key,
+            ht.task_status,
+            ht.active_slot,
+            ht.assigned_staff_id,
+
+            s.staff_code
+              AS assigned_staff_code,
+
+            s.full_name
+              AS assigned_staff_name,
+
+            s.department
+              AS assigned_staff_department,
+
+            s.status
+              AS assigned_staff_status,
+
+            ht.created_by_admin_id,
+            ht.assigned_by_admin_id,
+            ht.completed_by_admin_id,
+            ht.cancelled_by_admin_id,
+            ht.assigned_at,
+            ht.started_at,
+            ht.completed_at,
+            ht.cancelled_at,
+            ht.notes,
+            ht.completion_notes,
+            ht.cancellation_reason,
+            ht.created_at,
+            ht.updated_at
+
+          FROM housekeeping_tasks ht
+
+          LEFT JOIN staff s
+            ON s.hotel_id =
+                 ht.hotel_id
+
+           AND s.staff_id =
+                 ht.assigned_staff_id
+
+          WHERE ht.hotel_id = ?
+            AND ht.room_id = ?
+
+          ORDER BY
+            ht.created_at DESC,
+            ht.housekeeping_task_id DESC
+        `,
+        [
+          hotelId,
+          roomId,
+        ]
+      );
+
+    const [cleaningEventRows] =
+      await db.query(
+        `
+          SELECT
+            he.housekeeping_event_id,
+            he.housekeeping_task_id,
+            he.event_type,
+            he.from_status,
+            he.to_status,
+            he.staff_id,
+
+            s.staff_code,
+
+            s.full_name
+              AS staff_name,
+
+            he.admin_id,
+            he.notes,
+            he.created_at
+
+          FROM housekeeping_task_events he
+
+          INNER JOIN housekeeping_tasks ht
+            ON ht.hotel_id =
+                 he.hotel_id
+
+           AND ht.housekeeping_task_id =
+                 he.housekeeping_task_id
+
+          LEFT JOIN staff s
+            ON s.hotel_id =
+                 he.hotel_id
+
+           AND s.staff_id =
+                 he.staff_id
+
+          WHERE he.hotel_id = ?
+            AND ht.room_id = ?
+
+          ORDER BY
+            he.housekeeping_task_id DESC,
+            he.housekeeping_event_id ASC
+        `,
+        [
+          hotelId,
+          roomId,
+        ]
+      );
+
+    const cleaningEventsByTask =
+      new Map();
+
+    cleaningEventRows.forEach(
+      (row) => {
+        const taskId = Number(
+          row.housekeeping_task_id
+        );
+
+        const event = {
+          housekeepingEventId:
+            Number(
+              row.housekeeping_event_id
+            ),
+
+          eventType:
+            row.event_type,
+
+          fromStatus:
+            row.from_status || null,
+
+          toStatus:
+            row.to_status || null,
+
+          staff:
+            row.staff_id === null
+              ? null
+              : {
+                  staffId:
+                    Number(
+                      row.staff_id
+                    ),
+
+                  staffCode:
+                    row.staff_code ||
+                    "",
+
+                  fullName:
+                    row.staff_name ||
+                    "",
+                },
+
+          adminId:
+            row.admin_id === null
+              ? null
+              : Number(
+                  row.admin_id
+                ),
+
+          notes:
+            row.notes || null,
+
+          createdAt:
+            row.created_at || null,
+        };
+
+        if (
+          !cleaningEventsByTask
+            .has(taskId)
+        ) {
+          cleaningEventsByTask
+            .set(
+              taskId,
+              []
+            );
+        }
+
+        cleaningEventsByTask
+          .get(taskId)
+          .push(event);
+      }
+    );
+
+    const cleaningHistory =
+      cleaningTaskRows.map(
+        (row) => {
+          const taskId = Number(
+            row.housekeeping_task_id
+          );
+
+          return {
+            housekeepingTaskId:
+              taskId,
+
+            bookingId:
+              row.booking_id === null
+                ? null
+                : Number(
+                    row.booking_id
+                  ),
+
+            bookingAdjustmentId:
+              row.booking_adjustment_id ===
+              null
+                ? null
+                : Number(
+                    row.booking_adjustment_id
+                  ),
+
+            taskType:
+              row.task_type,
+
+            sourceKey:
+              row.source_key || null,
+
+            taskStatus:
+              row.task_status,
+
+            activeSlot:
+              row.active_slot === null
+                ? null
+                : Number(
+                    row.active_slot
+                  ),
+
+            assignedStaffId:
+              row.assigned_staff_id ===
+              null
+                ? null
+                : Number(
+                    row.assigned_staff_id
+                  ),
+
+            assignedStaff:
+              row.assigned_staff_id ===
+              null
+                ? null
+                : {
+                    staffId:
+                      Number(
+                        row.assigned_staff_id
+                      ),
+
+                    staffCode:
+                      row.assigned_staff_code ||
+                      "",
+
+                    fullName:
+                      row.assigned_staff_name ||
+                      "",
+
+                    department:
+                      row.assigned_staff_department ||
+                      "",
+
+                    status:
+                      row.assigned_staff_status ||
+                      "",
+                  },
+
+            audit:
+              {
+                createdByAdminId:
+                  row.created_by_admin_id ===
+                  null
+                    ? null
+                    : Number(
+                        row.created_by_admin_id
+                      ),
+
+                assignedByAdminId:
+                  row.assigned_by_admin_id ===
+                  null
+                    ? null
+                    : Number(
+                        row.assigned_by_admin_id
+                      ),
+
+                completedByAdminId:
+                  row.completed_by_admin_id ===
+                  null
+                    ? null
+                    : Number(
+                        row.completed_by_admin_id
+                      ),
+
+                cancelledByAdminId:
+                  row.cancelled_by_admin_id ===
+                  null
+                    ? null
+                    : Number(
+                        row.cancelled_by_admin_id
+                      ),
+              },
+
+            assignedAt:
+              row.assigned_at || null,
+
+            startedAt:
+              row.started_at || null,
+
+            completedAt:
+              row.completed_at || null,
+
+            cancelledAt:
+              row.cancelled_at || null,
+
+            notes:
+              row.notes || null,
+
+            completionNotes:
+              row.completion_notes || null,
+
+            cancellationReason:
+              row.cancellation_reason ||
+              null,
+
+            createdAt:
+              row.created_at || null,
+
+            updatedAt:
+              row.updated_at || null,
+
+            events:
+              cleaningEventsByTask
+                .get(taskId) || [],
+          };
+        }
+      );
+
     /* ========================================================
        DATA INTEGRITY WARNINGS
 
@@ -977,6 +1659,10 @@ exports.getRoomDetails = async (
           history,
 
           stats,
+
+          maintenanceHistory,
+
+          cleaningHistory,
 
           integrityWarnings,
 

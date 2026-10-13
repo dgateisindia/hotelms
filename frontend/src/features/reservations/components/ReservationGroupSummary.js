@@ -59,17 +59,17 @@ function ReservationGroupSummary({
           <div className="bstat-info">
 
             <span className="bstat-label">
-              Booking Total
+              Final Payable
             </span>
 
             <strong className="bstat-value">
               {formatCurrency(
-                summary.booking_total
+                summary.financial_payable_total
               )}
             </strong>
 
             <span className="bstat-change">
-              Active room bookings
+              Finalized reservation payable
             </span>
 
           </div>

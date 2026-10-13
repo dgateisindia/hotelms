@@ -25,6 +25,16 @@ const {
 } = require(
   "../../services/bookingStatusService"
 );
+const {
+  checkoutBookingWithAutomaticGroupInvoice,
+} = require(
+  "../../services/bookingCheckout/automaticGroupInvoiceService"
+);
+
+
+/* G6 INDIVIDUAL CHECKOUT AUTOMATION */
+
+
 function sendError(
   res,
   status,
@@ -466,7 +476,7 @@ exports.checkoutBooking = async (
 
 
     const result =
-      await checkoutBookingLifecycle(
+      await checkoutBookingWithAutomaticGroupInvoice(
         connection,
         {
           hotelId:

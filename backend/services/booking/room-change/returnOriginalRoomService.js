@@ -6,6 +6,10 @@ const {
   syncSourceRequestRoom,
 } = require("../../bookingSourceRequestService");
 
+const {
+  createRoomChangeCleaningTaskWithConnection,
+} = require("../../housekeeping/housekeepingService");
+
 function throwHttp(status, code, message) {
   const error = new Error(message);
   error.status = status;
@@ -310,14 +314,23 @@ async function returnToOriginalRoom(
     [hId, originalRoomId]
   );
 
-  await connection.query(
-    `
-      UPDATE rooms
-      SET status = 'cleaning'
-      WHERE hotel_id = ?
-        AND room_id = ?
-    `,
-    [hId, replacementRoomId]
+  await createRoomChangeCleaningTaskWithConnection(
+    connection,
+    {
+      hotelId:
+        hId,
+
+      adminId:
+        aId,
+
+      adjustmentId,
+
+      roomId:
+        replacementRoomId,
+
+      notes:
+        "Replacement room released for cleaning after the guest returned to the original room.",
+    }
   );
 
   const [resolutionResult] = await connection.query(

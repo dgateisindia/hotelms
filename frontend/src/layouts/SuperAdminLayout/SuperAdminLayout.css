@@ -486,3 +486,42 @@
     padding: 0;
   }
 }
+
+/* ============================================================
+   HMS SUPER ADMIN SHELL CONTRACT V1
+============================================================ */
+
+.super-admin-layout__breadcrumbs {
+  width: 100%;
+
+  padding:
+    16px
+    var(--page-padding)
+    0;
+}
+
+
+.super-admin-layout__breadcrumbs
+.page-breadcrumbs {
+  margin: 0;
+}
+
+
+.super-admin-layout__content {
+  width: 100%;
+  min-width: 0;
+
+  max-width:
+    var(--content-max-width);
+
+  margin:
+    0 auto;
+}
+
+
+@media (max-width: 768px) {
+
+  .super-admin-layout__breadcrumbs {
+    padding-top: 14px;
+  }
+}

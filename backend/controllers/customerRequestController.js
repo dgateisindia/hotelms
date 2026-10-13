@@ -1,6 +1,80 @@
 const db = require("../config/db");
 const promisePool = db.promisePool; // needed for the transactional approve flow below
 
+
+/* ============================================================
+   PUBLIC QR HELPERS
+
+   The public token resolves the hotel on the server.
+   The browser never sends or chooses hotel_id.
+============================================================ */
+
+async function findActiveQrHotelByToken(
+  publicToken
+) {
+  const [rows] =
+    await promisePool.query(
+      `
+        SELECT
+          qr.hotel_id,
+          h.hotel_name,
+          h.hotel_type,
+          h.star_rating
+
+        FROM qr_codes qr
+
+        INNER JOIN hotels h
+          ON h.hotel_id =
+            qr.hotel_id
+
+        WHERE qr.public_token = ?
+          AND qr.status = 'active'
+          AND h.status = 'active'
+
+        LIMIT 1
+      `,
+      [
+        publicToken,
+      ]
+    );
+
+  return rows[0] || null;
+}
+
+
+async function getHotelRoomTypes(
+  hotelId
+) {
+  const [rows] =
+    await promisePool.query(
+      `
+        SELECT DISTINCT
+          TRIM(room_type) AS room_type
+
+        FROM rooms
+
+        WHERE hotel_id = ?
+          AND room_type IS NOT NULL
+          AND TRIM(room_type) <> ''
+
+        ORDER BY
+          room_type ASC
+      `,
+      [
+        hotelId,
+      ]
+    );
+
+  return rows
+    .map(
+      (row) =>
+        String(
+          row.room_type || ""
+        ).trim()
+    )
+    .filter(Boolean);
+}
+
 // ===============================
 // Create Customer Room Request
 // ===============================
@@ -28,7 +102,13 @@ exports.createRequest = async (req, res) => {
     });
   }
 
-  if (!full_name || !phone || !check_in || !check_out) {
+  if (
+    !full_name ||
+    !phone ||
+    !room_type ||
+    !check_in ||
+    !check_out
+  ) {
     return res.status(400).json({
       success: false,
       message: "Please fill all required fields.",
@@ -66,28 +146,47 @@ exports.createRequest = async (req, res) => {
   }
 
   try {
-    const [qrRows] = await promisePool.query(
-      `
-        SELECT qr.hotel_id
-        FROM qr_codes qr
-        INNER JOIN hotels h
-          ON h.hotel_id = qr.hotel_id
-        WHERE qr.public_token = ?
-          AND qr.status = 'active'
-          AND h.status = 'active'
-        LIMIT 1
-      `,
-      [publicToken]
-    );
+    const qrHotel =
+      await findActiveQrHotelByToken(
+        publicToken
+      );
 
-    if (!qrRows.length) {
+    if (!qrHotel) {
       return res.status(404).json({
         success: false,
         message: "This QR code is invalid or inactive.",
       });
     }
 
-    const hotelId = Number(qrRows[0].hotel_id);
+    const hotelId =
+      Number(
+        qrHotel.hotel_id
+      );
+
+    const roomTypes =
+      await getHotelRoomTypes(
+        hotelId
+      );
+
+    const requestedRoomType =
+      String(
+        room_type || ""
+      ).trim();
+
+    const canonicalRoomType =
+      roomTypes.find(
+        (candidate) =>
+          candidate.toLowerCase() ===
+          requestedRoomType.toLowerCase()
+      );
+
+    if (!canonicalRoomType) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please select a valid room type for this hotel.",
+      });
+    }
 
     const [result] = await promisePool.query(
       `
@@ -109,7 +208,7 @@ exports.createRequest = async (req, res) => {
       `,
       [
         hotelId,
-        room_type || null,
+        canonicalRoomType,
         full_name.trim(),
         phone.trim(),
         email || null,
@@ -134,6 +233,96 @@ exports.createRequest = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Unable to submit the room request.",
+    });
+  }
+};
+
+
+/* ============================================================
+   PUBLIC QR REQUEST CONTEXT
+
+   Safe public information only:
+   - hotel name
+   - hotel type
+   - star rating
+   - actual room types configured for that hotel
+
+   No hotel_id or internal IDs are returned.
+============================================================ */
+
+exports.getPublicRequestContext = async (
+  req,
+  res
+) => {
+  const publicToken =
+    String(
+      req.params.publicToken ||
+      ""
+    ).trim();
+
+  if (!publicToken) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "QR token is required.",
+    });
+  }
+
+  try {
+    const qrHotel =
+      await findActiveQrHotelByToken(
+        publicToken
+      );
+
+    if (!qrHotel) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "This QR code is invalid or inactive.",
+      });
+    }
+
+    const roomTypes =
+      await getHotelRoomTypes(
+        Number(
+          qrHotel.hotel_id
+        )
+      );
+
+    return res.json({
+      success: true,
+
+      data: {
+        hotelName:
+          qrHotel.hotel_name,
+
+        hotelType:
+          qrHotel.hotel_type ||
+          null,
+
+        starRating:
+          qrHotel.star_rating ===
+            null ||
+          qrHotel.star_rating ===
+            undefined
+            ? null
+            : Number(
+                qrHotel.star_rating
+              ),
+
+        roomTypes,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Get public QR request context error:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Unable to load this hotel request form.",
     });
   }
 };

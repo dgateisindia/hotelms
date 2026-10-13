@@ -1115,3 +1115,324 @@ exports.createHotelAdmin =
       }
     }
   };
+
+
+/* ============================================================
+   SUPER ADMIN-SA3B-1 ACCOUNT LIFECYCLE
+
+   PATCH profile:
+     /hotels/:hotelDisplayId/admins/:adminDisplayId
+
+   PATCH status:
+     /hotels/:hotelDisplayId/admins/:adminDisplayId/status
+
+   Explicitly does NOT change:
+   - email
+   - Clerk identity
+   - password
+   - assigned hotel
+   - ownership
+   - admin role
+
+   Account access remains enforced by attachDbUser().
+============================================================ */
+
+function sa3bParseAdminDisplayId(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const match = /^ADM-(\d+)$/.exec(normalized);
+
+  if (!match) return null;
+
+  const id = Number(match[1]);
+
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function sa3bProblem(status, code, message) {
+  const error = new Error(message);
+  error.sa3bStatus = status;
+  error.sa3bCode = code;
+  return error;
+}
+
+async function sa3bChangeAdmin(req, res, action) {
+  const superadminId = Number(req.dbUser?.superadminId);
+  const hotelId = parseHotelDisplayId(req.params?.hotelDisplayId);
+  const adminId = sa3bParseAdminDisplayId(req.params?.adminDisplayId);
+
+  if (!Number.isSafeInteger(superadminId) || superadminId <= 0) {
+    return sendError(
+      res, 403, "SUPER_ADMIN_CONTEXT_MISSING",
+      "Super Admin account context is missing."
+    );
+  }
+
+  if (!hotelId || !adminId) {
+    return sendError(
+      res, 400, "INVALID_RESOURCE_ID",
+      "A valid Hotel ID and Admin ID are required."
+    );
+  }
+
+  const body = req.body;
+
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return sendError(
+      res, 400, "INVALID_ADMIN_DETAILS",
+      "A valid request object is required."
+    );
+  }
+
+  const keys = Object.keys(body);
+
+  let fullName = null;
+  let phoneProvided = false;
+  let phone = null;
+  let desiredStatus = null;
+
+  if (action === "profile") {
+    if (
+      keys.some(key => !["fullName", "phone"].includes(key)) ||
+      !Object.prototype.hasOwnProperty.call(body, "fullName") ||
+      typeof body.fullName !== "string"
+    ) {
+      return sendError(
+        res, 400, "INVALID_ADMIN_DETAILS",
+        "Only fullName and phone can be edited."
+      );
+    }
+
+    fullName = body.fullName.trim();
+
+    if (!fullName || fullName.length > 150) {
+      return sendError(
+        res, 400, "INVALID_ADMIN_NAME",
+        "Full Name must contain 1 to 150 characters."
+      );
+    }
+
+    phoneProvided =
+      Object.prototype.hasOwnProperty.call(body, "phone");
+
+    if (phoneProvided) {
+      if (
+        body.phone !== null &&
+        typeof body.phone !== "string"
+      ) {
+        return sendError(
+          res, 400, "INVALID_ADMIN_PHONE",
+          "Phone must be a string or null."
+        );
+      }
+
+      phone = normalizeOptionalString(body.phone);
+
+      if (phone && phone.length > 30) {
+        return sendError(
+          res, 400, "INVALID_ADMIN_PHONE",
+          "Phone number must not exceed 30 characters."
+        );
+      }
+    }
+  } else if (action === "status") {
+    if (
+      keys.length !== 1 ||
+      keys[0] !== "status" ||
+      !["active", "inactive"].includes(body.status)
+    ) {
+      return sendError(
+        res, 400, "INVALID_ADMIN_STATUS",
+        "Status must be active or inactive."
+      );
+    }
+
+    desiredStatus = body.status;
+  } else {
+    return sendError(
+      res, 400, "INVALID_OPERATION",
+      "Unsupported account operation."
+    );
+  }
+
+  let connection = null;
+
+  try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    // Lock owning hotel first, consistent with Hotel creation flow.
+    const [[hotel]] = await connection.query(
+      `
+        SELECT hotel_id, hotel_name, status
+        FROM hotels
+        WHERE hotel_id = ?
+          AND superadmin_id = ?
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [hotelId, superadminId]
+    );
+
+    if (!hotel) {
+      throw sa3bProblem(
+        404, "HOTEL_NOT_FOUND",
+        "The hotel was not found in your portfolio."
+      );
+    }
+
+    // Exact hotel AND portfolio ownership match.
+    const [[admin]] = await connection.query(
+      `
+        SELECT
+          admin_id,
+          full_name,
+          email,
+          phone,
+          profile_image,
+          status,
+          created_at,
+          updated_at
+        FROM admins
+        WHERE admin_id = ?
+          AND hotel_id = ?
+          AND superadmin_id = ?
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [adminId, hotelId, superadminId]
+    );
+
+    if (!admin) {
+      throw sa3bProblem(
+        404, "ADMIN_NOT_FOUND",
+        "This Admin does not belong to the selected hotel."
+      );
+    }
+
+    if (
+      action === "status" &&
+      desiredStatus === "active" &&
+      hotel.status !== "active"
+    ) {
+      throw sa3bProblem(
+        409, "HOTEL_NOT_ACTIVE",
+        "An Admin cannot be activated while the hotel is inactive."
+      );
+    }
+
+    if (action === "profile") {
+      await connection.query(
+        `
+          UPDATE admins
+          SET full_name = ?, phone = ?
+          WHERE admin_id = ?
+            AND hotel_id = ?
+            AND superadmin_id = ?
+        `,
+        [
+          fullName,
+          phoneProvided ? phone : admin.phone,
+          adminId,
+          hotelId,
+          superadminId,
+        ]
+      );
+    } else if (admin.status !== desiredStatus) {
+      await connection.query(
+        `
+          UPDATE admins
+          SET status = ?
+          WHERE admin_id = ?
+            AND hotel_id = ?
+            AND superadmin_id = ?
+        `,
+        [
+          desiredStatus,
+          adminId,
+          hotelId,
+          superadminId,
+        ]
+      );
+    }
+
+    const [[updated]] = await connection.query(
+      `
+        SELECT
+          admin_id,
+          full_name,
+          email,
+          phone,
+          profile_image,
+          status,
+          created_at,
+          updated_at
+        FROM admins
+        WHERE admin_id = ?
+          AND hotel_id = ?
+          AND superadmin_id = ?
+        LIMIT 1
+      `,
+      [adminId, hotelId, superadminId]
+    );
+
+    if (!updated) {
+      throw new Error("Updated Admin record could not be read.");
+    }
+
+    await connection.commit();
+
+    return res.status(200).json({
+      success: true,
+      message:
+        action === "profile"
+          ? "Hotel Admin profile updated successfully."
+          : `Hotel Admin account ${desiredStatus === "active" ? "activated" : "deactivated"} successfully.`,
+      admin: {
+        adminId: Number(updated.admin_id),
+        displayId: formatAdminDisplayId(updated.admin_id),
+        fullName: updated.full_name,
+        email: updated.email,
+        phone: updated.phone,
+        profileImage: updated.profile_image,
+        status: updated.status,
+        createdAt: updated.created_at,
+        updatedAt: updated.updated_at,
+      },
+      hotel: {
+        displayId: formatHotelDisplayId(hotel.hotel_id),
+        name: hotel.hotel_name,
+        status: hotel.status,
+      },
+    });
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        logAdminError("SA3B_ROLLBACK", rollbackError);
+      }
+    }
+
+    if (error.sa3bStatus) {
+      return sendError(
+        res, error.sa3bStatus,
+        error.sa3bCode, error.message
+      );
+    }
+
+    logAdminError("SA3B_ACCOUNT_CHANGE", error);
+
+    return sendError(
+      res, 500, "ADMIN_CHANGE_FAILED",
+      "The Admin account could not be updated."
+    );
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
+exports.updateHotelAdmin = (req, res) =>
+  sa3bChangeAdmin(req, res, "profile");
+
+exports.updateHotelAdminStatus = (req, res) =>
+  sa3bChangeAdmin(req, res, "status");

@@ -2359,3 +2359,559 @@
     width: 100%;
   }
 }
+
+/* ============================================================
+   FINAL SETTINGS UI MIGRATION
+   Shared HMS visual foundation.
+   Settings behavior / policy logic remains unchanged.
+============================================================ */
+
+
+/* PAGE */
+
+.hotel-settings-page.hms-page {
+  padding:
+    var(--space-5)
+    var(--page-padding)
+    var(--space-8);
+
+  background:
+    var(--color-background);
+}
+
+
+/* HERO */
+
+.hotel-settings-hero.hms-page-header {
+  align-items:
+    flex-start;
+
+  margin-bottom:
+    var(--space-5);
+
+  gap:
+    var(--space-5);
+}
+
+
+.hotel-settings-hero.hms-page-header
+.hotel-settings-eyebrow {
+  margin-bottom:
+    var(--space-1);
+
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-semibold);
+
+  letter-spacing:
+    0.06em;
+}
+
+
+.hotel-settings-hero.hms-page-header
+h1 {
+  font-size:
+    var(--hms-page-title-size);
+
+  font-weight:
+    var(--font-weight-extrabold);
+
+  letter-spacing:
+    -0.025em;
+}
+
+
+.hotel-settings-hero.hms-page-header
+p {
+  margin-top:
+    var(--space-2);
+
+  font-size:
+    var(--font-size-base);
+
+  color:
+    var(--color-text-muted);
+}
+
+
+/* CURRENT HOTEL */
+
+.hotel-settings-hotel-card.hms-panel {
+  min-width:
+    230px;
+
+  padding:
+    var(--space-4);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-xs);
+}
+
+
+.hotel-settings-hotel-card.hms-panel
+small {
+  color:
+    var(--color-primary);
+
+  font-weight:
+    var(--font-weight-bold);
+}
+
+
+/* SETTINGS WORKSPACE */
+
+.hotel-settings-shell {
+  gap:
+    var(--space-4);
+
+  align-items:
+    start;
+}
+
+
+.hotel-settings-nav.hms-panel {
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-xs);
+}
+
+
+.hotel-settings-content.hms-panel {
+  min-width:
+    0;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-xs);
+}
+
+
+/* NAVIGATION */
+
+.hotel-settings-nav-heading {
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-bold);
+
+  letter-spacing:
+    0.04em;
+}
+
+
+.hotel-settings-nav-item {
+  border-radius:
+    var(--radius-md);
+
+  color:
+    var(--color-text-secondary);
+
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+}
+
+
+.hotel-settings-nav-item:hover {
+  background:
+    var(--color-surface-hover);
+
+  color:
+    var(--color-primary);
+}
+
+
+.hotel-settings-nav-item.is-active {
+  background:
+    var(--color-primary-light);
+
+  color:
+    var(--color-primary);
+
+  font-weight:
+    var(--font-weight-bold);
+}
+
+
+/* SECTION HEADER */
+
+.hotel-settings-section-header {
+  margin-bottom:
+    var(--space-5);
+
+  padding-bottom:
+    var(--space-4);
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+}
+
+
+.hotel-settings-section-header
+h2 {
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-xl);
+
+  font-weight:
+    var(--font-weight-extrabold);
+
+  letter-spacing:
+    -0.015em;
+}
+
+
+.hotel-settings-section-header
+p {
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-sm);
+}
+
+
+/* FORM CONTROLS */
+
+.hotel-settings-input.hms-control,
+.hotel-settings-select.hms-control,
+.hotel-settings-textarea.hms-control {
+  width:
+    100%;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-control-radius);
+
+  background:
+    var(--color-surface);
+
+  color:
+    var(--color-text);
+
+  font-family:
+    var(--font-family-primary);
+}
+
+
+.hotel-settings-textarea.hms-control {
+  min-height:
+    92px;
+
+  height:
+    auto;
+
+  padding-top:
+    var(--space-3);
+
+  padding-bottom:
+    var(--space-3);
+
+  resize:
+    vertical;
+}
+
+
+/* BUTTONS */
+
+.hotel-settings-primary-button.hms-button,
+.hotel-settings-secondary-button.hms-button {
+  min-height:
+    var(--hms-control-height);
+
+  font-family:
+    var(--font-family-primary);
+}
+
+
+.hotel-settings-primary-button.hms-button {
+  border-color:
+    var(--color-primary);
+
+  background:
+    var(--color-primary);
+
+  color:
+    var(--color-text-inverse);
+}
+
+
+.hotel-settings-secondary-button.hms-button {
+  border-color:
+    var(--color-border);
+
+  background:
+    var(--color-surface);
+
+  color:
+    var(--color-text-secondary);
+}
+
+
+/* POLICY / RULE CARDS */
+
+.hotel-settings-rule-row,
+.hotel-settings-preset-row,
+.hotel-settings-check-grid,
+.hotel-settings-audit-block {
+  border-color:
+    var(--color-border);
+}
+
+
+.hotel-settings-rule-row,
+.hotel-settings-preset-row {
+  border-radius:
+    var(--radius-md);
+
+  background:
+    var(--color-surface);
+}
+
+
+/* SAVE AREA */
+
+.hotel-settings-save-summary {
+  margin-top:
+    var(--space-5);
+
+  padding:
+    var(--space-4);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface-muted);
+}
+
+
+/* AUDIT FILTERS */
+
+.hotel-settings-audit-filters {
+  gap:
+    var(--space-3);
+
+  margin-bottom:
+    var(--space-4);
+
+  padding:
+    var(--space-3);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface-muted);
+}
+
+
+/* AUDIT TABLE */
+
+.hotel-settings-table-wrap.hms-table-shell {
+  width:
+    100%;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+}
+
+
+.hotel-settings-audit-table.hms-table {
+  min-width:
+    900px;
+}
+
+
+.hotel-settings-audit-table.hms-table
+th {
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text-secondary);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-bold);
+
+  text-transform:
+    uppercase;
+
+  letter-spacing:
+    0.035em;
+}
+
+
+.hotel-settings-audit-table.hms-table
+tbody tr:hover {
+  background:
+    var(--color-surface-hover);
+}
+
+
+/* EMPTY STATE */
+
+.hotel-settings-empty-state.hms-empty {
+  min-height:
+    180px;
+
+  border:
+    1px dashed
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface-muted);
+}
+
+
+/* ALERTS */
+
+.hotel-settings-alert {
+  border-radius:
+    var(--hms-control-radius);
+
+  box-shadow:
+    var(--shadow-xs);
+}
+
+
+/* MODAL */
+
+.hotel-settings-modal-backdrop.hms-modal-backdrop {
+  background:
+    rgba(15, 23, 42, 0.48);
+}
+
+
+.hotel-settings-modal.hms-modal {
+  width:
+    min(
+      100%,
+      520px
+    );
+
+  padding:
+    var(--space-5);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--radius-xl);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-xl);
+}
+
+
+/* RESPONSIVE */
+
+@media (max-width: 980px) {
+  .hotel-settings-page.hms-page {
+    padding:
+      var(--space-4);
+  }
+
+  .hotel-settings-hero.hms-page-header {
+    flex-direction:
+      column;
+  }
+
+  .hotel-settings-hotel-card.hms-panel {
+    width:
+      100%;
+
+    min-width:
+      0;
+  }
+}
+
+
+@media (max-width: 700px) {
+  .hotel-settings-content.hms-panel {
+    border-radius:
+      var(--radius-lg);
+  }
+
+  .hotel-settings-audit-filters {
+    grid-template-columns:
+      1fr;
+  }
+}
+
+
+@media (max-width: 480px) {
+  .hotel-settings-primary-button.hms-button,
+  .hotel-settings-secondary-button.hms-button {
+    width:
+      100%;
+  }
+}

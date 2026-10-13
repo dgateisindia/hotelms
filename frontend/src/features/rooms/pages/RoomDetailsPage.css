@@ -41,7 +41,10 @@
 
   width: 100%;
   min-width: 0;
-  padding: 0 0 28px;
+  padding:
+    var(--space-5)
+    var(--page-padding)
+    var(--page-padding);
   color: var(--rd-text);
 }
 
@@ -72,7 +75,7 @@
 
   color: var(--rd-muted);
 
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -91,11 +94,7 @@
 
   color: var(--rd-text);
 
-  font-size: clamp(
-    24px,
-    2.4vw,
-    32px
-  );
+  font-size: 22px;
 
   line-height: 1.15;
 }
@@ -104,7 +103,7 @@
   margin: 7px 0 0;
 
   color: var(--rd-muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .room-details-back,
@@ -186,7 +185,7 @@
 
   color: var(--rd-text);
 
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1.3;
 }
 
@@ -195,7 +194,7 @@
 
   color: var(--rd-muted);
 
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -204,7 +203,7 @@
 
   color: var(--rd-muted);
 
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -599,7 +598,7 @@
   margin: 0;
 
   color: var(--rd-text);
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .room-details-state p {
@@ -749,7 +748,8 @@
 
 @media (max-width: 640px) {
   .room-details-page {
-    padding-bottom: 18px;
+    padding-top:
+      var(--space-4);
   }
 
   .room-details-header {
@@ -815,5 +815,258 @@
 
   .room-details-title-row {
     align-items: flex-start;
+  }
+}
+/* =========================================================
+   ROOM-R6H — OPERATIONAL ROOM HISTORY
+   Read-only Maintenance + Cleaning history
+========================================================= */
+
+.room-detail-operational-list {
+  display: grid;
+  gap: 16px;
+}
+
+.room-detail-operational-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.room-detail-operational-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.room-detail-operational-card-top h3 {
+  margin: 5px 0 0;
+  font-size: 15px;
+  line-height: 1.35;
+  color: #111827;
+}
+
+.room-detail-operational-kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.room-detail-operational-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.room-detail-operational-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid #d7dee8;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.room-detail-operational-badge-muted {
+  background: #ffffff;
+  color: #64748b;
+}
+
+.room-detail-operational-meta {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(150px, 1fr)
+  );
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.room-detail-operational-meta > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.room-detail-operational-meta span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.room-detail-operational-meta strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #111827;
+}
+
+.room-detail-operational-notes {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.room-detail-operational-notes strong {
+  font-size: 12px;
+  color: #334155;
+}
+
+.room-detail-operational-notes span {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #475569;
+  overflow-wrap: anywhere;
+}
+
+.room-detail-operational-audit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.room-detail-operational-audit span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.room-detail-operational-events {
+  margin-top: 16px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 14px;
+}
+
+.room-detail-operational-events-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.room-detail-operational-events-heading strong {
+  font-size: 13px;
+  color: #111827;
+}
+
+.room-detail-operational-events-heading span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.room-detail-operational-event {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 10px 12px 10px 18px;
+  border-left: 2px solid #cbd5e1;
+}
+
+.room-detail-operational-event::before {
+  content: "";
+  position: absolute;
+  top: 17px;
+  left: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #64748b;
+}
+
+.room-detail-operational-event-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room-detail-operational-event-head strong {
+  font-size: 12px;
+  color: #111827;
+}
+
+.room-detail-operational-event-head span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.room-detail-operational-event-transition {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.room-detail-operational-event small {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.room-detail-operational-event p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
+  overflow-wrap: anywhere;
+}
+
+.room-detail-operational-event-empty {
+  padding: 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .room-detail-operational-card {
+    padding: 14px;
+  }
+
+  .room-detail-operational-card-top {
+    flex-direction: column;
+  }
+
+  .room-detail-operational-badges {
+    justify-content: flex-start;
+  }
+
+  .room-detail-operational-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .room-detail-operational-event-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 }

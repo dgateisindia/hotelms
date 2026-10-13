@@ -461,6 +461,18 @@ exports.createRoom = async (
 
   const room = validation.value;
 
+  if (
+    room.status !==
+      "available"
+  ) {
+    return sendError(
+      res,
+      409,
+      "ROOM_STATUS_MANAGED_BY_WORKFLOW",
+      "New rooms must start as available. Occupied, cleaning, and maintenance statuses are managed by their workflows."
+    );
+  }
+
   try {
     const [result] =
       await db.query(
@@ -623,9 +635,21 @@ exports.updateRoom = async (
     );
   }
 
+  const requestBody =
+    req.body &&
+    typeof req.body === "object"
+      ? req.body
+      : {};
+
+  const statusWasProvided =
+    Object.prototype.hasOwnProperty.call(
+      requestBody,
+      "status"
+    );
+
   const validation =
     validateRoomPayload(
-      req.body
+      requestBody
     );
 
   if (validation.error) {
@@ -640,6 +664,49 @@ exports.updateRoom = async (
   const room = validation.value;
 
   try {
+    const [statusRows] =
+      await db.query(
+        `
+          SELECT
+            status
+
+          FROM rooms
+
+          WHERE room_id = ?
+            AND hotel_id = ?
+
+          LIMIT 1
+        `,
+        [roomId, hotelId]
+      );
+
+    if (statusRows.length === 0) {
+      return sendError(
+        res,
+        404,
+        "ROOM_NOT_FOUND",
+        "The room was not found in your hotel."
+      );
+    }
+
+    const currentStatus =
+      normalizeStatus(
+        statusRows[0].status
+      );
+
+    if (
+      statusWasProvided &&
+      room.status !==
+        currentStatus
+    ) {
+      return sendError(
+        res,
+        409,
+        "ROOM_STATUS_MANAGED_BY_WORKFLOW",
+        "Room status is managed by booking, housekeeping, and maintenance workflows and cannot be changed from generic room editing."
+      );
+    }
+
     const [result] =
       await db.query(
         `
@@ -655,8 +722,7 @@ exports.updateRoom = async (
                 ?,
                 max_extra_beds
               ),
-            price_per_night = ?,
-            status = ?
+            price_per_night = ?
 
           WHERE room_id = ?
             AND hotel_id = ?
@@ -668,7 +734,6 @@ exports.updateRoom = async (
           room.capacity,
           room.maxExtraBeds,
           room.price,
-          room.status,
           roomId,
           hotelId,
         ]

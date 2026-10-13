@@ -274,10 +274,83 @@ async function createHotel(
   };
 }
 
+/**
+ * Updates one owned hotel.
+ *
+ * PATCH /api/superadmin/hotels/HT-0001
+ */
+async function updateHotel(
+  hotelDisplayId,
+  hotelDetails
+) {
+  const normalizedHotelId =
+    normalizeHotelDisplayId(
+      hotelDisplayId
+    );
+
+  const status =
+    String(
+      hotelDetails?.status || ""
+    )
+      .trim()
+      .toLowerCase();
+
+
+  if (
+    ![
+      "active",
+      "inactive",
+    ].includes(
+      status
+    )
+  ) {
+    throw new Error(
+      "Hotel status must be active or inactive."
+    );
+  }
+
+
+  const payload = {
+    ...prepareHotelPayload(
+      hotelDetails
+    ),
+
+    status,
+  };
+
+
+  const response =
+    await apiClient.patch(
+      `/superadmin/hotels/${encodeURIComponent(
+        normalizedHotelId
+      )}`,
+      payload
+    );
+
+
+  const data =
+    getResponseData(response);
+
+
+  return {
+    success:
+      data?.success === true,
+
+    message:
+      data?.message ||
+      "Hotel updated successfully.",
+
+    hotel:
+      data?.hotel || null,
+  };
+}
+
+
 const hotelService = {
   getHotels,
   getHotelByDisplayId,
   createHotel,
+  updateHotel,
 };
 
 export default hotelService;

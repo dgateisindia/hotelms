@@ -1,0 +1,549 @@
+/* ============================================================
+   SA5B — SELECTED HOTEL FINANCE
+   HMS Navy / White Design System
+============================================================ */
+
+.hotel-finance {
+  width: 100%;
+  min-width: 0;
+  padding: var(--page-padding);
+  background: var(--color-background, #f5f7fc);
+  color: var(--color-text, #142043);
+}
+
+.hotel-finance__header {
+  margin-bottom: 22px;
+}
+
+.hotel-finance__eyebrow {
+  color: var(--color-primary, #102457);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.hotel-finance__header h1 {
+  margin: 8px 0;
+  font-size: clamp(22px, 2.5vw, 29px);
+  line-height: 1.25;
+}
+
+.hotel-finance__header p,
+.hotel-finance__panel-heading p {
+  margin: 0;
+  color: var(--color-text-muted, #71809c);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.hotel-finance__filters,
+.hotel-finance__panel,
+.hotel-finance__metric,
+.hotel-finance__scope {
+  border: 1px solid var(--color-border, #e0e5f0);
+  border-radius: 14px;
+  background: var(--color-surface, #fff);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(18, 30, 70, 0.03));
+}
+
+.hotel-finance__filters {
+  padding: 18px;
+  margin-bottom: 17px;
+}
+
+.hotel-finance__filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.hotel-finance__filter-header > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.hotel-finance__filter-header strong {
+  font-size: 13px;
+}
+
+.hotel-finance__filter-header span,
+.hotel-finance__filter-footer span {
+  color: var(--color-text-muted, #71809c);
+  font-size: 12px;
+}
+
+.hotel-finance__periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f0f3f9;
+}
+
+.hotel-finance__period {
+  border: 0;
+  border-radius: 7px;
+  padding: 10px 13px;
+  background: transparent;
+  color: #243b71;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hotel-finance__period--active {
+  background: var(--color-primary, #102457);
+  color: #fff;
+}
+
+.hotel-finance__dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 17px;
+}
+
+.hotel-finance__dates label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hotel-finance__dates input {
+  width: 100%;
+  min-width: 0;
+  min-height: 43px;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border, #e0e5f0);
+  border-radius: 9px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+.hotel-finance__filter-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 13px;
+  margin-top: 16px;
+}
+
+.hotel-finance__apply {
+  border: 0;
+  border-radius: 9px;
+  padding: 12px 20px;
+  background: var(--color-primary, #102457);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hotel-finance__apply:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hotel-finance__scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-bottom: 16px;
+  padding: 12px 17px;
+  color: var(--color-text-muted, #71809c);
+  font-size: 12px;
+}
+
+.hotel-finance__scope strong {
+  color: var(--color-text, #142043);
+}
+
+.hotel-finance__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.hotel-finance__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 20px;
+}
+
+.hotel-finance__metric-label {
+  color: var(--color-text-muted, #71809c);
+  font-size: 12px;
+}
+
+.hotel-finance__metric-value {
+  color: var(--color-primary, #102457);
+  font-size: 26px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.hotel-finance__metric-detail {
+  color: var(--color-text-muted, #71809c);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.hotel-finance__analysis {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.6fr);
+  gap: 14px;
+  align-items: start;
+  margin-top: 23px;
+  margin-bottom: 16px;
+}
+
+.hotel-finance__panel {
+  min-width: 0;
+  padding: 20px;
+}
+
+.hotel-finance__panel-heading {
+  margin-bottom: 20px;
+}
+
+.hotel-finance__panel-heading h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.hotel-finance__trend {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 370px;
+  overflow-y: auto;
+}
+
+.hotel-finance__trend-row {
+  display: grid;
+  grid-template-columns: minmax(65px, 95px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.hotel-finance__trend-label {
+  min-width: 0;
+  color: var(--color-text-muted, #71809c);
+  overflow-wrap: anywhere;
+}
+
+.hotel-finance__trend-row strong {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.hotel-finance__track {
+  height: 12px;
+  border-radius: 6px;
+  background: #edf1f8;
+  overflow: hidden;
+}
+
+.hotel-finance__bar {
+  height: 100%;
+  border-radius: inherit;
+  background: #243d85;
+}
+
+.hotel-finance__bar--negative {
+  background: #c45a5a;
+}
+
+.hotel-finance__status-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border, #e0e5f0);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.hotel-finance__status-row:last-child {
+  border-bottom: 0;
+}
+
+.hotel-finance__status-row span {
+  color: var(--color-text-muted, #71809c);
+}
+
+.hotel-finance__table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.hotel-finance__table {
+  width: 100%;
+  min-width: 570px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.hotel-finance__table th,
+.hotel-finance__table td {
+  padding: 13px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border, #e0e5f0);
+}
+
+.hotel-finance__table th {
+  background: #f5f7fc;
+  color: #33456e;
+  font-weight: 800;
+}
+
+.hotel-finance__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.hotel-finance__empty,
+.hotel-finance__loading {
+  padding: 28px 15px;
+  color: var(--color-text-muted, #71809c);
+  text-align: center;
+  font-size: 12px;
+}
+
+.hotel-finance__loading {
+  background: #fff;
+  border: 1px solid var(--color-border, #e0e5f0);
+  border-radius: 12px;
+}
+
+.hotel-finance__error {
+  padding: 13px 15px;
+  margin-bottom: 15px;
+  border: 1px solid #efc7c7;
+  border-radius: 10px;
+  background: #fff4f4;
+  color: #963636;
+  font-size: 12px;
+}
+
+.hotel-finance__note {
+  margin: 17px 0 0;
+  color: var(--color-text-muted, #71809c);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1050px) {
+  .hotel-finance__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hotel-finance__analysis {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .hotel-finance {
+    padding: 0;
+  }
+
+  .hotel-finance__metrics,
+  .hotel-finance__dates {
+    grid-template-columns: 1fr;
+  }
+
+  .hotel-finance__filter-header,
+  .hotel-finance__filter-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hotel-finance__periods {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hotel-finance__period,
+  .hotel-finance__apply {
+    width: 100%;
+  }
+
+  .hotel-finance__metric,
+  .hotel-finance__panel {
+    padding: 16px;
+  }
+
+  .hotel-finance__metric-value {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 420px) {
+  .hotel-finance__trend-row {
+    grid-template-columns: minmax(45px, 65px) minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .hotel-finance__trend-row strong {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  /* Existing topbar refresh available on Finance mobile. */
+  .super-admin-layout:has(.hotel-finance)
+  .super-admin-topbar__action--secondary {
+    display: inline-flex;
+  }
+}
+
+/* ============================================================
+   SA5B-P2-R1 FINANCE MOBILE UX
+   Instant preset selection + compact reporting
+============================================================ */
+
+@media (max-width: 760px) {
+
+  .hotel-finance__filters {
+    padding: 16px;
+  }
+
+  .hotel-finance__filter-header {
+    gap: 14px;
+  }
+
+  .hotel-finance__periods {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    width: 100%;
+    padding: 4px;
+    border-radius: 10px;
+  }
+
+  .hotel-finance__period {
+    min-width: 0;
+    width: 100%;
+    padding: 11px 3px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .hotel-finance__period--active {
+    box-shadow: 0 2px 5px rgba(12, 30, 80, 0.12);
+  }
+
+  .hotel-finance__filter-footer {
+    gap: 12px;
+    margin-top: 15px;
+  }
+
+  /* Revenue trend: label + amount, followed by a full-width bar. */
+
+  .hotel-finance__trend {
+    gap: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .hotel-finance__trend-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 9px 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--color-border, #e0e5f0);
+  }
+
+  .hotel-finance__trend-row:last-child {
+    border-bottom: 0;
+  }
+
+  .hotel-finance__trend-label {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    overflow-wrap: normal;
+    font-size: 11px;
+  }
+
+  .hotel-finance__trend-row strong {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    justify-self: end;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .hotel-finance__track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    height: 9px;
+  }
+
+  /* Six-month history as compact mobile cards. */
+
+  .hotel-finance__table-scroll {
+    overflow: visible;
+  }
+
+  .hotel-finance__table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .hotel-finance__table thead {
+    display: none;
+  }
+
+  .hotel-finance__table tbody {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .hotel-finance__table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--color-border, #e0e5f0);
+    border-radius: 10px;
+    background: #fbfcff;
+  }
+
+  .hotel-finance__table tbody td {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    font-size: 12px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  .hotel-finance__table tbody td::before {
+    content: attr(data-label);
+    color: var(--color-text-muted, #71809c);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+}

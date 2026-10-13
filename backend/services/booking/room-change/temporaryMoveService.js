@@ -9,6 +9,15 @@ const {
 const {
   syncSourceRequestRoom,
 } = require("../../bookingSourceRequestService");
+
+const {
+  createRoomChangeCleaningTaskWithConnection,
+} = require("../../housekeeping/housekeepingService");
+
+const {
+  createBookingMaintenanceTaskWithConnection,
+  SOURCE_TYPES,
+} = require("../../maintenance/maintenanceService");
 function throwHttp(status, code, message) {
   const error = new Error(message);
   error.status = status;
@@ -533,15 +542,63 @@ async function startTemporaryRoomChange(
     [targetRoomId, aId, hId, bId]
   );
 
-  await connection.query(
-    `
-      UPDATE rooms
-      SET status = ?
-      WHERE hotel_id = ?
-        AND room_id = ?
-    `,
-    [originalRoomNextStatus, hId, originalRoomId]
-  );
+  if (
+    originalRoomNextStatus ===
+      "maintenance"
+  ) {
+
+    await createBookingMaintenanceTaskWithConnection(
+      connection,
+      {
+        hotelId:
+          hId,
+
+        adminId:
+          aId,
+
+        roomId:
+          originalRoomId,
+
+        bookingId:
+          bId,
+
+        bookingAdjustmentId:
+          Number(
+            adjustmentResult.insertId
+          ),
+
+        sourceType:
+          SOURCE_TYPES.TEMPORARY_ROOM_CHANGE,
+
+        issueDescription:
+          description,
+      }
+    );
+  }
+  else {
+
+    await createRoomChangeCleaningTaskWithConnection(
+      connection,
+      {
+        hotelId:
+          hId,
+
+        adminId:
+          aId,
+
+        adjustmentId:
+          Number(
+            adjustmentResult.insertId
+          ),
+
+        roomId:
+          originalRoomId,
+
+        notes:
+          "Original room released for cleaning after temporary room move.",
+      }
+    );
+  }
 
   await connection.query(
     `

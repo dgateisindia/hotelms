@@ -422,3 +422,1176 @@
 @media (max-width: 1200px) { .payroll-stats { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 900px)  { .payroll-stats { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 600px)  { .payroll-stats { grid-template-columns: 1fr 1fr; } }
+
+/* ============================================================
+   FINAL HR FAST UI — PAYROLL
+============================================================ */
+
+.hms-payroll-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.hms-payroll-page .payroll-topbar {
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-3);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--radius-lg);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-xs);
+}
+
+.hms-payroll-page .payroll-date-btn,
+.hms-payroll-page .payroll-select,
+.hms-payroll-page .payroll-search-input {
+  min-height: 38px;
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.hms-payroll-page .payroll-search-wrap {
+  border-color:
+    var(--color-border);
+
+  background:
+    var(--color-surface);
+}
+
+.hms-payroll-page .payroll-stats {
+  grid-template-columns:
+    repeat(
+      4,
+      minmax(0, 1fr)
+    );
+
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.hms-payroll-page .payroll-stat-card {
+  min-height: 92px;
+  padding: var(--space-4);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-xs);
+}
+
+.hms-payroll-page .payroll-stat-label {
+  color:
+    var(--color-text-muted);
+}
+
+.hms-payroll-page .payroll-stat-value {
+  color:
+    var(--color-text);
+}
+
+.hms-payroll-page .payroll-card {
+  overflow-x: auto;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-xs);
+}
+
+.hms-payroll-page .payroll-table {
+  min-width: 980px;
+}
+
+.hms-payroll-page .payroll-table th {
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text-secondary);
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.hms-payroll-page .payroll-table td {
+  color:
+    var(--color-text);
+
+  vertical-align:
+    middle;
+}
+
+.hms-payroll-page .payroll-table tbody tr:hover {
+  background:
+    var(--color-surface-hover);
+}
+
+.hms-payroll-page .payroll-actions {
+  gap: var(--space-2);
+}
+
+.hms-payroll-page .payroll-act-btn {
+  border-color:
+    var(--color-border);
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    var(--color-surface);
+
+  color:
+    var(--color-text);
+}
+
+.hms-payroll-page .payroll-pagination {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-divider);
+}
+
+.hms-payroll-page .modal-box {
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-lg);
+}
+
+.hms-payroll-page .modal-header,
+.hms-payroll-page .modal-footer {
+  border-color:
+    var(--color-divider);
+}
+
+@media (max-width: 1100px) {
+  .hms-payroll-page .payroll-stats {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+}
+
+@media (max-width: 700px) {
+  .hms-payroll-page .payroll-topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hms-payroll-page .payroll-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .hms-payroll-page .payroll-date-btn,
+  .hms-payroll-page .payroll-select,
+  .hms-payroll-page .payroll-search-wrap {
+    width: 100%;
+  }
+}
+
+
+/* ============================================================
+   PAYROLL-P2-R1-RESPONSIVE-REDESIGN
+   Desktop + Mobile + Payslip Modal
+============================================================ */
+
+.hms-payroll-page,
+.hms-payroll-page *,
+.hms-payroll-modal-portal,
+.hms-payroll-modal-portal * {
+  box-sizing: border-box;
+}
+
+.hms-payroll-page {
+  width: 100%;
+  min-width: 0;
+  --pr-navy: #142653;
+  --pr-border: #dfe6f1;
+  --pr-text: #182746;
+  --pr-muted: #6b7a92;
+}
+
+/* Toolbar */
+
+.hms-payroll-page .payroll-topbar {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1.5fr;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  padding: 18px;
+  margin: 0 0 20px;
+  background: #fff;
+  border: 1px solid var(--pr-border);
+  border-radius: 16px;
+  box-shadow: 0 3px 12px rgba(16,29,75,.04);
+}
+
+.hms-payroll-page .payroll-toolbar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  padding-bottom: 13px;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.hms-payroll-page .payroll-toolbar-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hms-payroll-page .payroll-toolbar-heading strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--pr-navy);
+}
+
+.hms-payroll-page .payroll-toolbar-heading span {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--pr-muted);
+}
+
+.hms-payroll-page .payroll-toolbar-period {
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: #f0f4fb;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.hms-payroll-page .payroll-topbar > div[style] {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap;
+  gap: 7px !important;
+  min-width: 0;
+}
+
+.hms-payroll-page .payroll-date-btn,
+.hms-payroll-page .payroll-select,
+.hms-payroll-page .payroll-search-input {
+  min-height: 43px;
+  border: 1px solid var(--pr-border);
+  border-radius: 9px;
+  background-color: #fff;
+  color: var(--pr-text);
+  font-size: 12px;
+}
+
+.hms-payroll-page .payroll-date-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 10px;
+  font-weight: 750;
+  background: #f4f7fc;
+  cursor: default;
+}
+
+.hms-payroll-page .payroll-topbar .pg-btn {
+  flex-shrink: 0;
+  width: 39px;
+  height: 43px;
+  border-radius: 9px;
+}
+
+.hms-payroll-page .payroll-select {
+  width: 100%;
+  min-width: 0;
+  padding-left: 12px;
+}
+
+.hms-payroll-page .payroll-search-wrap {
+  width: 100%;
+  min-width: 0;
+  height: 43px;
+}
+
+.hms-payroll-page .payroll-search-input {
+  width: 100%;
+  height: 43px;
+  padding-left: 38px;
+}
+
+.hms-payroll-page .btn-export-payroll,
+.hms-payroll-page .btn-process-payroll {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 43px;
+  padding: 0 16px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.hms-payroll-page .btn-export-payroll {
+  grid-column: 3;
+  background: #fff;
+  border: 1px solid var(--pr-border);
+  color: var(--pr-navy);
+}
+
+.hms-payroll-page .btn-process-payroll {
+  grid-column: 4;
+  background: var(--pr-navy);
+  color: #fff;
+}
+
+.hms-payroll-page .payroll-topbar button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* Five KPI cards */
+
+.hms-payroll-page .payroll-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 13px;
+  width: 100%;
+  margin-bottom: 22px;
+}
+
+.hms-payroll-page .payroll-stat-card {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 105px;
+  gap: 12px;
+  padding: 15px;
+  background: #fff;
+  border: 1px solid var(--pr-border);
+  border-radius: 15px;
+  box-shadow: 0 3px 10px rgba(16,29,75,.035);
+}
+
+.hms-payroll-page .payroll-stat-card > div:last-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.hms-payroll-page .payroll-stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+}
+
+.hms-payroll-page .payroll-stat-label {
+  color: var(--pr-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.hms-payroll-page .payroll-stat-value {
+  margin-top: 5px;
+  color: var(--pr-text);
+  font-size: clamp(16px, 1.3vw, 22px);
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.hms-payroll-page .payroll-stat-sub {
+  margin-top: 5px;
+  color: #718099;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Register header */
+
+.hms-payroll-page .payroll-register-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.hms-payroll-page .payroll-register-eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: #667790;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+
+.hms-payroll-page .payroll-register-heading h2 {
+  margin: 0;
+  color: var(--pr-navy);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.hms-payroll-page .payroll-register-heading p {
+  margin: 6px 0 0;
+  color: var(--pr-muted);
+  font-size: 11px;
+}
+
+.hms-payroll-page .payroll-record-count {
+  padding: 9px 12px;
+  border: 1px solid var(--pr-border);
+  border-radius: 9px;
+  background: #f1f4fa;
+  color: var(--pr-navy);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+/* Salary table */
+
+.hms-payroll-page .payroll-card {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--pr-border);
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 3px 12px rgba(16,29,75,.04);
+}
+
+.hms-payroll-page .payroll-table-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.hms-payroll-page .payroll-table {
+  width: 100%;
+  min-width: 1090px;
+  border-collapse: collapse;
+}
+
+.hms-payroll-page .payroll-table th {
+  padding: 15px 13px;
+  background: #f5f7fb;
+  color: #62728b;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  border-bottom: 1px solid var(--pr-border);
+}
+
+.hms-payroll-page .payroll-table td {
+  padding: 15px 13px;
+  font-size: 12px;
+  line-height: 1.5;
+  vertical-align: middle;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.hms-payroll-page .payroll-table tbody tr:hover td {
+  background: #f8faff;
+}
+
+.hms-payroll-page .emp-avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 11px;
+}
+
+.hms-payroll-page .amt-net {
+  color: var(--pr-navy);
+  font-weight: 800;
+}
+
+.hms-payroll-page .payroll-act-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+}
+
+.hms-payroll-page .payroll-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border-top: 1px solid var(--pr-border);
+}
+
+.hms-payroll-page .payroll-pagination .pg-btn {
+  border-radius: 8px;
+}
+
+/* Payslip portal */
+
+.hms-payroll-modal-portal .modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
+  padding: 14px;
+  overflow: hidden;
+  background: rgba(9,19,43,.62);
+}
+
+.hms-payroll-modal-portal .modal-box {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 610px);
+  max-width: 610px;
+  max-height: calc(100vh - 28px);
+  max-height: calc(100dvh - 28px);
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #dfe6f1;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(5,15,40,.25);
+}
+
+.hms-payroll-modal-portal .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 16px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.hms-payroll-modal-portal .modal-header h3 {
+  min-width: 0;
+  margin: 0;
+  color: #142653;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.hms-payroll-modal-portal .modal-header > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.hms-payroll-modal-portal .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.hms-payroll-modal-portal .modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 15px 20px;
+  background: #fff;
+  border-top: 1px solid #e6ebf2;
+}
+
+.hms-payroll-modal-portal .slip-header {
+  gap: 12px;
+  padding: 17px;
+  background: linear-gradient(135deg,#101e45,#253b6a);
+}
+
+.hms-payroll-modal-portal .slip-row {
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.hms-payroll-modal-portal .slip-val {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.hms-payroll-modal-portal .slip-row input[type="number"] {
+  width: 140px !important;
+  max-width: 55%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #dfe6f1;
+  border-radius: 9px;
+}
+
+.hms-payroll-modal-portal .slip-total {
+  gap: 12px;
+  border: 1px solid #d9e4f6;
+  background: #f0f4fc;
+  color: #142653;
+}
+
+.hms-payroll-modal-portal .btn-modal-close {
+  background: #142653;
+}
+
+@media (max-width: 1250px) {
+  .hms-payroll-page .payroll-topbar {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+
+  .hms-payroll-page .btn-export-payroll {
+    grid-column: 1;
+  }
+
+  .hms-payroll-page .btn-process-payroll {
+    grid-column: 2;
+  }
+
+  .hms-payroll-page .payroll-stats {
+    grid-template-columns: repeat(3,minmax(0,1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .hms-payroll-page .payroll-stats {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (max-width: 700px) {
+
+  .hms-payroll-page .payroll-topbar {
+    display: grid;
+    grid-template-columns: minmax(0,1fr);
+    gap: 12px;
+    padding: 14px;
+    height: auto;
+  }
+
+  .hms-payroll-page .payroll-toolbar-heading {
+    grid-column: 1;
+    align-items: flex-start;
+  }
+
+  .hms-payroll-page .payroll-toolbar-heading > div {
+    max-width: 70%;
+  }
+
+  .hms-payroll-page .payroll-toolbar-period {
+    white-space: normal;
+    text-align: right;
+  }
+
+  .hms-payroll-page .payroll-topbar > div[style] {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .hms-payroll-page .payroll-date-btn {
+    flex: 1 1 auto;
+  }
+
+  .hms-payroll-page .payroll-select,
+  .hms-payroll-page .payroll-search-wrap,
+  .hms-payroll-page .payroll-search-input,
+  .hms-payroll-page .btn-export-payroll,
+  .hms-payroll-page .btn-process-payroll {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .hms-payroll-page .btn-export-payroll,
+  .hms-payroll-page .btn-process-payroll {
+    grid-column: 1;
+    min-height: 44px;
+  }
+
+  .hms-payroll-page .payroll-stats {
+    grid-template-columns: minmax(0,1fr);
+    gap: 12px;
+  }
+
+  .hms-payroll-page .payroll-stat-card {
+    min-height: 91px;
+  }
+
+  .hms-payroll-page .payroll-stat-value {
+    font-size: 21px;
+  }
+
+  /* Convert desktop table into mobile salary cards */
+
+  .hms-payroll-page .payroll-card {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .hms-payroll-page .payroll-table-scroll {
+    overflow: visible;
+  }
+
+  .hms-payroll-page .payroll-table,
+  .hms-payroll-page .payroll-table tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .hms-payroll-page .payroll-table thead {
+    display: none;
+  }
+
+  .hms-payroll-page .payroll-table tbody tr {
+    display: block;
+    width: 100%;
+    margin: 0 0 12px;
+    padding: 8px 14px;
+    border: 1px solid var(--pr-border);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 3px 10px rgba(16,29,75,.035);
+  }
+
+  .hms-payroll-page .payroll-table tbody td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    padding: 11px 0;
+    border-bottom: 1px solid #edf1f6;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .hms-payroll-page .payroll-table tbody td:last-child {
+    border-bottom: 0;
+  }
+
+  .hms-payroll-page .payroll-table tbody td::before {
+    flex: 0 0 100px;
+    text-align: left;
+    color: #697991;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(1)::before {
+    content: "Payroll ID";
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(2)::before {
+    content: "Employee";
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(3)::before {
+    content: "Department";
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(4)::before {
+    content: "Basic Salary";
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(5)::before {
+    content: "Allowances";
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(6)::before {
+    content: "Deductions";
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(7)::before {
+    content: "Net Pay";
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(8)::before {
+    content: "Period";
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(9)::before {
+    content: "Status";
+  }
+
+  .hms-payroll-page .payroll-table td:nth-child(10)::before {
+    content: "Actions";
+  }
+
+  .hms-payroll-page .payroll-table tbody td:nth-child(7) {
+    margin: 4px 0;
+    padding: 12px 9px;
+    border-radius: 9px;
+    background: #f0f4fb;
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .hms-payroll-page .payroll-table tbody td[colspan] {
+    display: block;
+    padding: 24px 10px !important;
+    text-align: center;
+  }
+
+  .hms-payroll-page .payroll-table tbody td[colspan]::before {
+    display: none;
+  }
+
+  .hms-payroll-page .emp-cell,
+  .hms-payroll-page .payroll-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .hms-payroll-page .payroll-pagination {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin-top: 3px;
+    gap: 10px;
+    border: 1px solid var(--pr-border);
+    border-radius: 13px;
+    background: #fff;
+  }
+
+  .hms-payroll-page .payroll-pagination .pagination-info {
+    text-align: center;
+  }
+
+  .hms-payroll-page .payroll-pagination .pagination-btns {
+    justify-content: center;
+  }
+
+  .hms-payroll-modal-portal .modal-overlay {
+    padding: 12px;
+  }
+
+  .hms-payroll-modal-portal .modal-box {
+    max-height: calc(100dvh - 24px);
+    border-radius: 14px;
+  }
+
+  .hms-payroll-modal-portal .modal-header,
+  .hms-payroll-modal-portal .modal-footer {
+    padding: 14px 15px;
+  }
+
+  .hms-payroll-modal-portal .modal-body {
+    padding: 16px;
+  }
+
+  .hms-payroll-modal-portal .modal-footer button {
+    flex: 1 1 110px;
+    min-height: 42px;
+  }
+
+  .hms-payroll-modal-portal .slip-header {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 390px) {
+  .hms-payroll-page .payroll-table tbody td::before {
+    flex-basis: 91px;
+  }
+
+  .hms-payroll-modal-portal .modal-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hms-payroll-modal-portal .modal-header > div {
+    justify-content: space-between;
+  }
+}
+
+
+/* ============================================================
+   PAYROLL-P2-R2-MOBILE-LAYOUT-FIX
+   Payroll-only responsive correction
+============================================================ */
+
+@media screen and (max-width: 700px) {
+
+  /* Remove excessive height from Payroll page heading. */
+
+  .hms-payroll-page > .hms-page-header.hms-payroll-page__header {
+    display: block !important;
+
+    position: relative !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+
+    margin: 0 0 16px !important;
+    padding: 0 !important;
+
+    grid-template-columns: none !important;
+    grid-template-rows: none !important;
+
+    align-items: initial !important;
+    align-content: initial !important;
+
+    overflow: visible !important;
+  }
+
+  .hms-payroll-page
+  .hms-page-header__content {
+    display: block !important;
+
+    position: static !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    transform: none !important;
+    align-self: auto !important;
+
+    overflow: visible !important;
+  }
+
+  .hms-payroll-page
+  .hms-page-header__eyebrow {
+    margin: 0 0 5px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    line-height: 1.4 !important;
+  }
+
+  .hms-payroll-page
+  .hms-page-header__title {
+    margin: 0 0 5px !important;
+
+    height: auto !important;
+    min-height: 0 !important;
+
+    line-height: 1.3 !important;
+  }
+
+  .hms-payroll-page
+  .hms-page-header__description {
+    display: block !important;
+
+    height: auto !important;
+    min-height: 0 !important;
+
+    max-width: 100% !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    line-height: 1.5 !important;
+  }
+
+  /* Compact Payroll controls panel. */
+
+  .hms-payroll-page .payroll-topbar {
+    display: grid !important;
+
+    grid-template-columns: minmax(0, 1fr) !important;
+
+    align-items: stretch !important;
+    align-content: start !important;
+
+    width: 100% !important;
+
+    height: auto !important;
+    min-height: 0 !important;
+
+    gap: 12px !important;
+    margin-top: 0 !important;
+
+    padding: 14px !important;
+  }
+
+  .hms-payroll-page .payroll-toolbar-heading {
+    grid-column: 1 / -1 !important;
+
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  /*
+   Existing JSX:
+   Previous | October 2026 | Next
+
+   Previous mobile CSS used flex-wrap together with
+   width:100% on the month label, causing vertical stacking.
+   CSS Grid keeps these controls in one row.
+  */
+
+  .hms-payroll-page
+  .payroll-topbar > div[style] {
+    display: grid !important;
+
+    grid-template-columns:
+      40px minmax(0, 1fr) 40px !important;
+
+    grid-template-rows: auto !important;
+
+    align-items: center !important;
+    justify-content: stretch !important;
+
+    gap: 8px !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    height: auto !important;
+    min-height: 0 !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .hms-payroll-page
+  .payroll-topbar > div[style] > .pg-btn {
+    display: flex !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+
+    height: 44px !important;
+    min-height: 44px !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .hms-payroll-page
+  .payroll-topbar > div[style] > .payroll-date-btn {
+    display: inline-flex !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+
+    height: 44px !important;
+    min-height: 44px !important;
+
+    margin: 0 !important;
+
+    padding: 0 8px !important;
+
+    font-size: 12px !important;
+    font-weight: 750 !important;
+
+    text-align: center !important;
+    white-space: nowrap !important;
+
+    flex: none !important;
+  }
+
+  /* Optional Return to current month control */
+
+  .hms-payroll-page
+  .payroll-topbar > div[style] >
+  .payroll-date-btn:nth-child(4) {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  /* Keep subsequent filters and actions full width. */
+
+  .hms-payroll-page .payroll-topbar > .payroll-select,
+  .hms-payroll-page .payroll-topbar > .payroll-search-wrap,
+  .hms-payroll-page .payroll-topbar > .btn-export-payroll,
+  .hms-payroll-page .payroll-topbar > .btn-process-payroll {
+    grid-column: 1 / -1 !important;
+
+    width: 100% !important;
+    min-width: 0 !important;
+
+    margin: 0 !important;
+  }
+
+  /* Preserve readable mobile KPI cards. */
+
+  .hms-payroll-page .payroll-stats {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
+    margin-top: 0 !important;
+  }
+}

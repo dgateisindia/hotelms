@@ -7,6 +7,7 @@ const router =
 const {
   getCustomers,
   getCustomer,
+  getCustomerDetails,
   addCustomer,
   updateCustomer,
   deleteCustomer,
@@ -49,6 +50,12 @@ router.get(
 router.post(
   "/",
   addCustomer
+);
+
+
+router.get(
+  "/:id/details",
+  getCustomerDetails
 );
 
 

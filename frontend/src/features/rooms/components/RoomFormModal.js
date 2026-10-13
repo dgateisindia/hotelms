@@ -205,7 +205,8 @@ function RoomFormModal({
                   name="status"
                   value={form.status}
                   onChange={onChange}
-                  disabled={isSaving}
+                  disabled
+                  title="Room status is managed by booking, housekeeping, and maintenance workflows."
                   required
                 >
                   {statusOptions.map(

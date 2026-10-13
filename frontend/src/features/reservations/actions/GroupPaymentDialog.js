@@ -4,6 +4,182 @@ import AppAlert from "../../../shared/components/ui/AppAlert";
 import { formatCurrency } from "../../../shared/utils/money";
 import "./GroupPaymentDialog.css";
 
+/*
+ * Mirrors the backend reservation-group allocation contract:
+ *
+ * 1. booking_id ascending
+ * 2. each booking receives min(remaining, outstanding)
+ * 3. legacy/missing policy allows partial allocation
+ * 4. allow_partial_payment=false requires that booking's
+ *    complete outstanding amount if allocation reaches it
+ *
+ * Backend remains authoritative and transactionally atomic.
+ */
+export function getGroupPartialPaymentPolicyState(
+  bookings,
+  amount
+) {
+
+  const paymentAmount =
+    Number(
+      amount
+    );
+
+
+  if (
+    !Number.isFinite(
+      paymentAmount
+    ) ||
+    paymentAmount <= 0
+  ) {
+
+    return {
+      valid:
+        true,
+
+      blockedBooking:
+        null,
+
+      nextBoundary:
+        null,
+    };
+  }
+
+
+  const orderedBookings =
+    (
+      Array.isArray(
+        bookings
+      )
+        ? [...bookings]
+        : []
+    )
+      .sort(
+        (left, right) =>
+          Number(
+            left?.booking_id || 0
+          ) -
+          Number(
+            right?.booking_id || 0
+          )
+      );
+
+
+  let remaining =
+    Number(
+      paymentAmount.toFixed(2)
+    );
+
+
+  let allocatedBefore =
+    0;
+
+
+  for (
+    const booking
+    of orderedBookings
+  ) {
+
+    if (
+      remaining <= 0.009
+    ) {
+      break;
+    }
+
+
+    const outstanding =
+      Number(
+        Math.max(
+          0,
+          Number(
+            booking
+              ?.outstanding_amount ||
+            0
+          )
+        ).toFixed(2)
+      );
+
+
+    if (
+      outstanding <= 0.009
+    ) {
+      continue;
+    }
+
+
+    const allocation =
+      Number(
+        Math.min(
+          remaining,
+          outstanding
+        ).toFixed(2)
+      );
+
+
+    const allowPartial =
+      booking
+        ?.payment_policy
+        ?.allow_partial_payment !==
+      false;
+
+
+    if (
+      !allowPartial &&
+      allocation +
+        0.009 <
+        outstanding
+    ) {
+
+      return {
+        valid:
+          false,
+
+        blockedBooking:
+          booking,
+
+        nextBoundary:
+          Number(
+            (
+              allocatedBefore +
+              outstanding
+            ).toFixed(2)
+          ),
+      };
+    }
+
+
+    remaining =
+      Number(
+        (
+          remaining -
+          allocation
+        ).toFixed(2)
+      );
+
+
+    allocatedBefore =
+      Number(
+        (
+          allocatedBefore +
+          allocation
+        ).toFixed(2)
+      );
+  }
+
+
+  return {
+    valid:
+      true,
+
+    blockedBooking:
+      null,
+
+    nextBoundary:
+      null,
+  };
+}
+
+
 const PAYMENT_METHODS = [
   ["cash", "Cash"],
   ["card", "Card"],
@@ -17,14 +193,180 @@ const PAYMENT_STATUSES = new Set([
   "no_show",
 ]);
 
+
+/*
+ * Checkout payment authority comes from the immutable
+ * booking payment-policy snapshot.
+ *
+ * Missing / legacy payment policy preserves the historical
+ * HMS rule: full payment is required before check-out.
+ */
+export function canContinueCheckoutAfterGroupPayment(
+  bookings,
+  result
+) {
+
+  if (
+    !Array.isArray(
+      bookings
+    ) ||
+    bookings.length === 0 ||
+    !result
+  ) {
+    return false;
+  }
+
+
+  const allocationByBookingId =
+    new Map(
+      (
+        Array.isArray(
+          result.allocations
+        )
+          ? result.allocations
+          : []
+      ).map(
+        (allocation) => [
+          Number(
+            allocation?.bookingId ||
+            0
+          ),
+
+          Number(
+            allocation?.outstandingAfter ??
+            0
+          ),
+        ]
+      )
+    );
+
+
+  return bookings.every(
+    (booking) => {
+
+      const mayCheckoutWithOutstanding =
+        booking
+          ?.payment_policy
+          ?.full_payment_required_before_checkout ===
+        false;
+
+
+      if (
+        mayCheckoutWithOutstanding
+      ) {
+        return true;
+      }
+
+
+      const bookingId =
+        Number(
+          booking?.booking_id ||
+          0
+        );
+
+
+      const projectedOutstanding =
+        allocationByBookingId.has(
+          bookingId
+        )
+          ? Number(
+              allocationByBookingId.get(
+                bookingId
+              ) ||
+              0
+            )
+          : Number(
+              booking
+                ?.outstanding_amount ||
+              0
+            );
+
+
+      return (
+        projectedOutstanding <=
+        0.009
+      );
+    }
+  );
+}
+
+
 function GroupPaymentDialog({
   group,
+  initialBookingIds = [],
   onClose,
   onChanged,
+  onContinueToCheckout,
 }) {
-  const [mode, setMode] = useState("all");
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [amount, setAmount] = useState("");
+  const checkoutBookingIds =
+    Array.isArray(
+      initialBookingIds
+    )
+      ? initialBookingIds
+          .map((value) =>
+            Number(value)
+          )
+          .filter(
+            (value) =>
+              Number.isSafeInteger(
+                value
+              ) &&
+              value > 0
+          )
+      : [];
+
+  const checkoutFlow =
+    checkoutBookingIds.length > 0;
+
+  const checkoutOutstanding =
+    Number(
+      (
+        Array.isArray(
+          group?.bookings
+        )
+          ? group.bookings
+          : []
+      )
+        .filter((booking) =>
+          checkoutBookingIds.includes(
+            Number(
+              booking?.booking_id ||
+                0
+            )
+          )
+        )
+        .reduce(
+          (total, booking) =>
+            total +
+            Number(
+              booking?.outstanding_amount ||
+                0
+            ),
+          0
+        )
+        .toFixed(2)
+    );
+
+  const [mode, setMode] =
+    useState(
+      checkoutFlow
+        ? "selected"
+        : "all"
+    );
+
+  const [
+    selectedIds,
+    setSelectedIds,
+  ] = useState(
+    checkoutBookingIds
+  );
+
+  const [amount, setAmount] =
+    useState(
+      checkoutOutstanding > 0
+        ? checkoutOutstanding.toFixed(2)
+        : ""
+    );
   const [method, setMethod] = useState("cash");
   const [transactionId, setTransactionId] = useState("");
   const [notes, setNotes] = useState("");
@@ -77,6 +419,7 @@ function GroupPaymentDialog({
 
   useEffect(() => {
     if (
+      !checkoutFlow &&
       hasFinancialReview &&
       mode === "all"
     ) {
@@ -86,6 +429,7 @@ function GroupPaymentDialog({
       setResult(null);
     }
   }, [
+    checkoutFlow,
     hasFinancialReview,
     mode,
   ]);
@@ -99,6 +443,86 @@ function GroupPaymentDialog({
           )
         );
 
+
+  const commonPaymentMethods =
+    selectedBookings.length === 0
+      ? PAYMENT_METHODS
+      : PAYMENT_METHODS.filter(
+          ([value]) =>
+            selectedBookings.every(
+              (booking) => {
+
+                const policyMethods =
+                  booking?.payment_policy
+                    ?.allowed_methods;
+
+
+                if (
+                  !Array.isArray(
+                    policyMethods
+                  )
+                ) {
+                  return true;
+                }
+
+
+                return policyMethods.some(
+                  (methodValue) =>
+                    String(
+                      methodValue || ""
+                    )
+                      .trim()
+                      .toLowerCase() ===
+                    value
+                );
+              }
+            )
+        );
+
+
+  const commonPaymentMethodKey =
+    commonPaymentMethods
+      .map(
+        ([value]) => value
+      )
+      .join("|");
+
+
+  useEffect(() => {
+
+    if (
+      commonPaymentMethods.length ===
+        0
+    ) {
+
+      if (method !== "") {
+        setMethod("");
+        setTransactionId("");
+      }
+
+      return;
+    }
+
+
+    const methodStillAllowed =
+      commonPaymentMethods.some(
+        ([value]) =>
+          value === method
+      );
+
+
+    if (!methodStillAllowed) {
+      setMethod(
+        commonPaymentMethods[0][0]
+      );
+
+      setTransactionId("");
+    }
+  }, [
+    commonPaymentMethodKey,
+    method,
+  ]);
+
   const selectedOutstanding = Number(
     selectedBookings
       .reduce(
@@ -111,6 +535,55 @@ function GroupPaymentDialog({
       )
       .toFixed(2)
   );
+
+
+  const enteredPaymentAmount =
+    Number(
+      amount
+    );
+
+
+  const groupPartialPolicy =
+    getGroupPartialPaymentPolicyState(
+      selectedBookings,
+      enteredPaymentAmount
+    );
+
+
+  const partialPolicyMessage =
+    !groupPartialPolicy.valid &&
+    groupPartialPolicy.blockedBooking
+      ? `${
+          groupPartialPolicy
+            .blockedBooking
+            .booking_code ||
+          "This booking"
+        } does not allow partial payments. The payment must reach ${formatCurrency(
+          groupPartialPolicy
+            .nextBoundary
+        )} to fully clear that room, or use a lower valid amount that ends before it.`
+      : "";
+
+
+  const canContinueToCheckout =
+    Boolean(
+      result
+    ) &&
+    typeof onContinueToCheckout ===
+      "function" &&
+    canContinueCheckoutAfterGroupPayment(
+      selectedBookings,
+      result
+    );
+
+
+  const checkoutOutstandingPermitted =
+    canContinueToCheckout &&
+    Number(
+      result?.outstandingAfter ||
+        0
+    ) >
+      0.009;
 
   if (!group) return null;
 
@@ -170,12 +643,44 @@ function GroupPaymentDialog({
       )}.`;
     }
 
+
+    const allocationPolicy =
+      getGroupPartialPaymentPolicyState(
+        selectedBookings,
+        paymentAmount
+      );
+
+
     if (
-      !PAYMENT_METHODS.some(
+      !allocationPolicy.valid &&
+      allocationPolicy.blockedBooking
+    ) {
+
+      return `${
+        allocationPolicy
+          .blockedBooking
+          .booking_code ||
+        "This booking"
+      } does not allow partial payments. Enter ${formatCurrency(
+        allocationPolicy
+          .nextBoundary
+      )} to fully clear that room, or use a lower valid amount that ends before it.`;
+    }
+
+
+    if (
+      commonPaymentMethods.length ===
+        0
+    ) {
+      return "Selected bookings do not share a common allowed payment method.";
+    }
+
+    if (
+      !commonPaymentMethods.some(
         ([value]) => value === method
       )
     ) {
-      return "Select a valid payment method.";
+      return "Select a payment method allowed for every selected booking.";
     }
 
     if (
@@ -433,6 +938,13 @@ function GroupPaymentDialog({
                     Full Due
                   </button>
                 </div>
+
+
+                {partialPolicyMessage && (
+                  <div className="booking-special-request">
+                    {partialPolicyMessage}
+                  </div>
+                )}
               </div>
 
               <div className="group-payment-field">
@@ -443,7 +955,10 @@ function GroupPaymentDialog({
                 <select
                   id="group-payment-method"
                   value={method}
-                  disabled={submitting}
+                  disabled={
+                    submitting ||
+                    commonPaymentMethods.length === 0
+                  }
                   onChange={(event) => {
                     const nextMethod =
                       event.target.value;
@@ -455,7 +970,13 @@ function GroupPaymentDialog({
                     }
                   }}
                 >
-                  {PAYMENT_METHODS.map(
+                  {commonPaymentMethods.length === 0 && (
+                    <option value="">
+                      No common payment method
+                    </option>
+                  )}
+
+                  {commonPaymentMethods.map(
                     ([value, label]) => (
                       <option
                         key={value}
@@ -468,7 +989,7 @@ function GroupPaymentDialog({
                 </select>
               </div>
 
-              {method !== "cash" && (
+              {method && method !== "cash" && (
                 <div className="group-payment-field">
                   <label htmlFor="group-payment-reference">
                     Transaction ID
@@ -530,6 +1051,15 @@ function GroupPaymentDialog({
                 </strong>
               </div>
 
+              {checkoutOutstandingPermitted && (
+                <div className="booking-special-request">
+                  Check-out may continue with the remaining balance.
+                  The outstanding amount will remain recorded as a
+                  receivable under the booking payment policy.
+                </div>
+              )}
+
+
               {(result.allocations || []).map(
                 (allocation) => (
                   <div
@@ -569,7 +1099,16 @@ function GroupPaymentDialog({
               disabled={
                 submitting ||
                 eligibleBookings.length === 0 ||
-                selectedOutstanding <= 0
+                selectedOutstanding <= 0 ||
+                commonPaymentMethods.length === 0 ||
+                (
+                  Number.isFinite(
+                    enteredPaymentAmount
+                  ) &&
+                  enteredPaymentAmount >
+                    0 &&
+                  !groupPartialPolicy.valid
+                )
               }
               onClick={() =>
                 void submitPayment()
@@ -578,6 +1117,19 @@ function GroupPaymentDialog({
               {submitting
                 ? "Recording..."
                 : "Collect Payment"}
+            </button>
+          )}
+
+          {canContinueToCheckout && (
+            <button
+              type="button"
+              className="booking-btn-primary"
+              disabled={submitting}
+              onClick={
+                onContinueToCheckout
+              }
+            >
+              Continue to Check-Out
             </button>
           )}
         </div>

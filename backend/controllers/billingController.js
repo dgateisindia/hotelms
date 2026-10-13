@@ -749,6 +749,9 @@ exports.getBillingDashboard = async (req, res) => {
 
       WHERE hotel_id = ?
 
+        AND customer_facing = 1
+
+
         AND DATE(generated_at)
             BETWEEN ? AND ?
     `;
@@ -867,6 +870,9 @@ exports.getBillingDashboard = async (req, res) => {
            i.booking_id
 
       WHERE i.hotel_id = ?
+
+        AND i.customer_facing = 1
+
 
         AND DATE(i.generated_at)
             BETWEEN ? AND ?
@@ -1569,7 +1575,8 @@ exports.getRecentPayments = async (req, res) => {
 };
 
 exports.getAllInvoices = async (req, res) => {
-  const hotelId = req.dbUser.hotelId;
+  const hotelId =
+    req.dbUser.hotelId;
 
   try {
     const {
@@ -1609,25 +1616,54 @@ exports.getAllInvoices = async (req, res) => {
       safeLimit;
 
 
+    /*
+     * Customer-facing Billing read model.
+     *
+     * Booking invoice:
+     *   invoices.booking_id
+     *
+     * Consolidated reservation invoice:
+     *   invoices.reservation_group_id
+     *
+     * Both scopes intentionally share one response shape so
+     * the existing Billing frontend does not need a parallel
+     * invoice-list implementation.
+     */
     const conditions = [
       "i.hotel_id = ?",
+      "i.customer_facing = 1",
     ];
+
 
     const params = [
       hotelId,
     ];
 
 
-    if (search) {
-
+    if (
+      search &&
+      search.trim()
+    ) {
       const like =
-        `%${search}%`;
+        `%${search.trim()}%`;
 
       conditions.push(
-        "(i.invoice_number LIKE ? OR c.full_name LIKE ? OR b.booking_id LIKE ?)"
+        `(
+          i.invoice_number LIKE ?
+
+          OR c.full_name LIKE ?
+
+          OR CAST(
+               b.booking_id
+               AS CHAR
+             ) LIKE ?
+
+          OR rg.group_code LIKE ?
+        )`
       );
 
       params.push(
+        like,
         like,
         like,
         like
@@ -1636,96 +1672,135 @@ exports.getAllInvoices = async (req, res) => {
 
 
     /*
-     * invoice_status is a stored snapshot only.
-     * Status filtering, total count, pagination, and returned
-     * rows must use the same successful payment/refund truth.
+     * Net paid is always derived from the real payment ledger.
+     *
+     * Booking invoice:
+     *   only that booking's successful transactions.
+     *
+     * Group invoice:
+     *   successful transactions across every booking belonging
+     *   to the reservation group.
+     *
+     * No payment is duplicated or recreated for the group invoice.
      */
-    if (
-      status &&
-      status !== "All Bills"
-    ) {
+    const netPaidSql = `
+      COALESCE(
+        (
+          SELECT
+            SUM(
+              CASE
 
-      const statusNetPaidSql = `
-        COALESCE(
-          (
-            SELECT
-              SUM(
-                CASE
-                  WHEN
-                    status_payment.transaction_type =
-                    'payment'
+                WHEN
+                  scope_payment.transaction_type =
+                  'payment'
 
-                  THEN
-                    status_payment.amount
+                THEN
+                  scope_payment.amount
 
 
-                  WHEN
-                    status_payment.transaction_type =
-                    'refund'
+                WHEN
+                  scope_payment.transaction_type =
+                  'refund'
 
-                  THEN
-                    -status_payment.amount
-
-
-                  ELSE 0
-                END
-              )
-
-            FROM payments status_payment
-
-            WHERE status_payment.booking_id =
-                  b.booking_id
-
-              AND status_payment.hotel_id =
-                  i.hotel_id
-
-              AND status_payment.payment_status =
-                  'success'
-          ),
-
-          0
-        )
-      `;
+                THEN
+                  -scope_payment.amount
 
 
-      const liveStatusSql = `
-        CASE
-          WHEN
-            GREATEST(
-              0,
-              COALESCE(
-                i.total_amount,
-                0
-              )
-            ) <= 0
-
-          THEN 'paid'
-
-
-          WHEN
-            (${statusNetPaidSql}) >=
-            GREATEST(
-              0,
-              COALESCE(
-                i.total_amount,
-                0
-              )
+                ELSE 0
+              END
             )
 
-          THEN 'paid'
+          FROM payments scope_payment
+
+          INNER JOIN bookings scope_booking
+            ON scope_booking.booking_id =
+               scope_payment.booking_id
+
+           AND scope_booking.hotel_id =
+               scope_payment.hotel_id
+
+          WHERE scope_payment.hotel_id =
+                i.hotel_id
+
+            AND scope_payment.payment_status =
+                'success'
+
+            AND (
+              (
+                i.invoice_scope =
+                'booking'
+
+                AND scope_booking.booking_id =
+                    i.booking_id
+              )
+
+              OR
+
+              (
+                i.invoice_scope =
+                'reservation_group'
+
+                AND scope_booking.reservation_group_id =
+                    i.reservation_group_id
+              )
+            )
+        ),
+
+        0
+      )
+    `;
 
 
-          WHEN
-            (${statusNetPaidSql}) > 0
+    /*
+     * invoice_status is a stored snapshot.
+     *
+     * Billing filtering must continue using live ledger truth,
+     * now for both invoice scopes.
+     */
+    const liveStatusSql = `
+      CASE
 
-          THEN 'partial'
+        WHEN
+          GREATEST(
+            0,
+            COALESCE(
+              i.total_amount,
+              0
+            )
+          ) <= 0
+
+        THEN 'paid'
 
 
-          ELSE 'unpaid'
-        END
-      `;
+        WHEN
+          (${netPaidSql}) >=
+          GREATEST(
+            0,
+            COALESCE(
+              i.total_amount,
+              0
+            )
+          )
+
+        THEN 'paid'
 
 
+        WHEN
+          (${netPaidSql}) > 0
+
+        THEN 'partial'
+
+
+        ELSE 'unpaid'
+      END
+    `;
+
+
+    if (
+      status &&
+      status !==
+      "All Bills"
+    ) {
       conditions.push(
         `(${liveStatusSql}) = ?`
       );
@@ -1740,7 +1815,6 @@ exports.getAllInvoices = async (req, res) => {
       dateFrom &&
       dateTo
     ) {
-
       conditions.push(
         "DATE(i.generated_at) BETWEEN ? AND ?"
       );
@@ -1753,9 +1827,91 @@ exports.getAllInvoices = async (req, res) => {
 
 
     const whereClause =
-      `WHERE ${conditions.join(
-        " AND "
-      )}`;
+      `WHERE ${
+        conditions.join(
+          " AND "
+        )
+      }`;
+
+
+    /*
+     * Reservation-group stay projection.
+     *
+     * This is display metadata only.
+     * Financial truth remains in invoices + payments.
+     */
+    const groupStayJoin = `
+      LEFT JOIN (
+        SELECT
+          gb.hotel_id,
+          gb.reservation_group_id,
+
+          MIN(
+            gb.check_in
+          ) AS check_in,
+
+          MAX(
+            gb.check_out
+          ) AS check_out,
+
+          COUNT(*) AS room_count
+
+        FROM bookings gb
+
+        WHERE gb.reservation_group_id
+              IS NOT NULL
+
+        GROUP BY
+          gb.hotel_id,
+          gb.reservation_group_id
+      ) group_stay
+
+        ON group_stay.hotel_id =
+           i.hotel_id
+
+       AND group_stay.reservation_group_id =
+           i.reservation_group_id
+    `;
+
+
+    const baseJoins = `
+      LEFT JOIN bookings b
+        ON b.booking_id =
+           i.booking_id
+
+       AND b.hotel_id =
+           i.hotel_id
+
+
+      LEFT JOIN reservation_groups rg
+        ON rg.reservation_group_id =
+           i.reservation_group_id
+
+       AND rg.hotel_id =
+           i.hotel_id
+
+
+      INNER JOIN customers c
+        ON c.customer_id =
+           COALESCE(
+             b.customer_id,
+             rg.customer_id
+           )
+
+       AND c.hotel_id =
+           i.hotel_id
+
+
+      LEFT JOIN rooms r
+        ON r.room_id =
+           b.room_id
+
+       AND r.hotel_id =
+           i.hotel_id
+
+
+      ${groupStayJoin}
+    `;
 
 
     const [[{ total }]] =
@@ -1766,16 +1922,7 @@ exports.getAllInvoices = async (req, res) => {
 
           FROM invoices i
 
-          INNER JOIN bookings b
-            ON i.booking_id =
-               b.booking_id
-
-           AND b.hotel_id =
-               i.hotel_id
-
-          INNER JOIN customers c
-            ON b.customer_id =
-               c.customer_id
+          ${baseJoins}
 
           ${whereClause}
         `,
@@ -1789,114 +1936,136 @@ exports.getAllInvoices = async (req, res) => {
           SELECT
             i.invoice_id,
             i.invoice_number,
+            i.invoice_scope,
+            i.booking_id,
+            i.reservation_group_id,
 
-            b.booking_id,
+            rg.group_code,
 
-            DATE_FORMAT(
-              b.check_in,
-              '%Y-%m-%d'
-            ) AS check_in,
+            CASE
+              WHEN
+                i.invoice_scope =
+                'reservation_group'
 
-            DATE_FORMAT(
-              b.check_out,
-              '%Y-%m-%d'
-            ) AS check_out,
+              THEN
+                DATE_FORMAT(
+                  group_stay.check_in,
+                  '%Y-%m-%d'
+                )
+
+              ELSE
+                DATE_FORMAT(
+                  b.check_in,
+                  '%Y-%m-%d'
+                )
+            END AS check_in,
+
+
+            CASE
+              WHEN
+                i.invoice_scope =
+                'reservation_group'
+
+              THEN
+                DATE_FORMAT(
+                  group_stay.check_out,
+                  '%Y-%m-%d'
+                )
+
+              ELSE
+                DATE_FORMAT(
+                  b.check_out,
+                  '%Y-%m-%d'
+                )
+            END AS check_out,
+
 
             c.full_name,
 
-            r.room_number,
+
+            CASE
+              WHEN
+                i.invoice_scope =
+                'reservation_group'
+
+              THEN
+                CONCAT(
+                  COALESCE(
+                    group_stay.room_count,
+                    0
+                  ),
+                  ' rooms'
+                )
+
+              ELSE
+                r.room_number
+            END AS room_number,
+
 
             i.total_amount,
 
-            COALESCE(
-              (
-                SELECT
-                  SUM(
-                    CASE
+            (${netPaidSql}) AS net_paid,
 
-                      WHEN
-                        p.transaction_type =
-                        'payment'
-
-                      THEN p.amount
-
-
-                      WHEN
-                        p.transaction_type =
-                        'refund'
-
-                      THEN -p.amount
-
-
-                      ELSE 0
-
-                    END
-                  )
-
-                FROM payments p
-
-                WHERE p.booking_id =
-                      b.booking_id
-
-                  AND p.hotel_id =
-                      i.hotel_id
-
-                  AND p.payment_status =
-                      'success'
-              ),
-
-              0
-            ) AS net_paid,
 
             (
               SELECT
-                p2.payment_method
+                scope_payment_method.payment_method
 
-              FROM payments p2
+              FROM payments scope_payment_method
 
-              WHERE p2.booking_id =
-                    b.booking_id
+              INNER JOIN bookings method_booking
+                ON method_booking.booking_id =
+                   scope_payment_method.booking_id
 
-                AND p2.hotel_id =
+               AND method_booking.hotel_id =
+                   scope_payment_method.hotel_id
+
+              WHERE scope_payment_method.hotel_id =
                     i.hotel_id
 
-                AND p2.payment_status =
+                AND scope_payment_method.payment_status =
                     'success'
 
-                AND p2.transaction_type =
+                AND scope_payment_method.transaction_type =
                     'payment'
 
+                AND (
+                  (
+                    i.invoice_scope =
+                    'booking'
+
+                    AND method_booking.booking_id =
+                        i.booking_id
+                  )
+
+                  OR
+
+                  (
+                    i.invoice_scope =
+                    'reservation_group'
+
+                    AND method_booking.reservation_group_id =
+                        i.reservation_group_id
+                  )
+                )
+
               ORDER BY
-                p2.payment_date DESC,
-                p2.payment_id DESC
+                scope_payment_method.payment_date DESC,
+                scope_payment_method.payment_id DESC
 
               LIMIT 1
             ) AS payment_method
 
+
           FROM invoices i
 
-          INNER JOIN bookings b
-            ON i.booking_id =
-               b.booking_id
-
-           AND b.hotel_id =
-               i.hotel_id
-
-          INNER JOIN customers c
-            ON b.customer_id =
-               c.customer_id
-
-          INNER JOIN rooms r
-            ON b.room_id =
-               r.room_id
-
-           AND r.hotel_id =
-               b.hotel_id
+          ${baseJoins}
 
           ${whereClause}
 
           ORDER BY
-            i.generated_at DESC
+            i.generated_at DESC,
+            i.invoice_id DESC
 
           LIMIT ? OFFSET ?
         `,
@@ -1929,7 +2098,7 @@ exports.getAllInvoices = async (req, res) => {
             );
 
 
-          const applied =
+          const paid =
             Math.min(
               Math.max(
                 0,
@@ -1943,7 +2112,7 @@ exports.getAllInvoices = async (req, res) => {
             Math.max(
               0,
               amount -
-              applied
+              paid
             );
 
 
@@ -1957,11 +2126,11 @@ exports.getAllInvoices = async (req, res) => {
 
           const liveStatus =
             amount <= 0 ||
-            applied >= amount
-              ? "paid"
-              : applied > 0
-                ? "partial"
-                : "unpaid";
+            netPaid >= amount
+              ? "Paid"
+              : netPaid > 0
+                ? "Partial"
+                : "Unpaid";
 
 
           return {
@@ -1971,8 +2140,26 @@ exports.getAllInvoices = async (req, res) => {
             id:
               row.invoice_number,
 
+            invoiceScope:
+              row.invoice_scope,
+
             bookingId:
-              row.booking_id,
+              row.booking_id
+                ? Number(
+                    row.booking_id
+                  )
+                : null,
+
+            reservationGroupId:
+              row.reservation_group_id
+                ? Number(
+                    row.reservation_group_id
+                  )
+                : null,
+
+            groupCode:
+              row.group_code ||
+              null,
 
             guest:
               row.full_name,
@@ -1988,8 +2175,7 @@ exports.getAllInvoices = async (req, res) => {
 
             amount,
 
-            paid:
-              applied,
+            paid,
 
             due,
 
@@ -1998,13 +2184,7 @@ exports.getAllInvoices = async (req, res) => {
             refundDue,
 
             status:
-              liveStatus ===
-              "paid"
-                ? "Paid"
-                : liveStatus ===
-                  "partial"
-                  ? "Partial"
-                  : "Unpaid",
+              liveStatus,
 
             method:
               row.payment_method ||
@@ -2016,20 +2196,26 @@ exports.getAllInvoices = async (req, res) => {
 
     return res.json({
       invoices,
-      total,
+      total:
+        Number(
+          total ||
+          0
+        ),
 
       totalPages:
         Math.max(
           1,
           Math.ceil(
-            total /
+            Number(
+              total ||
+              0
+            ) /
             safeLimit
           )
         ),
     });
 
   } catch (err) {
-
     console.error(
       "getAllInvoices error:",
       err
@@ -2043,9 +2229,9 @@ exports.getAllInvoices = async (req, res) => {
       });
   }
 };
-
 exports.getInvoiceById = async (req, res) => {
-  const hotelId = req.dbUser.hotelId;
+  const hotelId =
+    req.dbUser.hotelId;
 
   try {
     const {
@@ -2053,30 +2239,100 @@ exports.getInvoiceById = async (req, res) => {
     } = req.params;
 
 
+    /*
+     * One canonical invoice-detail reader for both:
+     *
+     * 1. booking invoices
+     * 2. consolidated reservation-group invoices
+     *
+     * Payment truth remains in the existing booking payment
+     * ledger. A group invoice never creates a second payment.
+     */
     const [[invoice]] =
       await db.query(
         `
           SELECT
             i.invoice_id,
             i.invoice_number,
+            i.invoice_scope,
+            i.customer_facing,
 
-            b.booking_id,
+            i.booking_id,
+            i.reservation_group_id,
 
-            DATE_FORMAT(
-              b.check_in,
-              '%Y-%m-%d'
-            ) AS check_in,
-
-            DATE_FORMAT(
-              b.check_out,
-              '%Y-%m-%d'
-            ) AS check_out,
+            rg.group_code,
 
             c.full_name,
             c.phone,
             c.email,
 
-            r.room_number,
+
+            CASE
+              WHEN
+                i.invoice_scope =
+                'reservation_group'
+
+              THEN
+                DATE_FORMAT(
+                  group_stay.check_in,
+                  '%Y-%m-%d'
+                )
+
+              ELSE
+                DATE_FORMAT(
+                  b.check_in,
+                  '%Y-%m-%d'
+                )
+            END AS check_in,
+
+
+            CASE
+              WHEN
+                i.invoice_scope =
+                'reservation_group'
+
+              THEN
+                DATE_FORMAT(
+                  group_stay.check_out,
+                  '%Y-%m-%d'
+                )
+
+              ELSE
+                DATE_FORMAT(
+                  b.check_out,
+                  '%Y-%m-%d'
+                )
+            END AS check_out,
+
+
+            CASE
+              WHEN
+                i.invoice_scope =
+                'reservation_group'
+
+              THEN
+                CONCAT(
+                  COALESCE(
+                    group_stay.room_count,
+                    0
+                  ),
+                  ' rooms'
+                )
+
+              ELSE
+                r.room_number
+            END AS room_number,
+
+
+            COALESCE(
+              group_stay.room_count,
+              CASE
+                WHEN b.booking_id IS NULL
+                THEN 0
+                ELSE 1
+              END
+            ) AS room_count,
+
 
             i.room_charges,
             i.food_charges,
@@ -2084,6 +2340,8 @@ exports.getInvoiceById = async (req, res) => {
             i.extra_service_charges,
             i.tax_amount,
             i.total_amount,
+            i.invoice_status,
+
 
             COALESCE(
               (
@@ -2092,58 +2350,134 @@ exports.getInvoiceById = async (req, res) => {
                     CASE
 
                       WHEN
-                        p.transaction_type =
+                        scope_payment.transaction_type =
                         'payment'
 
-                      THEN p.amount
+                      THEN
+                        scope_payment.amount
 
 
                       WHEN
-                        p.transaction_type =
+                        scope_payment.transaction_type =
                         'refund'
 
-                      THEN -p.amount
+                      THEN
+                        -scope_payment.amount
 
 
                       ELSE 0
-
                     END
                   )
 
-                FROM payments p
+                FROM payments scope_payment
 
-                WHERE p.booking_id =
-                      b.booking_id
+                INNER JOIN bookings scope_booking
+                  ON scope_booking.booking_id =
+                     scope_payment.booking_id
 
-                  AND p.hotel_id =
+                 AND scope_booking.hotel_id =
+                     scope_payment.hotel_id
+
+                WHERE scope_payment.hotel_id =
                       i.hotel_id
 
-                  AND p.payment_status =
+                  AND scope_payment.payment_status =
                       'success'
+
+                  AND (
+                    (
+                      i.invoice_scope =
+                      'booking'
+
+                      AND scope_booking.booking_id =
+                          i.booking_id
+                    )
+
+                    OR
+
+                    (
+                      i.invoice_scope =
+                      'reservation_group'
+
+                      AND scope_booking.reservation_group_id =
+                          i.reservation_group_id
+                    )
+                  )
               ),
 
               0
             ) AS net_paid
 
+
           FROM invoices i
 
-          INNER JOIN bookings b
-            ON i.booking_id =
-               b.booking_id
+
+          LEFT JOIN bookings b
+            ON b.booking_id =
+               i.booking_id
 
            AND b.hotel_id =
                i.hotel_id
 
-          INNER JOIN customers c
-            ON b.customer_id =
-               c.customer_id
 
-          INNER JOIN rooms r
-            ON b.room_id =
-               r.room_id
+          LEFT JOIN reservation_groups rg
+            ON rg.reservation_group_id =
+               i.reservation_group_id
+
+           AND rg.hotel_id =
+               i.hotel_id
+
+
+          INNER JOIN customers c
+            ON c.customer_id =
+               COALESCE(
+                 b.customer_id,
+                 rg.customer_id
+               )
+
+           AND c.hotel_id =
+               i.hotel_id
+
+
+          LEFT JOIN rooms r
+            ON r.room_id =
+               b.room_id
 
            AND r.hotel_id =
-               b.hotel_id
+               i.hotel_id
+
+
+          LEFT JOIN (
+            SELECT
+              gb.hotel_id,
+              gb.reservation_group_id,
+
+              MIN(
+                gb.check_in
+              ) AS check_in,
+
+              MAX(
+                gb.check_out
+              ) AS check_out,
+
+              COUNT(*) AS room_count
+
+            FROM bookings gb
+
+            WHERE gb.reservation_group_id
+                  IS NOT NULL
+
+            GROUP BY
+              gb.hotel_id,
+              gb.reservation_group_id
+          ) group_stay
+
+            ON group_stay.hotel_id =
+               i.hotel_id
+
+           AND group_stay.reservation_group_id =
+               i.reservation_group_id
+
 
           WHERE i.invoice_id = ?
             AND i.hotel_id = ?
@@ -2156,7 +2490,6 @@ exports.getInvoiceById = async (req, res) => {
 
 
     if (!invoice) {
-
       return res
         .status(404)
         .json({
@@ -2166,6 +2499,22 @@ exports.getInvoiceById = async (req, res) => {
     }
 
 
+    const invoiceScope =
+      invoice.invoice_scope ===
+      "reservation_group"
+        ? "reservation_group"
+        : "booking";
+
+
+    /*
+     * Immutability must follow the invoice scope.
+     *
+     * Booking invoice:
+     *   one booking
+     *
+     * Group invoice:
+     *   every booking belonging to that reservation group
+     */
     const [[immutability]] =
       await db.query(
         `
@@ -2177,32 +2526,92 @@ exports.getInvoiceById = async (req, res) => {
 
               FROM payments p
 
+              INNER JOIN bookings pb
+                ON pb.booking_id =
+                   p.booking_id
+
+               AND pb.hotel_id =
+                   p.hotel_id
+
               WHERE p.hotel_id = ?
-                AND p.booking_id = ?
+
                 AND p.payment_status =
                     'success'
+
+                AND (
+                  (
+                    ? =
+                    'booking'
+
+                    AND pb.booking_id = ?
+                  )
+
+                  OR
+
+                  (
+                    ? =
+                    'reservation_group'
+
+                    AND pb.reservation_group_id = ?
+                  )
+                )
             ) AS successful_transactions,
+
 
             (
               SELECT
                 COUNT(*)
 
-              FROM
-                booking_financial_settlements
-                bfs
+              FROM booking_financial_settlements bfs
+
+              INNER JOIN bookings sb
+                ON sb.booking_id =
+                   bfs.booking_id
+
+               AND sb.hotel_id =
+                   bfs.hotel_id
 
               WHERE bfs.hotel_id = ?
-                AND bfs.booking_id = ?
+
                 AND bfs.settlement_status =
                     'finalized'
+
+                AND (
+                  (
+                    ? =
+                    'booking'
+
+                    AND sb.booking_id = ?
+                  )
+
+                  OR
+
+                  (
+                    ? =
+                    'reservation_group'
+
+                    AND sb.reservation_group_id = ?
+                  )
+                )
             ) AS finalized_settlements
         `,
         [
           hotelId,
+
+          invoiceScope,
           invoice.booking_id,
 
+          invoiceScope,
+          invoice.reservation_group_id,
+
+
           hotelId,
+
+          invoiceScope,
           invoice.booking_id,
+
+          invoiceScope,
+          invoice.reservation_group_id,
         ]
       );
 
@@ -2210,7 +2619,7 @@ exports.getInvoiceById = async (req, res) => {
     const successfulTransactions =
       Number(
         immutability
-          .successful_transactions ||
+          ?.successful_transactions ||
         0
       );
 
@@ -2218,52 +2627,92 @@ exports.getInvoiceById = async (req, res) => {
     const finalizedSettlements =
       Number(
         immutability
-          .finalized_settlements ||
+          ?.finalized_settlements ||
         0
       );
 
 
     const isLocked =
+      invoiceScope ===
+        "reservation_group" ||
       successfulTransactions > 0 ||
       finalizedSettlements > 0;
 
 
     const lockReason =
-      finalizedSettlements > 0
-        ? "finalized_settlement"
-        : successfulTransactions > 0
-          ? "financial_activity"
-          : null;
+      invoiceScope ===
+        "reservation_group"
+        ? "reservation_group_invoice"
+        : finalizedSettlements > 0
+          ? "finalized_settlement"
+          : successfulTransactions > 0
+            ? "financial_activity"
+            : null;
 
+
+    /*
+     * Latest successful payment method for display.
+     *
+     * Group scope searches the child booking allocations.
+     */
     const [[payment]] =
       await db.query(
         `
           SELECT
-            payment_method,
-            payment_status,
-            payment_date,
-            transaction_id
+            p.payment_method,
+            p.payment_status,
+            p.payment_date,
+            p.transaction_id
 
-          FROM payments
+          FROM payments p
 
-          WHERE booking_id = ?
-            AND hotel_id = ?
+          INNER JOIN bookings pb
+            ON pb.booking_id =
+               p.booking_id
 
-            AND payment_status =
+           AND pb.hotel_id =
+               p.hotel_id
+
+          WHERE p.hotel_id = ?
+
+            AND p.payment_status =
                 'success'
 
-            AND transaction_type =
+            AND p.transaction_type =
                 'payment'
 
+            AND (
+              (
+                ? =
+                'booking'
+
+                AND pb.booking_id = ?
+              )
+
+              OR
+
+              (
+                ? =
+                'reservation_group'
+
+                AND pb.reservation_group_id = ?
+              )
+            )
+
           ORDER BY
-            payment_date DESC,
-            payment_id DESC
+            p.payment_date DESC,
+            p.payment_id DESC
 
           LIMIT 1
         `,
         [
-          invoice.booking_id,
           hotelId,
+
+          invoiceScope,
+          invoice.booking_id,
+
+          invoiceScope,
+          invoice.reservation_group_id,
         ]
       );
 
@@ -2313,13 +2762,17 @@ exports.getInvoiceById = async (req, res) => {
 
     const liveStatus =
       total <= 0 ||
-      applied >= total
+      netPaid >= total
         ? "paid"
-        : applied > 0
+        : netPaid > 0
           ? "partial"
           : "unpaid";
 
 
+    /*
+     * invoice_items is already the canonical line-item model
+     * for both invoice scopes.
+     */
     const [itemRows] =
       await db.query(
         `
@@ -2377,7 +2830,17 @@ exports.getInvoiceById = async (req, res) => {
               row.quantity
             ),
 
+          quantity:
+            Number(
+              row.quantity
+            ),
+
           rate:
+            Number(
+              row.unit_rate
+            ),
+
+          unitRate:
             Number(
               row.unit_rate
             ),
@@ -2387,29 +2850,53 @@ exports.getInvoiceById = async (req, res) => {
               row.line_amount
             ),
 
+          lineAmount:
+            Number(
+              row.line_amount
+            ),
+
           sourceType:
             row.source_type,
 
           sourceId:
-            row.source_id === null
-              ? null
-              : Number(
-                  row.source_id
-                ),
+            row.source_id,
         })
       );
 
 
     return res.json({
       items,
+
       invoice_id:
         invoice.invoice_id,
 
       id:
         invoice.invoice_number,
 
+      invoiceScope,
+
+      customerFacing:
+        Boolean(
+          invoice.customer_facing
+        ),
+
       bookingId:
-        invoice.booking_id,
+        invoice.booking_id
+          ? Number(
+              invoice.booking_id
+            )
+          : null,
+
+      reservationGroupId:
+        invoice.reservation_group_id
+          ? Number(
+              invoice.reservation_group_id
+            )
+          : null,
+
+      groupCode:
+        invoice.group_code ||
+        null,
 
       guest:
         invoice.full_name,
@@ -2422,6 +2909,12 @@ exports.getInvoiceById = async (req, res) => {
 
       room:
         invoice.room_number,
+
+      roomCount:
+        Number(
+          invoice.room_count ||
+          0
+        ),
 
       checkIn:
         invoice.check_in,
@@ -2470,16 +2963,19 @@ exports.getInvoiceById = async (req, res) => {
 
       refundDue,
 
-      isLocked,
+      status:
+        liveStatus,
 
-      lockReason,
+      storedStatus:
+        invoice.invoice_status,
 
       successfulTransactions,
 
       finalizedSettlements,
 
-      status:
-        liveStatus,
+      isLocked,
+
+      lockReason,
 
       paymentMethod:
         payment?.payment_method ||
@@ -2491,7 +2987,7 @@ exports.getInvoiceById = async (req, res) => {
 
       transactionId:
         payment?.transaction_id ||
-        "-",
+        null,
 
       paymentDate:
         payment?.payment_date ||
@@ -2499,7 +2995,6 @@ exports.getInvoiceById = async (req, res) => {
     });
 
   } catch (err) {
-
     console.error(
       "getInvoiceById error:",
       err
@@ -2513,7 +3008,6 @@ exports.getInvoiceById = async (req, res) => {
       });
   }
 };
-
 exports.createInvoice = async (req, res) => {
   const hotelId = req.dbUser.hotelId;
   const connection = await db.getConnection();
@@ -2863,14 +3357,21 @@ exports.updateInvoice = async (req, res) => {
     } = req.body;
 
     const [[existing]] = await connection.query(
-      `SELECT i.booking_id,b.booking_status,
+      `SELECT
+              i.booking_id,
+              i.reservation_group_id,
+              i.invoice_scope,
+              i.customer_facing,
+              b.booking_status,
               (SELECT bfs.final_payable_amount
                FROM booking_financial_settlements bfs
                WHERE bfs.hotel_id=b.hotel_id AND bfs.booking_id=b.booking_id
                  AND bfs.settlement_status='finalized'
                ORDER BY bfs.settlement_id DESC LIMIT 1) AS final_payable_amount
        FROM invoices i
-       JOIN bookings b ON b.booking_id=i.booking_id AND b.hotel_id=i.hotel_id
+       LEFT JOIN bookings b
+         ON b.booking_id=i.booking_id
+        AND b.hotel_id=i.hotel_id
        WHERE i.invoice_id=? AND i.hotel_id=?
        FOR UPDATE`,
       [id, hotelId]
@@ -2879,6 +3380,32 @@ exports.updateInvoice = async (req, res) => {
     if (!existing) {
       await connection.rollback();
       return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    /*
+     * Consolidated reservation-group invoices are generated
+     * from canonical child booking invoices and payment ledgers.
+     *
+     * They are customer-facing immutable financial documents.
+     * Any correction must happen through the underlying booking
+     * settlement/payment workflow, never by manually rewriting
+     * the consolidated invoice.
+     */
+    if (
+      existing.invoice_scope ===
+      "reservation_group"
+    ) {
+      await connection.rollback();
+
+      return res
+        .status(409)
+        .json({
+          code:
+            "GROUP_INVOICE_IMMUTABLE",
+
+          message:
+            "Consolidated reservation-group invoices cannot be edited manually.",
+        });
     }
     /*
      * Invoice immutability:

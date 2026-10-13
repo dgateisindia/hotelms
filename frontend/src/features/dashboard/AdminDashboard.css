@@ -1320,3 +1320,104 @@
     transform: none;
   }
 }
+
+/* ============================================================
+   FINAL ADMIN DASHBOARD UI V2
+============================================================ */
+
+.admin-dashboard-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.admin-dashboard-page__header {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+
+  align-items: start;
+
+  gap: var(--space-4);
+
+  margin-bottom: var(--space-5);
+}
+
+.admin-dashboard-page__title {
+  margin: 0;
+
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 800;
+
+  color: var(--color-text);
+}
+
+.admin-dashboard-page__subtitle {
+  margin-top: 5px;
+
+  color: var(--color-text-muted);
+}
+
+.admin-dashboard-page__date-control {
+  padding: var(--space-2) var(--space-3);
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+
+  background: var(--color-surface);
+
+  box-shadow: var(--shadow-xs);
+}
+
+.admin-dashboard-page__kpis {
+  gap: var(--space-3);
+
+  margin-bottom: var(--space-5);
+}
+
+.admin-dashboard-page__kpi {
+  min-width: 0;
+
+  border-color: var(--color-border);
+  border-radius: var(--radius-lg);
+
+  background: var(--color-surface);
+
+  box-shadow: var(--shadow-xs);
+}
+
+.admin-dashboard-page__grid {
+  gap: var(--space-4);
+}
+
+.admin-dashboard-page__panel {
+  border-color: var(--color-border);
+  border-radius: var(--radius-lg);
+
+  background: var(--color-surface);
+
+  box-shadow: var(--shadow-xs);
+}
+
+.admin-dashboard-page__panel-title {
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
+.admin-dashboard-page__panel-subtitle {
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 760px) {
+
+  .admin-dashboard-page__header {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-dashboard-page__date-control {
+    width: 100%;
+  }
+}

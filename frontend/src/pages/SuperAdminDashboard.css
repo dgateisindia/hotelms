@@ -57,7 +57,7 @@
 
   color: var(--color-text-muted);
 
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   line-height: var(--line-height-normal);
 }
 
@@ -619,5 +619,166 @@
 
   .sa-create-hotel-button {
     width: 100%;
+  }
+}
+
+/* ============================================================
+   FINAL SUPER ADMIN DASHBOARD UI V2
+============================================================ */
+
+.sa-dashboard {
+  width: 100%;
+  min-width: 0;
+}
+
+.sa-dashboard-intro {
+  display: flex;
+
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: var(--space-4);
+
+  margin-bottom: var(--space-5);
+}
+
+.sa-dashboard-intro h2 {
+  margin: 0;
+
+  color: var(--color-text);
+
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 800;
+
+  letter-spacing: -0.02em;
+}
+
+.sa-dashboard-intro p {
+  margin-top: 5px;
+
+  color: var(--color-text-muted);
+
+  line-height: 1.5;
+}
+
+.sa-stats-grid {
+  gap: var(--space-3);
+
+  margin-bottom: var(--space-5);
+}
+
+.sa-card {
+  border-color: var(--color-border);
+  border-radius: var(--radius-lg);
+
+  background: var(--color-surface);
+
+  box-shadow: var(--shadow-xs);
+}
+
+.sa-charts-grid {
+  gap: var(--space-4);
+}
+
+.sa-section-header h3,
+.sa-card h3 {
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
+.sa-section-header p {
+  color: var(--color-text-muted);
+}
+
+.sa-create-hotel-button {
+  min-height: 40px;
+
+  border-radius: var(--radius-lg);
+}
+
+@media (max-width: 760px) {
+
+  .sa-dashboard-intro {
+    flex-direction: column;
+  }
+
+  .sa-dashboard-intro--with-action
+  .sa-create-hotel-button {
+    width: 100%;
+  }
+}
+
+
+/* ============================================================
+   SUPER-ADMIN-SA3A-R1 — PORTFOLIO MOBILE HEADER FIX
+============================================================ */
+
+@media screen and (max-width: 760px) {
+
+  .sa-dashboard
+  .sa-dashboard-intro.sa-dashboard-intro--with-action {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    align-content: start !important;
+
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+
+    grid-template-columns: none !important;
+    grid-template-rows: none !important;
+
+    gap: 14px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .sa-dashboard
+  .sa-dashboard-intro--with-action > div:first-child {
+    display: block !important;
+    position: static !important;
+
+    flex: 0 0 auto !important;
+    align-self: stretch !important;
+
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    transform: none !important;
+  }
+
+  .sa-dashboard
+  .sa-dashboard-intro--with-action > div:first-child h2,
+  .sa-dashboard
+  .sa-dashboard-intro--with-action > div:first-child p {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
+
+  .sa-dashboard
+  .sa-dashboard-intro--with-action
+  .sa-create-hotel-button {
+    position: static !important;
+
+    flex: 0 0 auto !important;
+    align-self: stretch !important;
+
+    width: 100% !important;
+    height: 44px !important;
+    min-height: 44px !important;
+
+    margin: 0 !important;
+
+    transform: none !important;
   }
 }

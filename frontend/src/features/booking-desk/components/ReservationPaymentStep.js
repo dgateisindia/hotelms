@@ -6,10 +6,38 @@ import {
 
 import { formatCurrency } from "../../../shared/utils/money";
 
+import {
+  getInitialPaymentPolicyState,
+} from "../validation/bookingValidation";
+
+
+const PAYMENT_METHOD_OPTIONS = [
+  [
+    "cash",
+    "Cash",
+  ],
+
+  [
+    "upi",
+    "UPI",
+  ],
+
+  [
+    "card",
+    "Card",
+  ],
+
+  [
+    "bank_transfer",
+    "Bank Transfer",
+  ],
+];
+
 
 function ReservationPaymentStep({
   booking,
   payment,
+  paymentPolicy,
   isEditMode,
   existingPaymentStatus,
 
@@ -35,6 +63,69 @@ function ReservationPaymentStep({
       paymentNow ??
       0
     );
+
+
+  const paymentPolicyState =
+    getInitialPaymentPolicyState({
+      paymentPolicy,
+      grandTotal,
+    });
+
+
+  const availablePaymentMethods =
+    PAYMENT_METHOD_OPTIONS
+      .filter(
+        ([method]) =>
+          paymentPolicyState
+            .allowedMethods
+            .includes(
+              method
+            )
+      );
+
+
+  const paymentPolicyMessage =
+    !paymentPolicyState
+      .allowPartialPayment &&
+    paymentPolicyState.total >
+      0.009
+
+      ? `Full payment of ${formatCurrency(
+          paymentPolicyState
+            .total
+        )} is required at booking because partial payments are disabled.`
+
+      : paymentPolicyState
+          .advanceMethod ===
+          "fixed_amount" &&
+        paymentPolicyState
+          .automaticAdvanceAmount >
+          0.009
+
+        ? `Minimum advance required at booking: ${formatCurrency(
+            paymentPolicyState
+              .automaticAdvanceAmount
+          )}.`
+
+        : paymentPolicyState
+            .advanceMethod ===
+            "percentage" &&
+          paymentPolicyState
+            .automaticAdvanceAmount >
+            0.009
+
+          ? `Minimum advance required: ${paymentPolicyState.advanceValue}% (${formatCurrency(
+              paymentPolicyState
+                .automaticAdvanceAmount
+            )}).`
+
+          : paymentPolicyState
+              .advanceMethod ===
+              "manual"
+
+            ? "Advance collection is manual. Hotel policy does not calculate an automatic minimum."
+
+            : "No advance payment is required by hotel policy.";
 
 
   return (
@@ -136,11 +227,23 @@ function ReservationPaymentStep({
                 }
               >
 
-                <option value="none">
+                <option
+                  value="none"
+                  disabled={
+                    paymentPolicyState
+                      .requiresPayment
+                  }
+                >
                   No Payment
                 </option>
 
-                <option value="advance">
+                <option
+                  value="advance"
+                  disabled={
+                    !paymentPolicyState
+                      .allowPartialPayment
+                  }
+                >
                   Advance Payment
                 </option>
 
@@ -149,6 +252,43 @@ function ReservationPaymentStep({
                 </option>
 
               </select>
+
+            </div>
+
+
+            <div className="booking-desk-field booking-desk-field--full">
+
+              <div className="booking-desk-note">
+
+                <strong>
+                  Payment Policy:
+                </strong>
+                {" "}
+                {
+                  paymentPolicyMessage
+                }
+
+                <br />
+
+                <span>
+                  {
+                    availablePaymentMethods
+                      .length >
+                    0
+                      ? `Allowed methods: ${availablePaymentMethods
+                          .map(
+                            ([
+                              ,
+                              label,
+                            ]) =>
+                              label
+                          )
+                          .join(", ")}.`
+                      : "No payment methods are currently enabled."
+                  }
+                </span>
+
+              </div>
 
             </div>
 
@@ -165,7 +305,17 @@ function ReservationPaymentStep({
                 <input
                   id="booking-payment-amount"
                   type="number"
-                  min="0"
+                  min={
+                    paymentPolicyState
+                      .requiredAmount >
+                    0
+                      ? paymentPolicyState
+                          .requiredAmount
+                      : 0
+                  }
+                  max={
+                    grandTotal
+                  }
                   step="0.01"
                   value={
                     payment.amount
@@ -201,6 +351,11 @@ function ReservationPaymentStep({
                     value={
                       payment.payment_method
                     }
+                    disabled={
+                      availablePaymentMethods
+                        .length ===
+                      0
+                    }
                     onChange={(
                       event
                     ) =>
@@ -211,21 +366,36 @@ function ReservationPaymentStep({
                     }
                   >
 
-                    <option value="cash">
-                      Cash
-                    </option>
-
-                    <option value="upi">
-                      UPI
-                    </option>
-
-                    <option value="card">
-                      Card
-                    </option>
-
-                    <option value="bank_transfer">
-                      Bank Transfer
-                    </option>
+                    {
+                      availablePaymentMethods
+                        .length ===
+                      0
+                        ? (
+                            <option value="">
+                              No payment methods available
+                            </option>
+                          )
+                        : availablePaymentMethods
+                            .map(
+                              ([
+                                method,
+                                label,
+                              ]) => (
+                                <option
+                                  key={
+                                    method
+                                  }
+                                  value={
+                                    method
+                                  }
+                                >
+                                  {
+                                    label
+                                  }
+                                </option>
+                              )
+                            )
+                    }
 
                   </select>
 

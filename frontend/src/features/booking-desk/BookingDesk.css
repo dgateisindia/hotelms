@@ -2684,3 +2684,2280 @@
     transform: none;
   }
 }
+
+/* ============================================================
+   FINAL BOOKING DESK HEADING CONSISTENCY V2
+============================================================ */
+
+/*
+   DEFAULT BOOKING DESK
+
+   Topbar already shows "Booking Desk".
+   Match the /bookings intro pattern:
+   context label -> description -> action.
+*/
+.booking-desk-header--default
+> div:first-child::before {
+  content: "RESERVATION WORKFLOW";
+
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: var(--color-text-muted);
+
+  font-size: 11px;
+  line-height: 1.3;
+
+  font-weight: 700;
+
+  letter-spacing: 0.06em;
+
+  text-transform: uppercase;
+}
+
+
+.booking-desk-header--default h1 {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  padding: 0;
+  margin: -1px;
+
+  overflow: hidden;
+
+  clip: rect(0, 0, 0, 0);
+
+  white-space: nowrap;
+
+  border: 0;
+}
+
+
+/*
+   Edit Reservation / Add Room are meaningful titles
+   and therefore remain visible.
+*/
+.booking-desk-header:not(.booking-desk-header--default) h1 {
+  margin: 0;
+
+  color: var(--color-text);
+
+  font-size: 22px;
+  line-height: 1.2;
+
+  font-weight: 800;
+
+  letter-spacing: -0.02em;
+}
+
+
+.booking-desk-header p {
+  max-width: 760px;
+
+  margin-top: 5px;
+  margin-bottom: 0;
+
+  color: var(--color-text-muted);
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+
+.booking-desk-header {
+  display: flex;
+
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: var(--space-4);
+
+  margin-bottom: var(--space-5);
+}
+
+
+.booking-desk-header
+> div:first-child {
+  flex: 1 1 auto;
+
+  min-width: 0;
+}
+
+
+.booking-desk-back-link {
+  flex: 0 0 auto;
+
+  min-height: 40px;
+
+  white-space: nowrap;
+}
+
+
+@media (max-width: 760px) {
+
+  .booking-desk-header {
+    flex-direction: column;
+
+    align-items: stretch;
+  }
+
+
+  .booking-desk-back-link {
+    width: 100%;
+  }
+}
+
+
+/* UI-BD1 BOOKING DESK RESPONSIVE REDESIGN */
+
+
+/* ============================================================
+   PAGE FOUNDATION
+============================================================ */
+
+.booking-desk-page {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+
+  /*
+   * AdminWorkspaceLayout already owns the page's horizontal
+   * gutter. Do not apply a second horizontal page inset.
+   */
+  padding:
+    0
+    0
+    var(--page-padding);
+}
+
+
+.booking-desk-page *,
+.booking-desk-page *::before,
+.booking-desk-page *::after {
+  box-sizing: border-box;
+}
+
+
+/* ============================================================
+   PAGE HEADER
+============================================================ */
+
+.booking-desk-header {
+  margin-bottom: 16px;
+}
+
+
+.booking-desk-header h1 {
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+
+.booking-desk-header p {
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   STEPPER
+============================================================ */
+
+.booking-desk-steps {
+  gap: 10px;
+
+  margin-bottom: 16px;
+
+  padding: 14px 16px;
+
+  border-radius: 12px;
+}
+
+
+.booking-desk-step {
+  min-width: 0;
+}
+
+
+.booking-desk-step__label {
+  font-size: 12px;
+}
+
+
+/* ============================================================
+   MAIN WORKFLOW CARD
+============================================================ */
+
+.booking-desk-card {
+  overflow: visible;
+
+  border-radius: 12px;
+}
+
+
+.booking-desk-section {
+  min-height: 0;
+
+  padding: 20px;
+}
+
+
+.booking-desk-section__header {
+  margin-bottom: 18px;
+}
+
+
+.booking-desk-eyebrow {
+  margin-bottom: 4px;
+
+  font-size: 11px;
+}
+
+
+.booking-desk-section__header h2 {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+
+.booking-desk-section__header p {
+  margin-top: 5px;
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   STANDARD CONTROLS
+============================================================ */
+
+.booking-desk-field {
+  gap: 6px;
+}
+
+
+.booking-desk-field label {
+  font-size: 12px;
+}
+
+
+.booking-desk-field input,
+.booking-desk-field select {
+  min-height: 40px;
+}
+
+
+.booking-desk-btn {
+  min-height: 40px;
+}
+
+
+/* ============================================================
+   AVAILABLE ROOM GRID
+============================================================ */
+
+.booking-desk-room-grid {
+  gap: 14px;
+}
+
+
+.booking-desk-room {
+  padding: 16px;
+
+  border-radius: 10px;
+}
+
+
+.booking-desk-room__top > div {
+  gap: 4px;
+}
+
+
+.booking-desk-room__top strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+
+.booking-desk-room__top > div span {
+  font-size: 12px;
+}
+
+
+.booking-desk-room__meta {
+  margin-top: 13px;
+}
+
+
+.booking-desk-room__price {
+  margin:
+    14px
+    0;
+}
+
+
+.booking-desk-room__button {
+  min-height: 40px;
+}
+
+
+/* ============================================================
+   SELECTED ROOMS WRAPPER
+============================================================ */
+
+.booking-desk-selected {
+  margin-top: 20px;
+
+  overflow: hidden;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius: 12px;
+
+  background:
+    var(--color-white);
+}
+
+
+.booking-desk-selected > h3 {
+  display: block;
+
+  margin: 0;
+
+  padding:
+    14px
+    18px;
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text);
+
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+
+/* ============================================================
+   OCCUPANCY ROOM CARD
+============================================================ */
+
+.booking-desk-occupancy-card {
+  min-width: 0;
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+
+  background:
+    var(--color-white);
+}
+
+
+.booking-desk-occupancy-card:last-child {
+  border-bottom: 0;
+}
+
+
+/* ============================================================
+   ROOM CARD HEADER
+============================================================ */
+
+.booking-desk-occupancy-card__header {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto
+    auto;
+
+  align-items: center;
+
+  gap: 16px;
+
+  padding:
+    16px
+    18px;
+
+  background:
+    var(--color-white);
+}
+
+
+.booking-desk-occupancy-card__header > div:first-child {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 4px;
+}
+
+
+.booking-desk-occupancy-card__header > div:first-child > strong {
+  display: block;
+
+  color:
+    var(--color-text);
+
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+
+.booking-desk-occupancy-card__header > div:first-child > span {
+  display: block;
+
+  overflow: hidden;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 12px;
+  line-height: 1.4;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   ROOM SUMMARY
+============================================================ */
+
+.booking-desk-occupancy-card__summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 12px;
+
+  min-width: 0;
+}
+
+
+.booking-desk-occupancy-card__summary > span {
+  display: block;
+
+  padding:
+    5px
+    9px;
+
+  border-radius: 999px;
+
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 11px;
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+
+.booking-desk-occupancy-card__summary > strong {
+  display: block;
+
+  color:
+    var(--color-text);
+
+  font-size: 14px;
+  font-weight: 700;
+
+  white-space: nowrap;
+}
+
+
+.booking-desk-selected__remove {
+  flex: 0 0 auto;
+}
+
+
+/* ============================================================
+   ROOM INTERNAL SECTION
+============================================================ */
+
+.booking-desk-occupancy-primary {
+  min-width: 0;
+
+  padding:
+    16px
+    18px;
+
+  border-top:
+    1px solid
+    var(--color-divider);
+
+  background:
+    var(--color-white);
+}
+
+
+.booking-desk-occupancy-primary > div {
+  min-width: 0;
+}
+
+
+/* ============================================================
+   ROOM STAY / GUEST SECTION HEADINGS
+============================================================ */
+
+.booking-desk-occupancy-guests__heading {
+  display: flex;
+
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  width: 100%;
+}
+
+
+.booking-desk-occupancy-guests__heading > div {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 4px;
+}
+
+
+.booking-desk-occupancy-guests__heading > div > strong {
+  display: block;
+
+  color:
+    var(--color-text);
+
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+
+.booking-desk-occupancy-guests__heading > div > span {
+  display: block;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   ROOM-SPECIFIC FORM GRID
+============================================================ */
+
+.booking-desk-occupant__grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap: 14px;
+
+  margin-top: 14px;
+}
+
+
+/* ============================================================
+   PRIMARY GUEST
+============================================================ */
+
+.booking-desk-occupancy-check {
+  display: inline-flex;
+
+  align-items: flex-start;
+
+  gap: 9px;
+
+  color:
+    var(--color-text);
+
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+
+.booking-desk-occupancy-check input {
+  flex: 0 0 auto;
+
+  margin-top: 2px;
+}
+
+
+.booking-desk-occupancy-primary > div > strong {
+  display: block;
+
+  margin-top: 8px;
+
+  color:
+    var(--color-text);
+
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+
+.booking-desk-occupancy-primary > small {
+  display: block;
+
+  margin-top: 7px;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   ACCOMPANYING GUESTS
+============================================================ */
+
+.booking-desk-occupancy-guests {
+  min-width: 0;
+
+  padding:
+    16px
+    18px;
+
+  border-top:
+    1px solid
+    var(--color-divider);
+
+  background:
+    var(--color-white);
+}
+
+
+.booking-desk-occupancy-guests
+.booking-desk-room-state {
+  margin-top: 14px;
+}
+
+
+/* ============================================================
+   INDIVIDUAL GUEST CARD
+============================================================ */
+
+.booking-desk-occupant {
+  min-width: 0;
+
+  margin-top: 14px;
+
+  padding: 14px;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius: 10px;
+
+  background:
+    var(--color-surface-muted);
+}
+
+
+.booking-desk-occupant__header {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+
+  margin-bottom: 12px;
+}
+
+
+.booking-desk-occupant__header > strong {
+  display: block;
+
+  color:
+    var(--color-text);
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+
+/* ============================================================
+   LEGACY GUEST COUNT
+============================================================ */
+
+.booking-desk-occupancy-legacy {
+  padding:
+    16px
+    18px;
+
+  border-top:
+    1px solid
+    var(--color-divider);
+
+  background:
+    var(--color-white);
+}
+
+
+.booking-desk-occupancy-legacy > p {
+  margin:
+    0
+    0
+    12px;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   ROOM PRICE BREAKDOWN
+============================================================ */
+
+.booking-desk-occupancy-price {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  flex-wrap: wrap;
+
+  gap: 12px;
+
+  padding:
+    14px
+    18px;
+
+  border-top:
+    1px solid
+    var(--color-divider);
+
+  background:
+    var(--color-surface-muted);
+}
+
+
+.booking-desk-occupancy-price > div {
+  min-width: 0;
+}
+
+
+.booking-desk-occupancy-price span {
+  display: block;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+
+.booking-desk-occupancy-price strong {
+  display: block;
+
+  margin-top: 3px;
+
+  color:
+    var(--color-text);
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+
+.booking-desk-occupancy-price__total {
+  margin-left: auto;
+
+  text-align: right;
+}
+
+
+.booking-desk-occupancy-price__total strong {
+  color:
+    var(--color-primary);
+
+  font-size: 15px;
+}
+
+
+/* ============================================================
+   EMPTY / ERROR STATES INSIDE ROOM
+============================================================ */
+
+.booking-desk-occupancy-card
+.booking-desk-room-state {
+  margin:
+    14px
+    18px;
+
+  min-height: 90px;
+}
+
+
+/* ============================================================
+   WORKFLOW FOOTER
+============================================================ */
+
+.booking-desk-footer {
+  padding:
+    14px
+    20px;
+
+  background:
+    var(--color-white);
+}
+
+
+.booking-desk-footer__right {
+  gap: 8px;
+}
+
+
+/* ============================================================
+   TABLET
+============================================================ */
+
+@media (max-width: 1100px) {
+
+  .booking-desk-room-grid {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+
+
+  .booking-desk-occupancy-card__header {
+    grid-template-columns:
+      minmax(0, 1fr)
+      auto;
+  }
+
+
+  .booking-desk-occupancy-card__summary {
+    grid-column:
+      1 / -1;
+
+    justify-content:
+      flex-start;
+  }
+
+
+  .booking-desk-occupancy-card__header
+  > .booking-desk-selected__remove {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+
+/* ============================================================
+   MOBILE
+============================================================ */
+
+@media (max-width: 768px) {
+
+  .booking-desk-page {
+    padding-bottom: 20px;
+  }
+
+
+  .booking-desk-header {
+    align-items: stretch;
+
+    flex-direction: column;
+
+    gap: 12px;
+  }
+
+
+  .booking-desk-back-link {
+    width: 100%;
+  }
+
+
+  .booking-desk-steps {
+    grid-template-columns:
+      1fr;
+
+    gap: 4px;
+
+    padding: 10px;
+  }
+
+
+  .booking-desk-step {
+    min-height: 38px;
+
+    padding:
+      4px
+      6px;
+  }
+
+
+  .booking-desk-step:not(:last-child)::after {
+    display: none;
+  }
+
+
+  .booking-desk-section {
+    padding: 14px;
+  }
+
+
+  .booking-desk-section__header {
+    align-items: stretch;
+
+    flex-direction: column;
+
+    gap: 10px;
+
+    margin-bottom: 14px;
+  }
+
+
+  .booking-desk-form-grid,
+  .booking-desk-stay-grid,
+  .booking-desk-room-grid,
+  .booking-desk-review-grid,
+  .booking-desk-price-summary {
+    grid-template-columns:
+      1fr;
+  }
+
+
+  .booking-desk-room {
+    padding: 14px;
+  }
+
+
+  .booking-desk-selected {
+    margin-top: 16px;
+  }
+
+
+  .booking-desk-selected > h3 {
+    padding:
+      13px
+      14px;
+
+    font-size: 14px;
+  }
+
+
+  .booking-desk-occupancy-card__header {
+    grid-template-columns:
+      minmax(0, 1fr)
+      auto;
+
+    gap: 10px;
+
+    padding:
+      14px;
+  }
+
+
+  .booking-desk-occupancy-card__header
+  > div:first-child
+  > span {
+    white-space: normal;
+  }
+
+
+  .booking-desk-occupancy-card__summary {
+    grid-column:
+      1 / -1;
+
+    width: 100%;
+
+    display: grid;
+
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+
+    gap: 7px;
+
+    padding-top: 10px;
+
+    border-top:
+      1px solid
+      var(--color-divider);
+  }
+
+
+  .booking-desk-occupancy-card__summary
+  > span {
+    white-space: normal;
+
+    text-align: center;
+  }
+
+
+  .booking-desk-occupancy-card__summary
+  > strong {
+    grid-column:
+      1 / -1;
+
+    text-align: left;
+  }
+
+
+  .booking-desk-occupancy-primary,
+  .booking-desk-occupancy-guests,
+  .booking-desk-occupancy-legacy {
+    padding:
+      14px;
+  }
+
+
+  .booking-desk-occupancy-guests__heading {
+    align-items: stretch;
+
+    flex-direction: column;
+
+    gap: 10px;
+  }
+
+
+  .booking-desk-occupancy-guests__heading
+  .booking-desk-btn {
+    width: 100%;
+  }
+
+
+  .booking-desk-occupant__grid {
+    grid-template-columns:
+      1fr;
+
+    gap: 11px;
+  }
+
+
+  .booking-desk-occupant {
+    padding: 12px;
+  }
+
+
+  .booking-desk-selected__guests {
+    grid-template-columns:
+      1fr
+      72px
+      auto;
+
+    width: 100%;
+  }
+
+
+  .booking-desk-occupancy-price {
+    align-items: stretch;
+
+    flex-direction: column;
+
+    padding:
+      13px
+      14px;
+  }
+
+
+  .booking-desk-occupancy-price__total {
+    width: 100%;
+
+    margin-left: 0;
+
+    padding-top: 10px;
+
+    border-top:
+      1px solid
+      var(--color-divider);
+
+    text-align: left;
+  }
+
+
+  .booking-desk-footer {
+    align-items: stretch;
+
+    flex-direction: column;
+
+    padding: 12px;
+  }
+
+
+  .booking-desk-footer > div,
+  .booking-desk-footer__right {
+    width: 100%;
+  }
+
+
+  .booking-desk-footer__right {
+    align-items: stretch;
+
+    flex-direction: column-reverse;
+
+    gap: 8px;
+  }
+
+
+  .booking-desk-footer
+  .booking-desk-btn {
+    width: 100%;
+  }
+
+
+  .booking-desk-review-card > div,
+  .booking-desk-review-room {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 5px;
+  }
+
+
+  .booking-desk-review-card strong,
+  .booking-desk-review-room > div:last-child {
+    max-width: 100%;
+
+    text-align: left;
+  }
+}
+
+
+/* ============================================================
+   SMALL MOBILE
+============================================================ */
+
+@media (max-width: 420px) {
+
+  .booking-desk-occupancy-card__summary {
+    grid-template-columns:
+      1fr;
+  }
+
+
+  .booking-desk-occupancy-card__summary
+  > strong {
+    grid-column:
+      auto;
+  }
+
+
+  .booking-desk-selected__guests {
+    grid-template-columns:
+      1fr;
+  }
+
+
+  .booking-desk-selected__guests input {
+    width: 100%;
+  }
+}
+
+
+/* UI-BD1-R1 EXTRA BED ROW FIX */
+
+.booking-desk-extra-bed {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+
+  gap:
+    8px
+    14px;
+
+  margin-top: 12px;
+
+  padding-top: 12px;
+
+  border-top:
+    1px solid
+    var(--color-divider);
+}
+
+
+.booking-desk-extra-bed
+.booking-desk-occupancy-check {
+  flex: 0 0 auto;
+
+  margin: 0;
+}
+
+
+.booking-desk-extra-bed > small {
+  flex:
+    1
+    1
+    240px;
+
+  display: block;
+
+  margin: 0;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 11px;
+
+  line-height: 1.5;
+}
+
+
+.booking-desk-extra-bed
+.booking-desk-occupancy-check
+span {
+  margin: 0;
+
+  color:
+    var(--color-text);
+
+  font-size: 12px;
+
+  font-weight: 600;
+}
+
+
+@media (max-width: 640px) {
+
+  .booking-desk-extra-bed {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 7px;
+  }
+
+
+  .booking-desk-extra-bed > small {
+    width: 100%;
+
+    flex:
+      0
+      0
+      auto;
+  }
+
+
+  .booking-desk-extra-bed
+  .booking-desk-occupancy-check {
+    width: 100%;
+  }
+}
+
+
+/* UI-BD2 GUEST PAYMENT REVIEW REDESIGN */
+
+
+/* ============================================================
+   GUEST / RESERVATION CONTACT
+============================================================ */
+
+.booking-desk-customer-found {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  margin-bottom: 18px;
+  padding: 14px 16px;
+
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+
+  background: #f0fdf4;
+}
+
+
+.booking-desk-customer-found > svg {
+  flex: 0 0 auto;
+}
+
+
+.booking-desk-customer-found > div:first-of-type {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+
+.booking-desk-customer-found strong {
+  display: block;
+
+  color: #166534;
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+
+.booking-desk-customer-found span {
+  display: block;
+
+  margin-top: 3px;
+
+  overflow-wrap: anywhere;
+
+  color: #475569;
+
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+
+.booking-desk-customer-found > div:last-child {
+  display: flex;
+  flex: 0 0 auto;
+
+  gap: 8px;
+}
+
+
+/* ============================================================
+   FORM GRID
+============================================================ */
+
+.booking-desk-form-grid {
+  align-items: start;
+
+  gap:
+    16px
+    18px;
+}
+
+
+.booking-desk-field--full {
+  grid-column: 1 / -1;
+}
+
+
+.booking-desk-field textarea {
+  width: 100%;
+  min-width: 0;
+
+  min-height: 96px;
+
+  padding: 11px 12px;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius: 8px;
+
+  resize: vertical;
+
+  background: #ffffff;
+
+  color:
+    var(--color-text);
+
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+
+.booking-desk-field textarea:focus {
+  outline: none;
+
+  border-color:
+    var(--color-primary);
+
+  box-shadow:
+    0 0 0 3px
+    rgba(15, 35, 91, 0.08);
+}
+
+
+/* ============================================================
+   PAYMENT SUMMARY
+============================================================ */
+
+.booking-desk-price-summary {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      4,
+      minmax(0, 1fr)
+    );
+
+  gap: 10px;
+
+  margin-top: 20px;
+
+  padding: 14px;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius: 10px;
+
+  background:
+    var(--color-surface-muted);
+}
+
+
+.booking-desk-price-summary > div {
+  min-width: 0;
+
+  padding: 11px 12px;
+
+  border:
+    1px solid
+    var(--color-divider);
+
+  border-radius: 8px;
+
+  background: #ffffff;
+}
+
+
+.booking-desk-price-summary span {
+  display: block;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+
+.booking-desk-price-summary strong {
+  display: block;
+
+  margin-top: 5px;
+
+  overflow-wrap: anywhere;
+
+  color:
+    var(--color-text);
+
+  font-size: 15px;
+  font-weight: 700;
+}
+
+
+.booking-desk-price-summary__total {
+  border-color: #c7d7ff !important;
+
+  background: #f8faff !important;
+}
+
+
+.booking-desk-price-summary__total strong {
+  color:
+    var(--color-primary);
+}
+
+
+/* ============================================================
+   REVIEW GRID
+============================================================ */
+
+.booking-desk-review-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap: 14px;
+}
+
+
+.booking-desk-review-card {
+  min-width: 0;
+
+  overflow: hidden;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius: 10px;
+
+  background: #ffffff;
+}
+
+
+.booking-desk-review-card h3 {
+  margin: 0;
+
+  padding:
+    13px
+    15px;
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text);
+
+  font-size: 15px;
+  font-weight: 700;
+}
+
+
+.booking-desk-review-card > div {
+  display: grid;
+
+  grid-template-columns:
+    minmax(100px, 0.75fr)
+    minmax(0, 1.25fr);
+
+  align-items: center;
+
+  gap: 14px;
+
+  min-height: 48px;
+
+  padding:
+    10px
+    15px;
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+}
+
+
+.booking-desk-review-card > div:last-child {
+  border-bottom: 0;
+}
+
+
+.booking-desk-review-card span {
+  color:
+    var(--color-text-muted);
+
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+
+.booking-desk-review-card strong {
+  min-width: 0;
+
+  overflow-wrap: anywhere;
+
+  text-align: right;
+
+  color:
+    var(--color-text);
+
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+
+/* ============================================================
+   REVIEW ROOM DETAILS
+============================================================ */
+
+.booking-desk-review-rooms {
+  margin-top: 16px;
+
+  overflow: hidden;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius: 10px;
+
+  background: #ffffff;
+}
+
+
+.booking-desk-review-rooms > h3 {
+  margin: 0;
+
+  padding:
+    13px
+    15px;
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text);
+
+  font-size: 15px;
+  font-weight: 700;
+}
+
+
+.booking-desk-review-room {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 18px;
+
+  padding:
+    13px
+    15px;
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+}
+
+
+.booking-desk-review-room > div {
+  min-width: 0;
+}
+
+
+.booking-desk-review-room > div:last-child {
+  text-align: right;
+}
+
+
+.booking-desk-review-room strong {
+  display: block;
+
+  overflow-wrap: anywhere;
+
+  color:
+    var(--color-text);
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+
+.booking-desk-review-room span {
+  display: block;
+
+  margin-top: 3px;
+
+  overflow-wrap: anywhere;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+
+.booking-desk-review-total {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  padding:
+    14px
+    15px;
+
+  background:
+    #f8faff;
+}
+
+
+.booking-desk-review-total span {
+  color:
+    var(--color-text-muted);
+
+  font-size: 12px;
+  font-weight: 600;
+}
+
+
+.booking-desk-review-total strong {
+  color:
+    var(--color-primary);
+
+  font-size: 17px;
+  font-weight: 700;
+}
+
+
+/* ============================================================
+   REVIEW SPECIAL REQUEST / NOTICE
+============================================================ */
+
+.booking-desk-review-request {
+  margin-top: 16px;
+
+  padding: 15px;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius: 10px;
+
+  background: #ffffff;
+}
+
+
+.booking-desk-review-request h3 {
+  margin: 0;
+
+  color:
+    var(--color-text);
+
+  font-size: 15px;
+}
+
+
+.booking-desk-review-request p {
+  margin:
+    7px
+    0
+    0;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+
+.booking-desk-review-note {
+  margin-top: 14px;
+
+  padding:
+    11px
+    13px;
+
+  border:
+    1px solid
+    #dbe4f2;
+
+  border-radius: 8px;
+
+  background:
+    #f8fafc;
+
+  color:
+    var(--color-text-muted);
+
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   TABLET
+============================================================ */
+
+@media (max-width: 1000px) {
+
+  .booking-desk-price-summary {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+}
+
+
+/* ============================================================
+   MOBILE
+============================================================ */
+
+@media (max-width: 768px) {
+
+  .booking-desk-customer-found {
+    align-items: flex-start;
+
+    flex-direction: column;
+  }
+
+
+  .booking-desk-customer-found > div:last-child {
+    width: 100%;
+
+    flex-direction: column;
+  }
+
+
+  .booking-desk-customer-found
+  .booking-desk-btn {
+    width: 100%;
+  }
+
+
+  .booking-desk-form-grid {
+    grid-template-columns:
+      1fr;
+
+    gap: 12px;
+  }
+
+
+  .booking-desk-field--full {
+    grid-column: auto;
+  }
+
+
+  .booking-desk-price-summary {
+    grid-template-columns:
+      1fr;
+  }
+
+
+  .booking-desk-review-grid {
+    grid-template-columns:
+      1fr;
+  }
+
+
+  .booking-desk-review-card > div {
+    grid-template-columns:
+      1fr;
+
+    gap: 4px;
+
+    padding:
+      11px
+      13px;
+  }
+
+
+  .booking-desk-review-card strong {
+    text-align: left;
+  }
+
+
+  .booking-desk-review-room {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 8px;
+  }
+
+
+  .booking-desk-review-room > div:last-child {
+    width: 100%;
+
+    text-align: left;
+  }
+
+
+  .booking-desk-review-total {
+    align-items: flex-start;
+
+    flex-direction: column;
+
+    gap: 5px;
+  }
+}
+
+
+/* ============================================================
+   SMALL MOBILE
+============================================================ */
+
+@media (max-width: 420px) {
+
+  .booking-desk-price-summary {
+    padding: 10px;
+  }
+
+
+  .booking-desk-review-card h3,
+  .booking-desk-review-rooms > h3 {
+    padding:
+      12px
+      13px;
+  }
+}
+
+
+/* UI-BD2-R1 SMALL MOBILE HEADER GAP FIX */
+
+@media (max-width: 640px) {
+
+  /*
+   * The desktop header uses justify-content: space-between.
+   * When the header becomes a vertical flex container on
+   * small mobile screens, that rule can stretch the content
+   * apart if any inherited/minimum height is present.
+   *
+   * Force the mobile header back to natural content height.
+   */
+
+  .booking-desk-page
+  > .booking-desk-header {
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: stretch;
+    justify-content: flex-start;
+
+    width: 100%;
+
+    height: auto;
+    min-height: 0;
+    max-height: none;
+
+    gap: 14px;
+
+    margin-bottom: 16px;
+
+    padding: 0;
+  }
+
+
+  .booking-desk-page
+  > .booking-desk-header
+  > div {
+    width: 100%;
+
+    height: auto;
+    min-height: 0;
+
+    margin: 0;
+    padding: 0;
+  }
+
+
+  .booking-desk-page
+  > .booking-desk-header
+  h1 {
+    margin: 0;
+  }
+
+
+  .booking-desk-page
+  > .booking-desk-header
+  p {
+    margin:
+      5px
+      0
+      0;
+  }
+
+
+  .booking-desk-page
+  > .booking-desk-header
+  .booking-desk-back-link {
+    position: static;
+
+    width: 100%;
+
+    height: 40px;
+    min-height: 40px;
+
+    margin: 0;
+
+    align-self: stretch;
+  }
+
+
+  /*
+   * Stepper must begin immediately after the header.
+   */
+
+  .booking-desk-page
+  > .booking-desk-steps {
+    margin-top: 0;
+  }
+}
+
+
+@media (max-width: 420px) {
+
+  .booking-desk-page
+  > .booking-desk-header {
+    gap: 12px;
+
+    margin-bottom: 14px;
+  }
+
+
+  .booking-desk-page
+  > .booking-desk-header
+  .booking-desk-back-link {
+    min-height: 40px;
+  }
+}
+
+
+/* UI-BD2-R2 MOBILE HEADER HARD RESET */
+
+@media (max-width: 640px) {
+
+  /*
+   * Definitive mobile override.
+   *
+   * The Booking Desk header must size only to its actual
+   * content. Grid is intentionally used here instead of flex
+   * so no inherited flex sizing can create vertical space.
+   */
+
+  .booking-desk-page > .booking-desk-header {
+    display: grid !important;
+
+    grid-template-columns:
+      minmax(0, 1fr) !important;
+
+    grid-template-rows:
+      max-content
+      max-content !important;
+
+    grid-auto-rows:
+      max-content !important;
+
+    align-items:
+      start !important;
+
+    align-content:
+      start !important;
+
+    justify-items:
+      stretch !important;
+
+    justify-content:
+      stretch !important;
+
+    width:
+      100% !important;
+
+    height:
+      auto !important;
+
+    min-height:
+      0 !important;
+
+    max-height:
+      none !important;
+
+    block-size:
+      auto !important;
+
+    min-block-size:
+      0 !important;
+
+    max-block-size:
+      none !important;
+
+    aspect-ratio:
+      auto !important;
+
+    flex:
+      none !important;
+
+    flex-wrap:
+      nowrap !important;
+
+    gap:
+      12px !important;
+
+    margin:
+      0 0 14px !important;
+
+    padding:
+      0 !important;
+  }
+
+
+  /*
+   * Heading / description wrapper must also remain
+   * content-sized.
+   */
+
+  .booking-desk-page
+  > .booking-desk-header
+  > div:first-child {
+    display:
+      block !important;
+
+    width:
+      100% !important;
+
+    height:
+      auto !important;
+
+    min-height:
+      0 !important;
+
+    max-height:
+      none !important;
+
+    block-size:
+      auto !important;
+
+    min-block-size:
+      0 !important;
+
+    max-block-size:
+      none !important;
+
+    flex:
+      none !important;
+
+    align-self:
+      start !important;
+
+    justify-self:
+      stretch !important;
+
+    margin:
+      0 !important;
+
+    padding:
+      0 !important;
+  }
+
+
+  .booking-desk-page
+  > .booking-desk-header
+  h1 {
+    margin:
+      0 !important;
+
+    padding:
+      0 !important;
+  }
+
+
+  .booking-desk-page
+  > .booking-desk-header
+  p {
+    margin:
+      5px 0 0 !important;
+
+    padding:
+      0 !important;
+  }
+
+
+  /*
+   * Back button becomes the second natural grid row.
+   */
+
+  .booking-desk-page
+  > .booking-desk-header
+  > .booking-desk-back-link {
+    position:
+      static !important;
+
+    inset:
+      auto !important;
+
+    display:
+      inline-flex !important;
+
+    width:
+      100% !important;
+
+    height:
+      40px !important;
+
+    min-height:
+      40px !important;
+
+    max-height:
+      40px !important;
+
+    flex:
+      none !important;
+
+    align-self:
+      start !important;
+
+    justify-self:
+      stretch !important;
+
+    margin:
+      0 !important;
+
+    transform:
+      none !important;
+  }
+
+
+  /*
+   * Stepper follows immediately after the header.
+   */
+
+  .booking-desk-page
+  > .booking-desk-steps {
+    position:
+      relative !important;
+
+    width:
+      100% !important;
+
+    height:
+      auto !important;
+
+    min-height:
+      0 !important;
+
+    margin-top:
+      0 !important;
+  }
+}
+
+
+@media (max-width: 420px) {
+
+  .booking-desk-page > .booking-desk-header {
+    gap:
+      10px !important;
+
+    margin-bottom:
+      12px !important;
+  }
+}
+

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from "react-dom";
+import { useSearchParams } from 'react-router-dom';
 import apiClient, { getApiErrorMessage } from '../../shared/api/apiClient';
 import './Billing.css';
 import {
@@ -157,7 +159,7 @@ const RevenueChart = ({data}) => {
   if (!data || data.length === 0) {
     return <div style={{padding:'24px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No collection data yet.</div>;
   }
-  const W=340,H=100,PAD={top:10,right:10,bottom:24,left:40};
+  const W=440,H=178,PAD={top:16,right:18,bottom:32,left:46};
   const iW=W-PAD.left-PAD.right, iH=H-PAD.top-PAD.bottom;
   const chartData=data.map(d=>({
     ...d,
@@ -187,11 +189,11 @@ const RevenueChart = ({data}) => {
   };
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto'}}>
-      <defs><linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity="0.2"/><stop offset="100%" stopColor="#3b82f6" stopOpacity="0.01"/></linearGradient></defs>
+      <defs><linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#0f235b" stopOpacity="0.2"/><stop offset="100%" stopColor="#0f235b" stopOpacity="0.01"/></linearGradient></defs>
       {ticks.map((t,i)=><g key={i}><line x1={PAD.left} y1={y(t)} x2={W-PAD.right} y2={y(t)} stroke="#f1f4f9" strokeWidth="1"/><text x={PAD.left-4} y={y(t)+4} textAnchor="end" fontSize="9" fill="#9ca3af">{formatTick(t)}</text></g>)}
       <path d={area} fill="url(#revGrad)"/>
-      <path d={line} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
-      {chartData.map((d,i)=><circle key={i} cx={x(i)} cy={y(d.val)} r="4" fill="#fff" stroke="#3b82f6" strokeWidth="2.5"/>)}
+      <path d={line} fill="none" stroke="#0f235b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+      {chartData.map((d,i)=><circle key={i} cx={x(i)} cy={y(d.val)} r="4" fill="#fff" stroke="#0f235b" strokeWidth="2.5"/>)}
       {chartData.map((d,i)=><text key={i} x={x(i)} y={H-4} textAnchor="middle" fontSize="10" fill="#9ca3af">{d.month}</text>)}
     </svg>
   );
@@ -214,6 +216,105 @@ const DonutChart = ({segments, size=100, stroke=16, centerLabel, centerSub}) => 
 };
 
 // ── Invoice Modal — shown ONLY on Print button click ──────────
+const getInvoiceReference = (invoice = {}) => {
+
+  const invoiceScope =
+    String(
+      invoice.invoiceScope ||
+      invoice.invoice_scope ||
+      ""
+    ).toLowerCase();
+
+
+  const explicitGroupId =
+    Number(
+      invoice.reservationGroupId ??
+      invoice.reservation_group_id ??
+      0
+    );
+
+
+  const invoiceNumber =
+    String(
+      invoice.id ||
+      invoice.invoiceNumber ||
+      invoice.invoice_number ||
+      ""
+    );
+
+
+  const suffixMatch =
+    invoiceNumber.match(
+      /-RG-(\d+)$/i
+    );
+
+
+  const inferredGroupId =
+    Number.isSafeInteger(
+      explicitGroupId
+    ) &&
+    explicitGroupId > 0
+
+      ? explicitGroupId
+
+      : Number(
+          suffixMatch?.[1] ||
+          0
+        );
+
+
+  const isGroupInvoice =
+    invoiceScope ===
+      "reservation_group" ||
+
+    (
+      Number.isSafeInteger(
+        inferredGroupId
+      ) &&
+      inferredGroupId > 0
+    );
+
+
+  if (isGroupInvoice) {
+
+    const groupCode =
+      invoice.groupCode ||
+      invoice.group_code ||
+      invoice.reservationGroupCode ||
+      invoice.reservation_group_code ||
+
+      (
+        inferredGroupId > 0
+          ? `RG-${1000 + inferredGroupId}`
+          : "—"
+      );
+
+
+    return {
+      label:
+        "Reservation Group",
+
+      value:
+        groupCode,
+    };
+  }
+
+
+  return {
+    label:
+      "Booking ID",
+
+    value:
+      invoice.bookingId ||
+      invoice.booking_id ||
+      "—",
+  };
+};
+
+
+/* G6D GROUP-AWARE INVOICE REFERENCE */
+
+
 const InvoiceModal = ({invoice, onClose}) => {
   const items = invoice.items?.length ? invoice.items : invoiceDetailToItems(invoice);
   const subtotal = items.reduce((s,i)=>s+Number(i.amount||0),0);
@@ -221,6 +322,10 @@ const InvoiceModal = ({invoice, onClose}) => {
   const total = Number(invoice.total ?? (subtotal + tax));
   const discount = Math.max(0, subtotal + tax - total);
   const nights = invoice.nights ?? getInvoiceNights(invoice);
+  const invoiceReference =
+    getInvoiceReference(
+      invoice
+    );
 
   const handlePrint = () => {
     const content = document.getElementById('invoice-print-area').innerHTML;
@@ -254,14 +359,71 @@ const InvoiceModal = ({invoice, onClose}) => {
       .prow{display:flex;justify-content:space-between;font-size:11px;color:#6b7280;padding:2px 0}
       .pval{font-weight:600;color:#1a1f36}
       .thankyou{text-align:right;font-size:14px;color:#c9a227;font-weight:700;font-style:italic;margin-top:14px}
-    </style></head><body>${content}</body></html>`);
+    
+        /* G5E_F2_A4_PRINT */
+
+        @page{
+          size:A4 portrait;
+          margin:10mm;
+        }
+
+        html,
+        body{
+          margin:0 !important;
+          padding:0 !important;
+          background:#ffffff !important;
+        }
+
+        body{
+          width:auto !important;
+          max-width:none !important;
+          min-height:0 !important;
+          font-family:Arial,sans-serif;
+          color:#1a1f36;
+          -webkit-print-color-adjust:exact;
+          print-color-adjust:exact;
+        }
+
+        .invoice-paper-print{
+          width:100%;
+          min-height:277mm;
+          margin:0 auto;
+          padding:0;
+          background:#ffffff;
+          box-sizing:border-box;
+        }
+
+        table{
+          width:100%;
+          border-collapse:collapse;
+        }
+
+        tr{
+          break-inside:avoid;
+          page-break-inside:avoid;
+        }
+
+        .invoice-stay,
+        .invoice-payment-info,
+        .invoice-total-row{
+          break-inside:avoid;
+          page-break-inside:avoid;
+        }
+
+      </style></head><body><main class="invoice-paper-print">${content}</main></body></html>`);
     win.document.close();
     setTimeout(()=>{win.print();win.close();},400);
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-box-lg" style={{maxWidth:660}} onClick={e=>e.stopPropagation()}>
+    <div
+        className="modal-overlay invoice-viewer-overlay"
+        onClick={onClose}
+      >
+        <div
+          className="modal-box modal-box-lg invoice-viewer-modal"
+          onClick={e=>e.stopPropagation()}
+        >
 
         <div className="modal-header">
           <h3>Invoice — {invoice.id}</h3>
@@ -276,7 +438,10 @@ const InvoiceModal = ({invoice, onClose}) => {
           </div>
         </div>
 
-        <div id="invoice-print-area" style={{padding:'24px 28px'}}>
+        
+
+        <div className="invoice-viewer-scroll">
+<div id="invoice-print-area" className="invoice-paper-a4" style={{padding:'24px 28px'}}>
 
           <div className="ih" style={{display:'flex',alignItems:'flex-start',gap:14,marginBottom:14}}>
             <div className="ilogo" style={{width:44,height:44,background:'#c9a227',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,color:'#fff',fontWeight:900,flexShrink:0}}>H</div>
@@ -295,7 +460,7 @@ const InvoiceModal = ({invoice, onClose}) => {
             <div className="invoice-title">INVOICE</div>
             <div style={{textAlign:'right'}}>
               <div style={{fontSize:12,color:'#6b7280'}}>Invoice No. : <strong style={{color:'#1a1f36'}}>{invoice.id}</strong></div>
-              <div style={{fontSize:12,color:'#6b7280',marginTop:3}}>Booking ID &nbsp;: <strong style={{color:'#1a1f36'}}>{invoice.bookingId}</strong></div>
+              <div style={{fontSize:12,color:'#6b7280',marginTop:3}}>{invoiceReference.label} &nbsp;: <strong style={{color:'#1a1f36'}}>{invoiceReference.value}</strong></div>
               <div style={{fontSize:12,color:'#6b7280',marginTop:3}}>Date &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <strong style={{color:'#1a1f36'}}>{invoice.checkOut}</strong></div>
             </div>
           </div>
@@ -305,7 +470,7 @@ const InvoiceModal = ({invoice, onClose}) => {
               <div className="invoice-bill-label">Bill To.</div>
               <div className="invoice-bill-name">{invoice.guest}</div>
               <div className="invoice-bill-detail">Room No. {invoice.room}</div>
-              <div className="invoice-bill-detail">Booking ID: {invoice.bookingId}</div>
+              <div className="invoice-bill-detail">{invoiceReference.label}: {invoiceReference.value}</div>
             </div>
             <div className="invoice-stay">
               <div className="invoice-stay-title">Stay Details</div>
@@ -355,6 +520,8 @@ const InvoiceModal = ({invoice, onClose}) => {
           </div>
           <div className="invoice-thank">Thank You!</div>
         </div>
+        </div>
+
       </div>
     </div>
   );
@@ -373,7 +540,7 @@ const BillFormModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-box-lg" onClick={e => e.stopPropagation()}>
+      <div className="modal-box modal-box-lg bill-form-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header"><h3>{title}</h3><button className="modal-close" onClick={onClose}>×</button></div>
         <div className="modal-body">
           {formError && <div className="form-error" style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{formError}</div>}
@@ -481,6 +648,16 @@ const BillFormModal = ({
 //  MAIN COMPONENT
 // ════════════════════════════════════════════════════════════
 function Billing() {
+  const [
+    searchParams,
+    setSearchParams,
+  ] = useSearchParams();
+
+  const invoiceParam =
+    searchParams.get(
+      "invoice"
+    );
+
   // Table + pagination (server-driven)
   const [invoices, setInvoices]       = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -498,6 +675,8 @@ function Billing() {
 
   const [search, setSearch]           = useState('');
   const [activeTab, setActiveTab]     = useState('All Bills');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filterDraft, setFilterDraft] = useState(() => ({status:'All Bills',from:firstOfMonthISO(),to:todayISO()}));
   const [page, setPage]               = useState(1);
 
   // Date range — defaults to current month start → today.
@@ -651,9 +830,11 @@ function Billing() {
         setSelected(data);
 
         setTableError(
-          data.lockReason === 'finalized_settlement'
-            ? 'This invoice is locked because its booking has a finalized financial settlement.'
-            : 'This invoice is locked because successful financial activity has already been recorded.'
+          data.lockReason === 'reservation_group_invoice'
+              ? 'This consolidated reservation-group invoice is generated from finalized room-level financial records and cannot be edited manually.'
+              : data.lockReason === 'finalized_settlement'
+                ? 'This invoice is locked because its booking has a finalized financial settlement.'
+                : 'This invoice is locked because successful financial activity has already been recorded.'
         );
 
         return;
@@ -679,15 +860,116 @@ function Billing() {
     setSelected(inv);
     setShowInvoice(true);
     setInvoiceLoading(true);
+
     try {
-      const { data } = await apiClient.get(`/billing/invoices/${inv.invoice_id}`)
+      const { data } =
+        await apiClient.get(
+          `/billing/invoices/${inv.invoice_id}`
+        );
+
       setSelected(data);
     } catch (err) {
-      console.error('Failed to load invoice detail:', err);
+      console.error(
+        "Failed to load invoice detail:",
+        err
+      );
     } finally {
       setInvoiceLoading(false);
     }
   };
+
+  const closeInvoice = () => {
+    setShowInvoice(false);
+    setSelected(null);
+
+    if (invoiceParam) {
+      const nextParams =
+        new URLSearchParams(
+          searchParams
+        );
+
+      nextParams.delete(
+        "invoice"
+      );
+
+      setSearchParams(
+        nextParams,
+        {
+          replace: true,
+        }
+      );
+    }
+  };
+
+  useEffect(() => {
+    const invoiceId =
+      Number(
+        invoiceParam
+      );
+
+    if (
+      !Number.isSafeInteger(
+        invoiceId
+      ) ||
+      invoiceId <= 0
+    ) {
+      return undefined;
+    }
+
+    let active =
+      true;
+
+    setSelected(null);
+    setShowInvoice(true);
+    setInvoiceLoading(true);
+
+    apiClient
+      .get(
+        `/billing/invoices/${invoiceId}`
+      )
+      .then((response) => {
+
+        if (!active) {
+          return;
+        }
+
+        setSelected(
+          response.data
+        );
+      })
+      .catch((error) => {
+
+        if (!active) {
+          return;
+        }
+
+        console.error(
+          "Failed to load deep-linked invoice:",
+          error
+        );
+
+        setShowInvoice(false);
+
+        setTableError(
+          getApiErrorMessage(
+            error,
+            "Unable to load invoice."
+          )
+        );
+      })
+      .finally(() => {
+
+        if (active) {
+          setInvoiceLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    invoiceParam,
+  ]);
 
   // ── Validation ──
   const validateForm = (f) => {
@@ -923,14 +1205,14 @@ function Billing() {
   return (
     <>
       {/* Page Header */}
-      <div className="page-header">
-        <div className="page-header-left"><h2>Billing &amp; Invoices</h2><p>Manage bills, payments and invoices</p></div>
-        <div className="page-header-right">
+      <div className="page-header hms-page-header">
+        <div className="page-header-left hms-page-header__content"><h2 className="hms-page-header__title">Billing &amp; Invoices</h2><p className="hms-page-header__description">Manage bills, payments and invoices</p></div>
+        <div className="page-header-right hms-page-header__actions">
 
           {/* Date range badge — clickable, opens a from/to picker */}
           <div style={{ position: 'relative' }}>
             <button
-              className="date-range-badge"
+              className="date-range-badge hms-button hms-button--secondary"
               style={{ cursor: 'pointer', border: 'none' }}
               onClick={openDatePicker}
             >
@@ -981,40 +1263,123 @@ function Billing() {
             )}
           </div>
 
-          <button className="btn-generate" onClick={openAdd}><IcoPlus/>Generate New Bill</button>
+          <button className="btn-generate hms-button hms-button--primary" onClick={openAdd}><IcoPlus/>Generate New Bill</button>
         </div>
       </div>
 
       {/* Stat Cards */}
-      <div className="bill-stats">
-        <div className="bstat-card"><div className="bstat-icon blue"><IcoBill/></div><div className="bstat-info"><div className="bstat-label">Total Bills</div><div className="bstat-value">{loadingWidgets ? '—' : Number(stats.totalBills||0).toLocaleString('en-IN')}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.totalBills)}</div></div></div>
-        <div className="bstat-card"><div className="bstat-icon green"><IcoRevenue/></div><div className="bstat-info"><div className="bstat-label">Billed Amount</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.billedAmount)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.billedAmount)}</div></div></div>
-        <div className="bstat-card"><div className="bstat-icon teal"><IcoPaid/></div><div className="bstat-info"><div className="bstat-label">Net Collections</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.netCollections)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.netCollections)}</div></div></div>
-        <div className="bstat-card"><div className="bstat-icon red"><IcoOutstand/></div><div className="bstat-info"><div className="bstat-label">Outstanding</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.outstanding)}</div><div className="bstat-change neg">{loadingWidgets ? '' : fmtChange(stats.changes?.outstanding)}</div></div></div>
+      <div className="bill-stats hms-stat-grid">
+        <div className="bstat-card hms-stat-card"><div className="bstat-icon blue"><IcoBill/></div><div className="bstat-info"><div className="bstat-label">Total Bills</div><div className="bstat-value">{loadingWidgets ? '—' : Number(stats.totalBills||0).toLocaleString('en-IN')}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.totalBills)}</div></div></div>
+        <div className="bstat-card hms-stat-card"><div className="bstat-icon green"><IcoRevenue/></div><div className="bstat-info"><div className="bstat-label">Billed Amount</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.billedAmount)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.billedAmount)}</div></div></div>
+        <div className="bstat-card hms-stat-card"><div className="bstat-icon teal"><IcoPaid/></div><div className="bstat-info"><div className="bstat-label">Net Collections</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.netCollections)}</div><div className="bstat-change">{loadingWidgets ? '' : fmtChange(stats.changes?.netCollections)}</div></div></div>
+        <div className="bstat-card hms-stat-card"><div className="bstat-icon red"><IcoOutstand/></div><div className="bstat-info"><div className="bstat-label">Outstanding</div><div className="bstat-value" style={{fontSize:17}}>{loadingWidgets ? '—' : fmtCurrency(stats.outstanding)}</div><div className="bstat-change neg">{loadingWidgets ? '' : fmtChange(stats.changes?.outstanding)}</div></div></div>
       </div>
 
       {/* Tabs */}
-      <div className="bill-tabs">
+      <div className="bill-tabs hms-toolbar">
         {TABS.map(tab=>(
           <button key={tab} className={`bill-tab ${activeTab===tab?'active':''}`} onClick={()=>{setActiveTab(tab);setPage(1);}}>{tab}</button>
         ))}
       </div>
 
       {/* Filter */}
-      <div className="filter-bar">
-        <div className="search-wrap">
+      <div className="filter-bar hms-toolbar">
+        <div className="search-wrap hms-toolbar__group hms-toolbar__group--grow hms-billing-search">
           <IcoSearch/>
-          <input className="search-input" placeholder="Search by Invoice No., Guest or Booking ID..." value={search} onChange={e=>{setSearch(e.target.value);setPage(1);}}/>
+          <input className="search-input hms-control" placeholder="Search by Invoice No., Guest or Booking ID..." value={search} onChange={e=>{setSearch(e.target.value);setPage(1);}}/>
         </div>
-        <button className="btn-filter"><IcoFilter/> Filter</button>
+        <button type="button" className="btn-filter hms-button hms-button--secondary" aria-expanded={showAdvancedFilters} onClick={() => { setFilterDraft({status: activeTab, from: dateRange.from, to: dateRange.to}); setShowAdvancedFilters(v => !v); }}><IcoFilter/> Filters</button>
       </div>
 
+      {showAdvancedFilters && (
+        <div className="hms-billing-advanced-filters">
+          <div className="hms-billing-filter-field">
+            <label htmlFor="bill-filter-status">Invoice status</label>
+            <select
+              id="bill-filter-status"
+              className="hms-control"
+              value={filterDraft.status}
+              onChange={e => setFilterDraft(p => ({...p, status:e.target.value}))}
+            >
+              {TABS.map(t => <option value={t} key={t}>{t}</option>)}
+            </select>
+          </div>
+
+          <div className="hms-billing-filter-field">
+            <label htmlFor="bill-filter-from">From</label>
+            <input
+              id="bill-filter-from"
+              className="hms-control"
+              type="date"
+              value={filterDraft.from}
+              max={filterDraft.to || todayISO()}
+              onChange={e => setFilterDraft(p => ({...p, from:e.target.value}))}
+            />
+          </div>
+
+          <div className="hms-billing-filter-field">
+            <label htmlFor="bill-filter-to">To</label>
+            <input
+              id="bill-filter-to"
+              className="hms-control"
+              type="date"
+              value={filterDraft.to}
+              min={filterDraft.from}
+              max={todayISO()}
+              onChange={e => setFilterDraft(p => ({...p, to:e.target.value}))}
+            />
+          </div>
+
+          <div className="hms-billing-filter-actions">
+            <button
+              type="button"
+              className="hms-button hms-button--secondary"
+              onClick={() => {
+                resetToCurrentRange();
+                setActiveTab('All Bills');
+                setSearch('');
+                setPage(1);
+                setShowAdvancedFilters(false);
+              }}
+            >
+              Reset
+            </button>
+
+            <button
+              type="button"
+              className="hms-button hms-button--primary"
+              disabled={
+                !filterDraft.from ||
+                !filterDraft.to ||
+                filterDraft.from > filterDraft.to ||
+                filterDraft.to > todayISO()
+              }
+              onClick={() => {
+                userPickedRangeRef.current = true;
+                setDateRange({
+                  from: filterDraft.from,
+                  to: filterDraft.to
+                });
+                setDraftRange({
+                  from: filterDraft.from,
+                  to: filterDraft.to
+                });
+                setActiveTab(filterDraft.status);
+                setPage(1);
+                setShowAdvancedFilters(false);
+              }}
+            >
+              Apply filters
+            </button>
+          </div>
+        </div>
+      )}
       {/* Invoice Table — full width */}
       <div className="bill-card">
-        <table className="bill-table">
+        <table className="bill-table hms-table hms-billing-table">
           <thead>
             <tr>
-              <th>Invoice No.</th><th>Booking ID</th><th>Guest Name</th>
+              <th>Invoice No.</th><th>Booking / Reservation</th><th>Guest Name</th>
               <th>Check-out Date</th><th>Amount (₹)</th><th>Paid (₹)</th>
               <th>Due (₹)</th><th>Status</th><th>Action</th>
             </tr>
@@ -1029,7 +1394,7 @@ function Billing() {
             ) : invoices.map((inv,idx)=>(
               <tr key={inv.id}>
                 <td style={{fontWeight:700,color:'#1a2a5e'}}>{inv.id}</td>
-                <td style={{color:'#6b7280'}}>{inv.bookingId}</td>
+                <td style={{color:'#6b7280'}}>{getInvoiceReference(inv).value}</td>
                 <td>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <div style={{width:28,height:28,borderRadius:'50%',background:AVATAR_COLORS[idx%AVATAR_COLORS.length],display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#fff',flexShrink:0}}>{initials(inv.guest)}</div>
@@ -1043,16 +1408,18 @@ function Billing() {
                 <td><span className={statusClass(inv.status)}>{inv.status}</span></td>
                 <td>
                   <div className="action-btns">
-                    <button className="btn-icon btn-icon-view"  title="View Details" onClick={()=>openView(inv)}><IcoEye/></button>
-                    <button className="btn-icon btn-icon-edit"  title="Edit"         onClick={()=>openEdit(inv)}><IcoEdit/></button>
-                    <button className="btn-icon btn-icon-print" title="Print / Download Invoice" onClick={()=>openInvoice(inv)}><IcoPrint/></button>
+                    <button className="btn-icon btn-icon-view hms-icon-button"  title="View Details" onClick={()=>openView(inv)}><IcoEye/></button>
+                    {inv.invoiceScope !== 'reservation_group' && (
+                      <button className="btn-icon btn-icon-edit hms-icon-button"  title="Edit"         onClick={()=>openEdit(inv)}><IcoEdit/></button>
+                    )}
+                    <button className="btn-icon btn-icon-print hms-icon-button" title="Print / Download Invoice" onClick={()=>openInvoice(inv)}><IcoPrint/></button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="pagination">
+        <div className="pagination hms-billing-pagination">
           <span className="pagination-info">Showing {totalInvoices===0?0:(page-1)*PER_PAGE+1} to {Math.min(page*PER_PAGE,totalInvoices)} of {totalInvoices} invoices</span>
           <div className="pagination-btns">
             <button className="pg-btn" onClick={()=>setPage(p=>p-1)} disabled={page===1}><IcoChevL/></button>
@@ -1070,9 +1437,9 @@ function Billing() {
       </div>
 
       {/* Bottom 3-col */}
-      <div className="bill-bottom">
-        <div className="revenue-card"><div className="revenue-title">Net Collections Overview</div><RevenueChart data={revenueData}/></div>
-        <div className="payment-methods-card">
+      <div className="bill-bottom hms-billing-grid">
+        <div className="revenue-card hms-panel"><div className="revenue-title">Net Collections Overview</div><RevenueChart data={revenueData}/></div>
+        <div className="payment-methods-card hms-panel">
           <div className="pm-title">Gross Payments by Method</div>
           {paymentMethods.length===0 ? (
             <div style={{padding:'16px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No payment data yet.</div>
@@ -1083,7 +1450,7 @@ function Billing() {
             </div>
           )}
         </div>
-        <div className="recent-pay-card">
+        <div className="recent-pay-card hms-panel">
           <div className="rp-title">Recent Transactions</div>
           {recentPayments.length===0 ? (
             <div style={{padding:'16px 0',textAlign:'center',color:'#9ca3af',fontSize:13}}>No recent payments.</div>
@@ -1135,17 +1502,49 @@ function Billing() {
         />
       )}
 
-      {showInvoice && selected && (
+      {showInvoice && (
         invoiceLoading
-          ? <div className="modal-overlay" onClick={()=>setShowInvoice(false)}><div className="modal-box" onClick={e=>e.stopPropagation()} style={{padding:40,textAlign:'center',color:'#9ca3af'}}>Loading invoice…</div></div>
-          : <InvoiceModal invoice={selected} onClose={()=>setShowInvoice(false)}/>
+          ? (
+              <div
+                className="modal-overlay"
+                onClick={closeInvoice}
+              >
+                <div
+                  className="modal-box"
+                  onClick={(event) =>
+                    event.stopPropagation()
+                  }
+                  style={{
+                    padding: 40,
+                    textAlign: "center",
+                    color: "#9ca3af",
+                  }}
+                >
+                  Loading invoice…
+                </div>
+              </div>
+            )
+          : selected
+            ? (
+                <>
+                  {/* G5E_INVOICE_PORTAL */}
+                  {createPortal(
+                    <InvoiceModal
+                      invoice={selected}
+                      onClose={closeInvoice}
+                    />,
+                    document.body
+                  )}
+                </>
+              )
+            : null
       )}
       {showView && selected && (
         <div className="modal-overlay" onClick={()=>setShowView(false)}>
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
             <div className="modal-header"><h3>Invoice Details — {selected.id}</h3><button className="modal-close" onClick={()=>setShowView(false)}>×</button></div>
             <div className="modal-body">
-              {[['Invoice No.',selected.id],['Booking ID',selected.bookingId],['Guest Name',selected.guest],['Room No.',selected.room],['Check-in',selected.checkIn],['Check-out',selected.checkOut],['Total Amount',fmtCurrency(selected.amount)],['Applied to Invoice',fmtCurrency(selected.paid)],['Net Paid',fmtCurrency(selected.netPaid||0)],['Refund Due',fmtCurrency(selected.refundDue||0)],['Due Amount',fmtCurrency(selected.due)],['Status',selected.status],['Payment Method',selected.method||'—']].map(([k,v])=>(
+              {[['Invoice No.',selected.id],[getInvoiceReference(selected).label,getInvoiceReference(selected).value],['Guest Name',selected.guest],['Room No.',selected.room],['Check-in',selected.checkIn],['Check-out',selected.checkOut],['Total Amount',fmtCurrency(selected.amount)],['Applied to Invoice',fmtCurrency(selected.paid)],['Net Paid',fmtCurrency(selected.netPaid||0)],['Refund Due',fmtCurrency(selected.refundDue||0)],['Due Amount',fmtCurrency(selected.due)],['Status',selected.status],['Payment Method',selected.method||'—']].map(([k,v])=>(
                 <div className="detail-row" key={k}><span className="detail-key">{k}</span><span className="detail-value">{v}</span></div>
               ))}
             </div>

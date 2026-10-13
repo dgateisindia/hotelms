@@ -1,0 +1,162 @@
+/* SUPER ADMIN-SA3B-2-R1 — ACCOUNT ACTION DIALOG */
+
+.sa-admins-action-danger-light {
+  color: #b91c25;
+  background: #fff1f2;
+  border-color: #f3c8cc;
+}
+
+.sa-admins-action-success-light {
+  color: #06754c;
+  background: #edfaf2;
+  border-color: #c5ead6;
+}
+
+.sa-admins-action-danger {
+  color: #fff;
+  background: #b91c25;
+  border-color: #b91c25;
+}
+
+.sa-admins-action-dialog form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sa-admins-action-dialog .sa-admins-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sa-admins-action-dialog .sa-admins-modal__footer {
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.sa-admins-action-dialog .sa-admins-modal__footer button {
+  min-width: 125px;
+}
+
+.sa-admins-action-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e6edf5;
+}
+
+.sa-admins-action-identity strong {
+  color: #182a50;
+  font-size: 15px;
+}
+
+.sa-admins-action-identity span {
+  color: #74839b;
+  font-size: 11px;
+}
+
+.sa-admins-action-fields {
+  display: grid;
+  gap: 16px;
+  padding-top: 17px;
+}
+
+.sa-admins-action-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sa-admins-action-fields label span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1c2c4e;
+}
+
+.sa-admins-action-fields input {
+  width: 100%;
+  min-width: 0;
+  height: 43px;
+  padding: 0 12px;
+  border: 1px solid #dce4f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #1c2c4e;
+  font-size: 13px;
+}
+
+.sa-admins-action-fields input:disabled {
+  color: #7c899b;
+  background: #f4f6f9;
+}
+
+.sa-admins-action-note {
+  margin: 0;
+  color: #718098;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.sa-admins-action-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 22px 0 8px;
+}
+
+.sa-admins-action-confirm > strong {
+  color: #192a4c;
+  font-size: 16px;
+}
+
+.sa-admins-action-confirm p {
+  margin: 0;
+  color: #697a93;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.sa-admins-action-error {
+  margin-top: 14px;
+  padding: 12px;
+  color: #a32332;
+  background: #fff2f3;
+  border: 1px solid #f3bdc3;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .sa-admins-action-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+  }
+
+  .sa-admins-action-dialog .sa-admins-modal__footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .sa-admins-action-dialog .sa-admins-modal__footer button {
+    min-width: 0;
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .sa-admins-row-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .sa-admins-row-actions .sa-admins-button {
+    white-space: normal;
+    text-align: center;
+  }
+}

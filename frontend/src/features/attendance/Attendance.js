@@ -22,6 +22,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import apiClient, { getApiErrorMessage } from '../../shared/api/apiClient';
 import './Attendance.css';
 import {
@@ -93,6 +94,55 @@ const workedMinutes = (checkIn, checkOut) => {
 const todayISO = () => new Date().toISOString().slice(0,10);
 const formatDateLabel = (iso) => new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
 
+// ATTENDANCE-A5 — UTC-safe date-only helpers.
+
+const addAttendanceDays = (iso, offset) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().slice(0, 10);
+};
+
+const attendanceRange = (iso, tab) => {
+  if (tab === 'Weekly Summary') {
+    const weekday = new Date(
+      `${iso}T00:00:00Z`
+    ).getUTCDay();
+
+    const start = addAttendanceDays(
+      iso,
+      -(weekday === 0 ? 6 : weekday - 1)
+    );
+
+    return {
+      start,
+      end: addAttendanceDays(start, 6)
+    };
+  }
+
+  if (tab === 'Monthly Summary') {
+    const start = `${iso.slice(0, 7)}-01`;
+
+    const lastDay = new Date(
+      Date.UTC(
+        Number(iso.slice(0, 4)),
+        Number(iso.slice(5, 7)),
+        0
+      )
+    ).getUTCDate();
+
+    return {
+      start,
+      end:
+        `${iso.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`
+    };
+  }
+
+  return null;
+};
+
+const escapeAttendanceCSV = (v) =>
+  `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+
 // ── Donut Chart Helper ───────────────────────────────────────
 const DonutChart = ({ segments, size=110, stroke=18, centerLabel, centerSub }) => {
   const R=((size-stroke)/2), CX=size/2, circ=2*Math.PI*R;
@@ -152,6 +202,163 @@ function Attendance() {
   const [selected, setSelected]       = useState(null);
   const [form, setForm]               = useState({ check_in_time:'', check_out_time:'', status:'Present' });
 
+  // Weekly and monthly reports use saved attendance records only.
+
+  const [periodData, setPeriodData] = useState({
+    start: '',
+    end: '',
+    staff: [],
+    records: []
+  });
+
+  const [periodLoading, setPeriodLoading] = useState(false);
+  const [periodError, setPeriodError] = useState('');
+
+  const selectedPeriod = useMemo(
+    () => attendanceRange(date, activeTab),
+    [date, activeTab]
+  );
+
+  const isPeriodTab =
+    activeTab === 'Weekly Summary' ||
+    activeTab === 'Monthly Summary';
+
+  const periodMatches = Boolean(
+    selectedPeriod &&
+    periodData.start === selectedPeriod.start &&
+    periodData.end === selectedPeriod.end
+  );
+
+  useEffect(() => {
+    if (!selectedPeriod) return undefined;
+
+    let active = true;
+
+    setPeriodLoading(true);
+    setPeriodError('');
+
+    apiClient.get('/attendance', {
+      params: selectedPeriod
+    })
+      .then(res => {
+        if (!active) return;
+
+        const payload = res.data || {};
+
+        if (
+          !Array.isArray(payload.staff) ||
+          !Array.isArray(payload.records)
+        ) {
+          throw new Error(
+            'Unexpected attendance range response.'
+          );
+        }
+
+        setPeriodData({
+          start: payload.start,
+          end: payload.end,
+          staff: payload.staff,
+          records: payload.records
+        });
+      })
+      .catch(err => {
+        if (!active) return;
+
+        setPeriodData({
+          start: '',
+          end: '',
+          staff: [],
+          records: []
+        });
+
+        setPeriodError(getApiErrorMessage(err));
+      })
+      .finally(() => {
+        if (active) setPeriodLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedPeriod]);
+
+  const periodSummary = useMemo(() => {
+    const byStaff = new Map(
+      (periodData.staff || []).map(person => [
+        String(person.staff_id),
+        {
+          staff_id: person.staff_id,
+          staffCode: person.staffCode,
+          name: person.name,
+          dept: person.dept,
+          present: 0,
+          absent: 0,
+          half_day: 0,
+          leave: 0,
+          recorded: 0,
+          minutes: 0
+        }
+      ])
+    );
+
+    (periodData.records || []).forEach(record => {
+      const entry = byStaff.get(
+        String(record.staff_id)
+      );
+
+      if (!entry) return;
+
+      if (
+        !['present', 'absent', 'half_day', 'leave']
+          .includes(record.status)
+      ) {
+        return;
+      }
+
+      entry[record.status] += 1;
+      entry.recorded += 1;
+
+      if (
+        record.status === 'present' ||
+        record.status === 'half_day'
+      ) {
+        entry.minutes += workedMinutes(
+          record.check_in_time,
+          record.check_out_time
+        );
+      }
+    });
+
+    return Array.from(byStaff.values());
+  }, [periodData]);
+
+  const periodFiltered = periodSummary
+    .filter(person =>
+      (person.name || '')
+        .toLowerCase()
+        .includes(search.toLowerCase()) ||
+      (person.staffCode || '')
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    )
+    .filter(person =>
+      filterDept === 'All Departments' ||
+      person.dept === filterDept
+    );
+
+  const periodTotalPages = Math.max(
+    1,
+    Math.ceil(periodFiltered.length / PER_PAGE)
+  );
+
+  const periodPageRows = periodFiltered.slice(
+    (page - 1) * PER_PAGE,
+    page * PER_PAGE
+  );
+
+  const periodRecorded =
+    (periodData.records || []).length;
+
   // ── Fetch attendance for the selected date ──
   const fetchAttendance = useCallback(async () => {
     setLoading(true);
@@ -169,6 +376,7 @@ function Attendance() {
         check_in_time: r.check_in_time,
         check_out_time: r.check_out_time,
         status: STATUS_LABEL[r.status] || r.status,
+        isMarked: Number(r.isMarked === undefined ? 1 : r.isMarked) === 1,
       }));
       setAttendance(normalized);
     } catch (err) {
@@ -196,10 +404,33 @@ function Attendance() {
 
   // ── Filter (table) ──
   const filtered = attendance.filter(a => {
-    const ms = (a.name||'').toLowerCase().includes(search.toLowerCase()) || (a.staffCode||'').toLowerCase().includes(search.toLowerCase());
-    const md = filterDept === 'All Departments' || a.dept === filterDept;
-    return ms && md;
+    const ms =
+      (a.name || '')
+        .toLowerCase()
+        .includes(search.toLowerCase()) ||
+      (a.staffCode || '')
+        .toLowerCase()
+        .includes(search.toLowerCase());
+
+    const md =
+      filterDept === 'All Departments' ||
+      a.dept === filterDept;
+
+    const exception =
+      !a.isMarked ||
+      a.status === 'Absent' ||
+      a.status === 'Half Day' ||
+      (
+        a.status === 'Present' &&
+        (!a.check_in_time || !a.check_out_time)
+      );
+
+    return ms && md && (
+      activeTab !== 'Attendance Exceptions' ||
+      exception
+    );
   });
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const paginated  = filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
 
@@ -210,7 +441,10 @@ function Attendance() {
     const totalStaff = attendance.length;
     const present     = attendance.filter(a => a.status === 'Present').length;
     const onLeave     = attendance.filter(a => a.status === 'On Leave').length;
-    const absent      = attendance.filter(a => a.status === 'Absent').length;
+    // ATTENDANCE-A7-UNMARKED-FIX
+    // Only explicitly saved absent records count as absent.
+    const absent      = attendance.filter(a => a.isMarked && a.status === 'Absent').length;
+    const unmarked    = attendance.filter(a => !a.isMarked).length;
     const halfDay     = attendance.filter(a => a.status === 'Half Day').length;
 
     const workingMinutesList = attendance
@@ -228,6 +462,7 @@ function Attendance() {
       { label:'Absent',   count:absent,  pct:`${pct(absent)}%`,  color:STATUS_COLORS.Absent },
       { label:'On Leave', count:onLeave, pct:`${pct(onLeave)}%`, color:STATUS_COLORS['On Leave'] },
       { label:'Half Day', count:halfDay, pct:`${pct(halfDay)}%`, color:STATUS_COLORS['Half Day'] },
+      { label:'Not Marked', count:unmarked, pct:`${pct(unmarked)}%`, color:'#94a3b8' },
     ];
 
     const deptPresent = DEPARTMENTS.map(dept => {
@@ -236,8 +471,77 @@ function Attendance() {
       return { dept, present: deptPresentCount, total: deptRecords.length };
     }).filter(d => d.total > 0);
 
-    return { totalStaff, present, onLeave, absent, halfDay, avgMinutes, summary, deptPresent };
+    return { totalStaff, present, onLeave, absent, unmarked, halfDay, avgMinutes, summary, deptPresent };
   }, [attendance]);
+
+  // ATTENDANCE-A6-PERIOD-KPI
+  // Saved attendance records only.
+  // Unmarked dates are not automatically absent.
+
+  const periodStats = useMemo(() => {
+    const totals = {
+      totalStaff: periodSummary.length,
+      present: 0,
+      absent: 0,
+      onLeave: 0,
+      halfDay: 0,
+      recorded: 0,
+      totalMinutes: 0
+    };
+
+    periodSummary.forEach(a => {
+      totals.present += a.present;
+      totals.absent += a.absent;
+      totals.onLeave += a.leave;
+      totals.halfDay += a.half_day;
+      totals.recorded += a.recorded;
+      totals.totalMinutes += a.minutes;
+    });
+
+    const pct = (count) => totals.recorded
+      ? `${((count / totals.recorded) * 100).toFixed(1)}%`
+      : '0.0%';
+
+    return {
+      ...totals,
+      summary: [
+        {
+          label: 'Present',
+          count: totals.present,
+          pct: pct(totals.present),
+          color: STATUS_COLORS.Present
+        },
+        {
+          label: 'Absent',
+          count: totals.absent,
+          pct: pct(totals.absent),
+          color: STATUS_COLORS.Absent
+        },
+        {
+          label: 'On Leave',
+          count: totals.onLeave,
+          pct: pct(totals.onLeave),
+          color: STATUS_COLORS['On Leave']
+        },
+        {
+          label: 'Half Day',
+          count: totals.halfDay,
+          pct: pct(totals.halfDay),
+          color: STATUS_COLORS['Half Day']
+        }
+      ]
+    };
+  }, [periodSummary]);
+
+  const periodReady =
+    isPeriodTab &&
+    periodMatches &&
+    !periodLoading &&
+    !periodError;
+
+  const displayedSummary = isPeriodTab
+    ? (periodReady ? periodStats.summary : [])
+    : stats.summary;
 
   const maxDept = Math.max(1, ...stats.deptPresent.map(d => d.total));
 
@@ -245,11 +549,23 @@ function Attendance() {
   // since the status enum has no "late" value to detect it from.
   const alerts = useMemo(() => {
     const list = [];
-    if (stats.absent > 0) list.push({ text:`${stats.absent} staff member${stats.absent>1?'s are':' is'} absent today`, color:'red' });
+    if (stats.absent > 0) {
+      list.push({
+        text: `${stats.absent} staff member${stats.absent > 1 ? 's' : ''} marked absent on ${formatDateLabel(date)}`,
+        color: 'red'
+      });
+    }
+
+    if (stats.unmarked > 0) {
+      list.push({
+        text: `${stats.unmarked} staff attendance record${stats.unmarked > 1 ? 's' : ''} not marked for ${formatDateLabel(date)}`,
+        color: 'orange'
+      });
+    }
     const pendingLeave = leaveRequests.filter(lr => lr.status === 'Pending').length;
     if (pendingLeave > 0) list.push({ text:`${pendingLeave} leave request${pendingLeave>1?'s are':' is'} pending approval`, color:'orange' });
     return list;
-  }, [stats, leaveRequests]);
+  }, [stats, leaveRequests, date]);
 
   // ── Handlers ──
   const openView = (a) => { setSelected(a); setShowView(true); };
@@ -258,7 +574,7 @@ function Attendance() {
     setForm({
       check_in_time: toTimeInputValue(a.check_in_time),
       check_out_time: toTimeInputValue(a.check_out_time),
-      status: a.status,
+      status: a.isMarked ? a.status : '',
     });
     setShowEdit(true);
   };
@@ -266,6 +582,11 @@ function Attendance() {
 
   const handleEdit = async () => {
     if (submitting || !selected) return;
+
+    if (!STATUS_ENUM[form.status]) {
+      alert('Please select an attendance status before saving.');
+      return;
+    }
     setSubmitting(true);
     try {
       await apiClient.put(`/attendance/${selected.staff_id}`, {
@@ -285,22 +606,93 @@ function Attendance() {
     }
   };
 
-  // ── Export handler (exports the real fetched data) ──
+  // Export real data matching the selected tab.
+
   const handleExport = () => {
-    const headers = ['Staff ID','Name','Department','Check-in','Check-out','Working Hours','Status'];
-    const rows = filtered.map(a => [
-      a.staffCode, a.name, a.dept,
-      formatTime(a.check_in_time), formatTime(a.check_out_time),
-      minutesToHoursLabel(workedMinutes(a.check_in_time, a.check_out_time)),
-      a.status,
-    ]);
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const range = selectedPeriod;
+
+    const headers = isPeriodTab
+      ? [
+          'Staff ID',
+          'Name',
+          'Department',
+          'Present',
+          'Absent',
+          'Half Day',
+          'On Leave',
+          'Recorded Days',
+          'Working Hours'
+        ]
+      : [
+          'Staff ID',
+          'Name',
+          'Department',
+          'Check-in',
+          'Check-out',
+          'Working Hours',
+          'Status'
+        ];
+
+    const rows = isPeriodTab
+      ? periodFiltered.map(a => [
+          a.staffCode,
+          a.name,
+          a.dept,
+          a.present,
+          a.absent,
+          a.half_day,
+          a.leave,
+          a.recorded,
+          minutesToHoursLabel(a.minutes)
+        ])
+      : filtered.map(a => [
+          a.staffCode,
+          a.name,
+          a.dept,
+          formatTime(a.check_in_time),
+          formatTime(a.check_out_time),
+          minutesToHoursLabel(
+            workedMinutes(
+              a.check_in_time,
+              a.check_out_time
+            )
+          ),
+          !a.isMarked ? 'Not Marked' : a.status
+        ]);
+
+    const csvContent = [
+      headers,
+      ...rows
+    ]
+      .map(row =>
+        row.map(escapeAttendanceCSV).join(',')
+      )
+      .join('\r\n');
+
+    const blob = new Blob(
+      [csvContent],
+      { type: 'text/csv;charset=utf-8;' }
+    );
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
+
     link.href = url;
-    link.download = `attendance-${date}.csv`;
+
+    link.download = isPeriodTab
+      ? `attendance-${
+          activeTab === 'Weekly Summary'
+            ? 'weekly'
+            : 'monthly'
+        }-${range.start}-to-${range.end}.csv`
+      : `attendance-${
+          activeTab === 'Attendance Exceptions'
+            ? 'exceptions-'
+            : ''
+        }${date}.csv`;
+
     link.click();
+
     URL.revokeObjectURL(url);
   };
 
@@ -308,7 +700,8 @@ function Attendance() {
   //  RENDER
   // ════════════════════════════════════════════════════════════
   return (
-    <>
+    <div className="hms-attendance-page" data-hms-fast-ui="attendance">
+<>
       {/* ── Page Header ── */}
       <div className="page-header">
         <div className="page-header-left">
@@ -339,28 +732,142 @@ function Attendance() {
         </div>
       )}
 
-      {/* ── Stat Cards (all live, derived from fetched attendance) ── */}
+      {/* Attendance KPIs follow the selected date or period. */}
+
       <div className="attend-stats">
+
         <div className="astat-card">
-          <div className="astat-icon blue"><IcoUsers/></div>
-          <div><div className="astat-label">Total Staff</div><div className="astat-value">{stats.totalStaff}</div><div className="astat-sub">Marked for {formatDateLabel(date)}</div></div>
+          <div className="astat-icon blue">
+            <IcoUsers/>
+          </div>
+
+          <div>
+            <div className="astat-label">
+              Total Staff
+            </div>
+
+            <div className="astat-value">
+              {isPeriodTab
+                ? (periodReady ? periodStats.totalStaff : '—')
+                : stats.totalStaff}
+            </div>
+
+            <div className="astat-sub">
+              {isPeriodTab
+                ? 'Staff in selected hotel'
+                : `Selected date: ${formatDateLabel(date)}`}
+            </div>
+          </div>
         </div>
+
         <div className="astat-card">
-          <div className="astat-icon green"><IcoPresent/></div>
-          <div><div className="astat-label">Present Today</div><div className="astat-value">{stats.present}</div><div className="astat-sub">{stats.totalStaff ? ((stats.present/stats.totalStaff)*100).toFixed(1) : '0.0'}% of total staff</div></div>
+          <div className="astat-icon green">
+            <IcoPresent/>
+          </div>
+
+          <div>
+            <div className="astat-label">
+              {isPeriodTab
+                ? 'Present Days'
+                : 'Present (Selected Date)'}
+            </div>
+
+            <div className="astat-value">
+              {isPeriodTab
+                ? (periodReady ? periodStats.present : '—')
+                : stats.present}
+            </div>
+
+            <div className="astat-sub">
+              {isPeriodTab
+                ? 'Saved present records'
+                : `${stats.totalStaff
+                    ? ((stats.present / stats.totalStaff) * 100).toFixed(1)
+                    : '0.0'}% of staff`}
+            </div>
+          </div>
         </div>
+
         <div className="astat-card">
-          <div className="astat-icon orange"><IcoLeave/></div>
-          <div><div className="astat-label">On Leave</div><div className="astat-value">{stats.onLeave}</div><div className="astat-sub muted">{stats.totalStaff ? ((stats.onLeave/stats.totalStaff)*100).toFixed(1) : '0.0'}% of total staff</div></div>
+          <div className="astat-icon orange">
+            <IcoLeave/>
+          </div>
+
+          <div>
+            <div className="astat-label">
+              {isPeriodTab
+                ? 'Leave Days'
+                : 'On Leave (Selected Date)'}
+            </div>
+
+            <div className="astat-value">
+              {isPeriodTab
+                ? (periodReady ? periodStats.onLeave : '—')
+                : stats.onLeave}
+            </div>
+
+            <div className="astat-sub muted">
+              {isPeriodTab
+                ? 'Saved leave records'
+                : 'Selected date'}
+            </div>
+          </div>
         </div>
+
         <div className="astat-card">
-          <div className="astat-icon red"><IcoAbsent/></div>
-          <div><div className="astat-label">Absent Today</div><div className="astat-value">{stats.absent}</div><div className="astat-sub muted">{stats.totalStaff ? ((stats.absent/stats.totalStaff)*100).toFixed(1) : '0.0'}% of total staff</div></div>
+          <div className="astat-icon red">
+            <IcoAbsent/>
+          </div>
+
+          <div>
+            <div className="astat-label">
+              {isPeriodTab
+                ? 'Absent Days'
+                : 'Absent (Selected Date)'}
+            </div>
+
+            <div className="astat-value">
+              {isPeriodTab
+                ? (periodReady ? periodStats.absent : '—')
+                : stats.absent}
+            </div>
+
+            <div className="astat-sub muted">
+              {isPeriodTab
+                ? 'Saved absent records only'
+                : 'Selected date'}
+            </div>
+          </div>
         </div>
+
         <div className="astat-card">
-          <div className="astat-icon purple"><IcoClock/></div>
-          <div><div className="astat-label">Avg Working Hours</div><div className="astat-value">{minutesToHoursLabel(stats.avgMinutes)}</div><div className="astat-sub muted">Based on present staff today</div></div>
+          <div className="astat-icon purple">
+            <IcoClock/>
+          </div>
+
+          <div>
+            <div className="astat-label">
+              {isPeriodTab
+                ? 'Total Work Hours'
+                : 'Avg Working Hours'}
+            </div>
+
+            <div className="astat-value">
+              {isPeriodTab
+                ? (periodReady
+                    ? minutesToHoursLabel(periodStats.totalMinutes)
+                    : '—')
+                : minutesToHoursLabel(stats.avgMinutes)}
+            </div>
+
+            <div className="astat-sub muted">
+              {isPeriodTab
+                ? 'Sum of recorded work time'
+                : 'Present staff, selected date'}
+            </div>
+          </div>
         </div>
+
       </div>
 
       {/* ── Main 2-col layout ── */}
@@ -371,7 +878,34 @@ function Attendance() {
           <div className="attend-tabs">
             <div className="attend-tab-group">
               {TABS.map(tab=>(
-                <button key={tab} className={`attend-tab ${activeTab===tab?'active':''}`} onClick={()=>setActiveTab(tab)}>{tab}</button>
+                <button
+                  key={tab}
+                  type="button"
+                  className={`attend-tab ${activeTab===tab?'active':''}`}
+                  aria-pressed={activeTab===tab}
+                  onClick={()=>{
+                    setActiveTab(tab);
+                    setPage(1);
+                  }}
+                >
+                  {tab === 'Attendance Exceptions'
+                    ? <IcoAlert/>
+                    : <IcoCalendar/>
+                  }
+                  <span className="att-tab-copy">
+                    <strong>{tab}</strong>
+                    <small>
+                      {tab === 'Daily Summary'
+                        ? 'Selected day'
+                        : tab === 'Weekly Summary'
+                        ? 'Mon – Sun'
+                        : tab === 'Monthly Summary'
+                        ? 'Calendar month'
+                        : 'Flagged records'
+                      }
+                    </small>
+                  </span>
+                </button>
               ))}
             </div>
             <div className="attend-search">
@@ -379,12 +913,154 @@ function Attendance() {
                 <IcoSearch/>
                 <input className="attend-search-input" placeholder="Search by name or staff ID..." value={search} onChange={e=>{setSearch(e.target.value);setPage(1);}}/>
               </div>
-              <button className="btn-export" onClick={handleExport}><IcoExport/> Export</button>
+              <button className="btn-export" onClick={handleExport} disabled={isPeriodTab && (!periodMatches || periodLoading || Boolean(periodError))}><IcoExport/> Export</button>
             </div>
           </div>
 
-          {/* Table */}
-          <div className="attend-card">
+          {/* Selected attendance report context */}
+
+          <div
+            className="attendance-view-heading"
+            role="status"
+          >
+            <div>
+              <strong>
+                {isPeriodTab
+                  ? activeTab
+                  : activeTab === 'Attendance Exceptions'
+                  ? 'Attendance Exceptions'
+                  : 'Daily Attendance'
+                }
+              </strong>
+
+              <span>
+                {selectedPeriod
+                  ? `${formatDateLabel(selectedPeriod.start)} – ${formatDateLabel(selectedPeriod.end)} · saved attendance entries only`
+                  : `${formatDateLabel(date)} · ${
+                      activeTab === 'Attendance Exceptions'
+                        ? 'absent, half-day, unmarked or incomplete times'
+                        : 'selected day snapshot'
+                    }`
+                }
+              </span>
+            </div>
+
+            {isPeriodTab &&
+              periodMatches &&
+              !periodLoading &&
+              !periodError && (
+                <div className="attendance-view-meta">
+                  {periodRecorded} saved records · {periodSummary.length} staff
+                </div>
+              )
+            }
+          </div>
+
+          {/* Weekly / Monthly table */}
+
+          {isPeriodTab && (
+            <div className="attend-card attendance-period-card">
+
+              {periodError ? (
+                <div className="attendance-period-state attendance-period-error">
+                  {periodError}
+                </div>
+
+              ) : periodLoading || !periodMatches ? (
+                <div className="attendance-period-state">
+                  Loading period attendance...
+                </div>
+
+              ) : (
+                <>
+                  <table className="attend-table attendance-period-table">
+                    <thead>
+                      <tr>
+                        <th>Staff ID</th>
+                        <th>Name</th>
+                        <th>Department</th>
+                        <th>Present</th>
+                        <th>Absent</th>
+                        <th>Half Day</th>
+                        <th>On Leave</th>
+                        <th>Recorded Days</th>
+                        <th>Work Hours</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {periodPageRows.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={9}
+                            className="attendance-period-empty"
+                          >
+                            No matching staff for this period.
+                          </td>
+                        </tr>
+
+                      ) : periodPageRows.map(a => (
+                        <tr key={a.staff_id}>
+                          <td>{a.staffCode}</td>
+                          <td>{a.name}</td>
+                          <td>{a.dept}</td>
+                          <td>{a.present}</td>
+                          <td>{a.absent}</td>
+                          <td>{a.half_day}</td>
+                          <td>{a.leave}</td>
+                          <td>{a.recorded}</td>
+                          <td>{minutesToHoursLabel(a.minutes)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="pagination">
+                    <span className="pagination-info">
+                      Showing {
+                        periodFiltered.length === 0
+                          ? 0
+                          : (page - 1) * PER_PAGE + 1
+                      } to {
+                        Math.min(
+                          page * PER_PAGE,
+                          periodFiltered.length
+                        )
+                      } of {periodFiltered.length} staff
+                    </span>
+
+                    <div className="pagination-btns">
+                      <button
+                        className="pg-btn"
+                        disabled={page === 1}
+                        onClick={()=>setPage(p=>p-1)}
+                      >
+                        <IcoChevL/>
+                      </button>
+
+                      <button
+                        className="pg-btn active"
+                        aria-current="page"
+                      >
+                        {page}
+                      </button>
+
+                      <button
+                        className="pg-btn"
+                        disabled={page >= periodTotalPages}
+                        onClick={()=>setPage(p=>p+1)}
+                      >
+                        <IcoChevR/>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Existing daily / exception attendance table */}
+          <div className="attend-card" style={{display: isPeriodTab ? "none" : undefined}}>
             <table className="attend-table">
               <thead>
                 <tr>
@@ -411,7 +1087,7 @@ function Attendance() {
                     <td>{formatTime(a.check_in_time)}</td>
                     <td>{formatTime(a.check_out_time)}</td>
                     <td>{minutesToHoursLabel(workedMinutes(a.check_in_time, a.check_out_time))}</td>
-                    <td><span className={statusClass(a.status)}>{a.status}</span></td>
+                    <td><span className={a.isMarked ? statusClass(a.status) : 'badge badge-unmarked'}>{a.isMarked ? a.status : 'Not Marked'}</span></td>
                     <td>
                       <div className="action-btns">
                         <button className="btn-icon btn-icon-view" title="View" onClick={()=>openView(a)}><IcoEye/></button>
@@ -443,11 +1119,11 @@ function Attendance() {
 
           {/* Attendance Summary — real, derived from fetched attendance */}
           <div className="summary-card">
-            <div className="summary-title">Attendance Summary ({formatDateLabel(date)})</div>
+            <div className="summary-title">Attendance Summary ({isPeriodTab && selectedPeriod ? `${formatDateLabel(selectedPeriod.start)} – ${formatDateLabel(selectedPeriod.end)}` : formatDateLabel(date)})</div>
             <div className="summary-donut-wrap">
-              <DonutChart segments={stats.summary.map(a=>({pct:a.count,color:a.color}))} size={100} stroke={16} centerLabel={stats.totalStaff} centerSub="Total Staff"/>
+              <DonutChart segments={displayedSummary.map(a=>({pct:a.count,color:a.color}))} size={100} stroke={16} centerLabel={isPeriodTab ? (periodReady ? periodStats.recorded : "—") : stats.totalStaff} centerSub={isPeriodTab ? "Saved Records" : "Total Staff"}/>
               <div className="summary-legend">
-                {stats.summary.map(a=>(
+                {displayedSummary.map(a=>(
                   <div className="summary-leg-item" key={a.label}>
                     <span className="summary-dot" style={{background:a.color}}/>
                     <span>{a.label}</span>
@@ -528,7 +1204,7 @@ function Attendance() {
 
         {/* Department wise present bar chart — real, derived from fetched attendance */}
         <div className="dept-bar-card">
-          <div className="dept-bar-title">Department Wise Present</div>
+          <div className="dept-bar-title">Department Wise Present (Selected Date)</div>
           {stats.deptPresent.length === 0 ? (
             <div style={{color:'#9ca3af',fontSize:13,padding:'12px 0'}}>No attendance data yet.</div>
           ) : stats.deptPresent.map(d=>(
@@ -579,8 +1255,8 @@ function Attendance() {
       {/* ══════════ MODALS ══════════ */}
 
       {/* Edit Modal */}
-      {showEdit && selected && (
-        <div className="modal-overlay" onClick={()=>setShowEdit(false)}>
+      {showEdit && selected && createPortal(
+        <div className="modal-overlay hms-attendance-page attendance-modal-overlay" onClick={()=>setShowEdit(false)}>
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
             <div className="modal-header"><h3>Edit Attendance — {selected.name}</h3><button className="modal-close" onClick={()=>setShowEdit(false)}>×</button></div>
             <div className="modal-body">
@@ -590,6 +1266,7 @@ function Attendance() {
                 <div className="form-group full">
                   <label className="form-label">Status</label>
                   <select className="form-select" name="status" value={form.status} onChange={handleFormChange}>
+                    <option value="" disabled>Select attendance status</option>
                     <option>Present</option><option>Absent</option><option>On Leave</option><option>Half Day</option>
                   </select>
                 </div>
@@ -600,12 +1277,13 @@ function Attendance() {
               <button className="btn-save" onClick={handleEdit} disabled={submitting}>{submitting ? 'Saving...' : 'Save Changes'}</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* View Modal */}
-      {showView && selected && (
-        <div className="modal-overlay" onClick={()=>setShowView(false)}>
+      {showView && selected && createPortal(
+        <div className="modal-overlay hms-attendance-page attendance-modal-overlay" onClick={()=>setShowView(false)}>
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
             <div className="modal-header"><h3>Attendance Details — {selected.staffCode}</h3><button className="modal-close" onClick={()=>setShowView(false)}>×</button></div>
             <div className="modal-body">
@@ -616,16 +1294,18 @@ function Attendance() {
                 ['Check-in',formatTime(selected.check_in_time)],
                 ['Check-out',formatTime(selected.check_out_time)],
                 ['Working Hours',minutesToHoursLabel(workedMinutes(selected.check_in_time, selected.check_out_time))],
-                ['Status',selected.status],
+                ['Status',selected.isMarked ? selected.status : 'Not Marked'],
               ].map(([k,v])=>(
                 <div className="detail-row" key={k}><span className="detail-key">{k}</span><span className="detail-value">{v}</span></div>
               ))}
             </div>
             <div className="modal-footer"><button className="btn-save" onClick={()=>setShowView(false)}>Close</button></div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
+</div>
   );
 }
 

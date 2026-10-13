@@ -1,0 +1,3478 @@
+/* ============================================================
+   HOUSEKEEPING
+
+   Dedicated operational styles for the hotel-admin
+   Housekeeping workspace.
+
+   Notes:
+   - scoped under .housekeeping-page where practical
+   - no global element resets
+   - responsive table remains horizontally scrollable
+   - lifecycle colours are presentation only
+============================================================ */
+
+
+/* ============================================================
+   PAGE TOKENS
+============================================================ */
+
+.housekeeping-page {
+  --hk-surface:
+    var(
+      --color-surface,
+      #ffffff
+    );
+
+  --hk-surface-soft:
+    var(
+      --color-surface-soft,
+      #f7f8fb
+    );
+
+  --hk-text:
+    var(
+      --color-text,
+      #172033
+    );
+
+  --hk-text-muted:
+    var(
+      --color-text-muted,
+      #667085
+    );
+
+  --hk-border:
+    var(
+      --color-border,
+      #e4e7ec
+    );
+
+  --hk-primary:
+    var(
+      --primary-color,
+      #344f7a
+    );
+
+  --hk-primary-hover:
+    var(
+      --primary-dark,
+      #293f63
+    );
+
+  --hk-danger:
+    var(
+      --danger-color,
+      #b42318
+    );
+
+  --hk-danger-soft:
+    #fff4f2;
+
+  --hk-radius-sm:
+    8px;
+
+  --hk-radius-md:
+    12px;
+
+  --hk-radius-lg:
+    16px;
+
+  --hk-shadow:
+    0 1px 3px rgba(16, 24, 40, 0.08);
+
+  width:
+    100%;
+
+  min-width:
+    0;
+
+  color:
+    var(--hk-text);
+}
+
+
+/* ============================================================
+   PAGE HEADER
+============================================================ */
+
+.housekeeping-page__header {
+  display:
+    flex;
+
+  align-items:
+    flex-start;
+
+  justify-content:
+    space-between;
+
+  gap:
+    20px;
+
+  margin-bottom:
+    22px;
+}
+
+
+.housekeeping-page__header h1 {
+  margin:
+    2px 0 6px;
+
+  font-size:
+    clamp(
+      1.5rem,
+      2vw,
+      2rem
+    );
+
+  line-height:
+    1.2;
+
+  font-weight:
+    700;
+
+  color:
+    var(--hk-text);
+}
+
+
+.housekeeping-page__eyebrow {
+  margin:
+    0;
+
+  font-size:
+    0.75rem;
+
+  line-height:
+    1.4;
+
+  font-weight:
+    700;
+
+  letter-spacing:
+    0.08em;
+
+  text-transform:
+    uppercase;
+
+  color:
+    var(--hk-primary);
+}
+
+
+.housekeeping-page__subtitle {
+  max-width:
+    680px;
+
+  margin:
+    0;
+
+  font-size:
+    0.92rem;
+
+  line-height:
+    1.6;
+
+  color:
+    var(--hk-text-muted);
+}
+
+
+/* ============================================================
+   BUTTONS
+============================================================ */
+
+.housekeeping-button {
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  min-height:
+    40px;
+
+  padding:
+    9px 15px;
+
+  border:
+    1px solid transparent;
+
+  border-radius:
+    var(--hk-radius-sm);
+
+  font:
+    inherit;
+
+  font-size:
+    0.875rem;
+
+  line-height:
+    1.2;
+
+  font-weight:
+    600;
+
+  white-space:
+    nowrap;
+
+  cursor:
+    pointer;
+
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+
+.housekeeping-button:focus-visible {
+  outline:
+    3px solid rgba(52, 79, 122, 0.2);
+
+  outline-offset:
+    2px;
+}
+
+
+.housekeeping-button:disabled {
+  cursor:
+    not-allowed;
+
+  opacity:
+    0.55;
+}
+
+
+.housekeeping-button--primary {
+  border-color:
+    var(--hk-primary);
+
+  background:
+    var(--hk-primary);
+
+  color:
+    #ffffff;
+}
+
+
+.housekeeping-button--primary:hover:not(:disabled) {
+  border-color:
+    var(--hk-primary-hover);
+
+  background:
+    var(--hk-primary-hover);
+}
+
+
+.housekeeping-button--secondary {
+  border-color:
+    var(--hk-border);
+
+  background:
+    var(--hk-surface);
+
+  color:
+    var(--hk-text);
+}
+
+
+.housekeeping-button--secondary:hover:not(:disabled) {
+  border-color:
+    #c8ced8;
+
+  background:
+    var(--hk-surface-soft);
+}
+
+
+.housekeeping-button--ghost {
+  border-color:
+    var(--hk-border);
+
+  background:
+    transparent;
+
+  color:
+    var(--hk-text);
+}
+
+
+.housekeeping-button--ghost:hover:not(:disabled) {
+  background:
+    var(--hk-surface-soft);
+}
+
+
+/* ============================================================
+   FILTERS
+============================================================ */
+
+.housekeeping-filters {
+  display:
+    grid;
+
+  grid-template-columns:
+    minmax(220px, 1.5fr)
+    minmax(150px, 0.8fr)
+    minmax(180px, 1fr)
+    minmax(120px, 0.65fr)
+    auto;
+
+  gap:
+    14px;
+
+  align-items:
+    end;
+
+  margin-bottom:
+    18px;
+
+  padding:
+    16px;
+
+  border:
+    1px solid var(--hk-border);
+
+  border-radius:
+    var(--hk-radius-lg);
+
+  background:
+    var(--hk-surface);
+
+  box-shadow:
+    var(--hk-shadow);
+}
+
+
+.housekeeping-field {
+  display:
+    flex;
+
+  min-width:
+    0;
+
+  flex-direction:
+    column;
+
+  gap:
+    7px;
+}
+
+
+.housekeeping-field > span {
+  font-size:
+    0.78rem;
+
+  line-height:
+    1.4;
+
+  font-weight:
+    600;
+
+  color:
+    var(--hk-text-muted);
+}
+
+
+.housekeeping-field input,
+.housekeeping-field select {
+  width:
+    100%;
+
+  min-width:
+    0;
+
+  min-height:
+    40px;
+
+  padding:
+    8px 11px;
+
+  border:
+    1px solid var(--hk-border);
+
+  border-radius:
+    var(--hk-radius-sm);
+
+  background:
+    var(--hk-surface);
+
+  color:
+    var(--hk-text);
+
+  font:
+    inherit;
+
+  font-size:
+    0.875rem;
+
+  outline:
+    none;
+
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+
+.housekeeping-field input::placeholder {
+  color:
+    #98a2b3;
+}
+
+
+.housekeeping-field input:focus,
+.housekeeping-field select:focus {
+  border-color:
+    var(--hk-primary);
+
+  box-shadow:
+    0 0 0 3px rgba(52, 79, 122, 0.12);
+}
+
+
+.housekeeping-filters__actions {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    flex-end;
+
+  gap:
+    8px;
+}
+
+
+/* ============================================================
+   ALERT
+============================================================ */
+
+.housekeeping-alert {
+  margin-bottom:
+    18px;
+
+  padding:
+    12px 14px;
+
+  border:
+    1px solid transparent;
+
+  border-radius:
+    var(--hk-radius-md);
+
+  font-size:
+    0.875rem;
+
+  line-height:
+    1.5;
+}
+
+
+.housekeeping-alert--error {
+  border-color:
+    #fecdca;
+
+  background:
+    var(--hk-danger-soft);
+
+  color:
+    var(--hk-danger);
+}
+
+
+/* ============================================================
+   PANEL
+============================================================ */
+
+.housekeeping-panel {
+  min-width:
+    0;
+
+  overflow:
+    hidden;
+
+  border:
+    1px solid var(--hk-border);
+
+  border-radius:
+    var(--hk-radius-lg);
+
+  background:
+    var(--hk-surface);
+
+  box-shadow:
+    var(--hk-shadow);
+}
+
+
+.housekeeping-panel__header {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    space-between;
+
+  gap:
+    16px;
+
+  padding:
+    17px 18px;
+
+  border-bottom:
+    1px solid var(--hk-border);
+}
+
+
+.housekeeping-panel__header h2 {
+  margin:
+    0 0 3px;
+
+  font-size:
+    1rem;
+
+  line-height:
+    1.35;
+
+  font-weight:
+    700;
+
+  color:
+    var(--hk-text);
+}
+
+
+.housekeeping-panel__header p {
+  margin:
+    0;
+
+  font-size:
+    0.8rem;
+
+  line-height:
+    1.4;
+
+  color:
+    var(--hk-text-muted);
+}
+
+
+/* ============================================================
+   TABLE
+============================================================ */
+
+.housekeeping-table-wrap {
+  width:
+    100%;
+
+  min-width:
+    0;
+
+  overflow-x:
+    auto;
+
+  overscroll-behavior-inline:
+    contain;
+}
+
+
+.housekeeping-table {
+  width:
+    100%;
+
+  min-width:
+    980px;
+
+  border-collapse:
+    collapse;
+
+  border-spacing:
+    0;
+}
+
+
+.housekeeping-table th {
+  padding:
+    11px 14px;
+
+  border-bottom:
+    1px solid var(--hk-border);
+
+  background:
+    var(--hk-surface-soft);
+
+  color:
+    var(--hk-text-muted);
+
+  font-size:
+    0.72rem;
+
+  line-height:
+    1.35;
+
+  font-weight:
+    700;
+
+  letter-spacing:
+    0.04em;
+
+  text-align:
+    left;
+
+  text-transform:
+    uppercase;
+
+  white-space:
+    nowrap;
+}
+
+
+.housekeeping-table td {
+  padding:
+    13px 14px;
+
+  border-bottom:
+    1px solid var(--hk-border);
+
+  color:
+    var(--hk-text);
+
+  font-size:
+    0.84rem;
+
+  line-height:
+    1.45;
+
+  vertical-align:
+    middle;
+}
+
+
+.housekeeping-table tbody tr:last-child td {
+  border-bottom:
+    0;
+}
+
+
+.housekeeping-table tbody tr:hover {
+  background:
+    #fafbfc;
+}
+
+
+.housekeeping-table__state {
+  height:
+    128px;
+
+  text-align:
+    center;
+
+  color:
+    var(--hk-text-muted);
+}
+
+
+.housekeeping-cell-stack {
+  display:
+    flex;
+
+  min-width:
+    0;
+
+  flex-direction:
+    column;
+
+  gap:
+    2px;
+}
+
+
+.housekeeping-cell-stack strong {
+  overflow:
+    hidden;
+
+  color:
+    var(--hk-text);
+
+  font-weight:
+    600;
+
+  text-overflow:
+    ellipsis;
+
+  white-space:
+    nowrap;
+}
+
+
+.housekeeping-cell-stack span {
+  overflow:
+    hidden;
+
+  color:
+    var(--hk-text-muted);
+
+  font-size:
+    0.76rem;
+
+  text-overflow:
+    ellipsis;
+
+  white-space:
+    nowrap;
+}
+
+
+/* ============================================================
+   TASK STATUS
+============================================================ */
+
+.housekeeping-status {
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  min-height:
+    26px;
+
+  padding:
+    4px 9px;
+
+  border:
+    1px solid transparent;
+
+  border-radius:
+    999px;
+
+  font-size:
+    0.72rem;
+
+  line-height:
+    1.2;
+
+  font-weight:
+    700;
+
+  white-space:
+    nowrap;
+}
+
+
+.housekeeping-status--pending {
+  border-color:
+    #fedf89;
+
+  background:
+    #fffaeb;
+
+  color:
+    #93370d;
+}
+
+
+.housekeeping-status--in_progress {
+  border-color:
+    #b2ddff;
+
+  background:
+    #eff8ff;
+
+  color:
+    #175cd3;
+}
+
+
+.housekeeping-status--completed {
+  border-color:
+    #abefc6;
+
+  background:
+    #ecfdf3;
+
+  color:
+    #067647;
+}
+
+
+.housekeeping-status--cancelled {
+  border-color:
+    #fecdca;
+
+  background:
+    #fef3f2;
+
+  color:
+    #b42318;
+}
+
+
+.housekeeping-status--unknown {
+  border-color:
+    var(--hk-border);
+
+  background:
+    var(--hk-surface-soft);
+
+  color:
+    var(--hk-text-muted);
+}
+
+
+/* ============================================================
+   PAGINATION
+============================================================ */
+
+.housekeeping-pagination {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    space-between;
+
+  gap:
+    14px;
+
+  padding:
+    14px 18px;
+
+  border-top:
+    1px solid var(--hk-border);
+
+  color:
+    var(--hk-text-muted);
+
+  font-size:
+    0.8rem;
+}
+
+
+.housekeeping-pagination__actions {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  gap:
+    8px;
+}
+
+
+/* ============================================================
+   TABLET
+============================================================ */
+
+@media (
+  max-width: 1100px
+) {
+
+  .housekeeping-filters {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(
+          0,
+          1fr
+        )
+      );
+  }
+
+
+  .housekeeping-filters__actions {
+    grid-column:
+      1 / -1;
+
+    justify-content:
+      flex-start;
+  }
+}
+
+
+/* ============================================================
+   MOBILE
+============================================================ */
+
+@media (
+  max-width: 680px
+) {
+
+  .housekeeping-page__header {
+    flex-direction:
+      column;
+
+    align-items:
+      stretch;
+
+    gap:
+      14px;
+  }
+
+
+  .housekeeping-page__header
+  > .housekeeping-button {
+    width:
+      100%;
+  }
+
+
+  .housekeeping-filters {
+    grid-template-columns:
+      minmax(
+        0,
+        1fr
+      );
+
+    gap:
+      12px;
+
+    padding:
+      14px;
+  }
+
+
+  .housekeeping-filters__actions {
+    grid-column:
+      auto;
+
+    display:
+      grid;
+
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(
+          0,
+          1fr
+        )
+      );
+  }
+
+
+  .housekeeping-filters__actions
+  .housekeeping-button {
+    width:
+      100%;
+  }
+
+
+  .housekeeping-panel__header {
+    padding:
+      14px;
+  }
+
+
+  .housekeeping-table th,
+  .housekeeping-table td {
+    padding:
+      11px 12px;
+  }
+
+
+  .housekeeping-pagination {
+    align-items:
+      stretch;
+
+    flex-direction:
+      column;
+
+    padding:
+      12px 14px;
+  }
+
+
+  .housekeeping-pagination__actions {
+    display:
+      grid;
+
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(
+          0,
+          1fr
+        )
+      );
+  }
+
+
+  .housekeeping-pagination__actions
+  .housekeeping-button {
+    width:
+      100%;
+  }
+}
+
+
+/* ============================================================
+   REDUCED MOTION
+============================================================ */
+
+@media (
+  prefers-reduced-motion: reduce
+) {
+
+  .housekeeping-button,
+  .housekeeping-field input,
+  .housekeeping-field select {
+    transition:
+      none;
+  }
+}
+
+/* ============================================================
+   MANUAL HOUSEKEEPING TASK MODAL
+============================================================ */
+
+.housekeeping-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.46);
+  backdrop-filter: blur(2px);
+}
+
+.housekeeping-modal {
+  width: min(100%, 560px);
+  max-height: calc(100vh - 48px);
+  overflow: hidden auto;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.18),
+    0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.housekeeping-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.housekeeping-modal__title-block {
+  min-width: 0;
+}
+
+.housekeeping-modal__title-block h2 {
+  margin: 4px 0 0;
+  font-size: 1.2rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.housekeeping-modal__subtitle {
+  margin: 8px 0 0;
+  max-width: 44ch;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: #64748b;
+}
+
+.housekeeping-modal__close {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #475569;
+  font: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.housekeeping-modal__close:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.16);
+  color: #0f172a;
+}
+
+.housekeeping-modal__close:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.housekeeping-modal__close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.housekeeping-modal__close:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.housekeeping-modal__body {
+  display: grid;
+  gap: 18px;
+  padding: 22px 24px 24px;
+}
+
+.housekeeping-modal__hint {
+  margin: -6px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.housekeeping-modal__room-preview {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.housekeeping-modal__room-preview strong {
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: #0f172a;
+}
+
+.housekeeping-modal__room-preview span {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.housekeeping-modal__body textarea {
+  width: 100%;
+  min-height: 104px;
+  resize: vertical;
+}
+
+.housekeeping-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .housekeeping-modal-backdrop {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .housekeeping-modal {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 16px;
+  }
+
+  .housekeeping-modal__header {
+    gap: 14px;
+    padding: 20px 18px 16px;
+  }
+
+  .housekeeping-modal__body {
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .housekeeping-modal__footer {
+    display: grid;
+    grid-template-columns: 1fr;
+    padding: 14px 18px 18px;
+  }
+
+  .housekeeping-modal__footer .housekeeping-button {
+    width: 100%;
+  }
+}
+
+/* ============================================================
+   MANUAL CLEANING PAGE ACTIONS + SUCCESS FEEDBACK
+============================================================ */
+
+.housekeeping-page__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.housekeeping-alert--success {
+  border-color: rgba(22, 101, 52, 0.18);
+  background: #f0fdf4;
+  color: #166534;
+}
+
+@media (max-width: 640px) {
+  .housekeeping-page__actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .housekeeping-page__actions .housekeeping-button {
+    width: 100%;
+  }
+}
+
+/* ============================================================
+   HOUSEKEEPING TASK DETAILS
+============================================================ */
+
+.housekeeping-task-detail-backdrop {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.housekeeping-task-detail {
+  width: min(920px, 100%);
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2);
+}
+
+.housekeeping-task-detail__header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.housekeeping-task-detail__heading {
+  min-width: 0;
+}
+
+.housekeeping-task-detail__heading h2 {
+  margin: 2px 0 4px;
+  font-size: 22px;
+  line-height: 1.25;
+  color: #111827;
+}
+
+.housekeeping-task-detail__heading > p:last-child {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.housekeeping-task-detail__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px 24px 28px;
+  background: #f8fafc;
+}
+
+.housekeeping-task-detail__state {
+  padding: 28px 18px;
+  border: 1px dashed #d0d5dd;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #667085;
+  text-align: center;
+  font-size: 14px;
+}
+
+.housekeeping-task-detail__summary,
+.housekeeping-task-detail__section {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.housekeeping-task-detail__summary {
+  padding: 20px;
+}
+
+.housekeeping-task-detail__summary-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.housekeeping-task-detail__summary-main > div:first-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.housekeeping-task-detail__summary-main strong {
+  color: #111827;
+  font-size: 19px;
+  line-height: 1.3;
+}
+
+.housekeeping-task-detail__summary-main small {
+  color: #667085;
+  font-size: 13px;
+}
+
+.housekeeping-task-detail__label {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.housekeeping-task-detail__badges {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.housekeeping-task-detail__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.housekeeping-task-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.housekeeping-task-detail__item {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #eaecf0;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.housekeeping-task-detail__item > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.housekeeping-task-detail__item > strong {
+  display: block;
+  color: #1d2939;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.housekeeping-task-detail__section {
+  margin-top: 16px;
+  padding: 18px 20px 20px;
+}
+
+.housekeeping-task-detail__section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.housekeeping-task-detail__section-header h3 {
+  margin: 0 0 3px;
+  color: #1d2939;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.housekeeping-task-detail__section-header p {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.housekeeping-task-detail__empty-note {
+  margin-top: 12px;
+  padding: 11px 13px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #f9fafb;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.housekeeping-task-detail__assignment-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #e4e7ec;
+  border-radius: 12px;
+  background: #fcfcfd;
+}
+
+.housekeeping-task-detail__assignment-controls .housekeeping-field {
+  margin: 0;
+}
+
+.housekeeping-task-detail__assignment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.housekeeping-task-detail__assignment-alert {
+  margin: 12px 0 0;
+}
+
+.housekeeping-task-detail__notes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.housekeeping-task-detail__notes > div {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid #eaecf0;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.housekeeping-task-detail__notes span {
+  display: block;
+  margin-bottom: 6px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.housekeeping-task-detail__notes p {
+  margin: 0;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.housekeeping-task-detail__event-count {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 27px;
+  padding: 4px 9px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #f9fafb;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.housekeeping-task-detail__events {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.housekeeping-task-detail__event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+  padding: 0 0 18px;
+}
+
+.housekeeping-task-detail__event:last-child {
+  padding-bottom: 0;
+}
+
+.housekeeping-task-detail__event:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  bottom: -1px;
+  left: 7px;
+  width: 2px;
+  background: #e4e7ec;
+}
+
+.housekeeping-task-detail__event-marker {
+  position: relative;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  margin: 4px 0 0 3px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #667085;
+  box-shadow: 0 0 0 2px #d0d5dd;
+}
+
+.housekeeping-task-detail__event-content {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #eaecf0;
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.housekeeping-task-detail__event-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.housekeeping-task-detail__event-topline strong {
+  color: #1d2939;
+  font-size: 13px;
+}
+
+.housekeeping-task-detail__event-topline time {
+  flex: 0 0 auto;
+  color: #667085;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.housekeeping-task-detail__event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 5px;
+  color: #667085;
+  font-size: 11px;
+}
+
+.housekeeping-task-detail__event-content > p {
+  margin: 9px 0 0;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.housekeeping-task-detail__footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.housekeeping-task-detail__footer-feedback {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.housekeeping-task-detail__footer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.housekeeping-task-detail__action-feedback {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.housekeeping-task-detail__action-feedback--error {
+  border-color: rgba(180, 35, 24, 0.18);
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.housekeeping-task-detail__action-feedback--success {
+  border-color: rgba(22, 101, 52, 0.18);
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.housekeeping-task-detail__completion-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.housekeeping-task-detail__completion-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.housekeeping-task-detail__completion-copy strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.housekeeping-task-detail__completion-copy span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.housekeeping-task-detail__completion-panel .housekeeping-field {
+  margin: 0;
+}
+
+.housekeeping-task-detail__completion-panel textarea {
+  width: 100%;
+  min-height: 84px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.housekeeping-task-detail__completion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.housekeeping-task-detail__cancellation-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px 24px;
+  border-top: 1px solid #fecaca;
+  background: #fffafa;
+}
+
+.housekeeping-task-detail__cancellation-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.housekeeping-task-detail__cancellation-copy strong {
+  color: #991b1b;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.housekeeping-task-detail__cancellation-copy span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.housekeeping-task-detail__cancellation-panel .housekeeping-field {
+  margin: 0;
+}
+
+.housekeeping-task-detail__cancellation-panel textarea {
+  width: 100%;
+  min-height: 84px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.housekeeping-task-detail__cancellation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.housekeeping-button--danger {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b42318;
+}
+
+.housekeeping-button--danger:hover:not(:disabled) {
+  border-color: #fda4af;
+  background: #ffe4e6;
+}
+
+.housekeeping-button--danger:focus-visible {
+  outline: 3px solid rgba(220, 38, 38, 0.16);
+  outline-offset: 2px;
+}
+
+.housekeeping-button--danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 800px) {
+  .housekeeping-task-detail__notes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .housekeeping-task-detail-backdrop {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .housekeeping-task-detail {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-width: 0;
+    border-radius: 0;
+  }
+
+  .housekeeping-task-detail__header {
+    gap: 14px;
+    padding: 17px 16px 14px;
+  }
+
+  .housekeeping-task-detail__heading h2 {
+    font-size: 19px;
+  }
+
+  .housekeeping-task-detail__body {
+    padding: 16px;
+  }
+
+  .housekeeping-task-detail__summary,
+  .housekeeping-task-detail__section {
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .housekeeping-task-detail__summary-main {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .housekeeping-task-detail__badges {
+    justify-content: flex-start;
+  }
+
+  .housekeeping-task-detail__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .housekeeping-task-detail__section-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .housekeeping-task-detail__event-topline {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .housekeeping-task-detail__event-topline time {
+    white-space: normal;
+  }
+
+  .housekeeping-task-detail__assignment-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .housekeeping-task-detail__assignment-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .housekeeping-task-detail__assignment-actions .housekeeping-button {
+    width: 100%;
+  }
+
+  .housekeeping-task-detail__footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 16px 16px;
+  }
+
+  .housekeeping-task-detail__footer-feedback,
+  .housekeeping-task-detail__footer-actions {
+    width: 100%;
+  }
+
+  .housekeeping-task-detail__action-feedback {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .housekeeping-task-detail__footer-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .housekeeping-task-detail__completion-panel {
+    padding: 14px 16px;
+  }
+
+  .housekeeping-task-detail__completion-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .housekeeping-task-detail__completion-actions .housekeeping-button {
+    width: 100%;
+  }
+
+  .housekeeping-task-detail__cancellation-panel {
+    padding: 14px 16px;
+  }
+
+  .housekeeping-task-detail__cancellation-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .housekeeping-task-detail__cancellation-actions .housekeeping-button {
+    width: 100%;
+  }
+
+  .housekeeping-task-detail__footer .housekeeping-button {
+    width: 100%;
+  }
+}
+
+.housekeeping-task-detail__cancellation-panel .housekeeping-field > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+.housekeeping-task-detail__note-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px 24px;
+  border-top: 1px solid #dbe3ee;
+  background: #f8fafc;
+}
+
+.housekeeping-task-detail__note-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.housekeeping-task-detail__note-copy strong {
+  color: #1e293b;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.housekeeping-task-detail__note-copy span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.housekeeping-task-detail__note-panel .housekeeping-field {
+  margin: 0;
+}
+
+.housekeeping-task-detail__note-panel .housekeeping-field > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.housekeeping-task-detail__note-panel textarea {
+  width: 100%;
+  min-height: 84px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.housekeeping-task-detail__note-meta {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.housekeeping-task-detail__note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.housekeeping-task-detail__note-feedback {
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.housekeeping-task-detail__note-feedback--success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.housekeeping-task-detail__note-feedback--error {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #b42318;
+}
+
+@media (max-width: 640px) {
+  .housekeeping-task-detail__note-panel {
+    padding: 14px 16px;
+  }
+
+  .housekeeping-task-detail__note-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .housekeeping-task-detail__note-actions .housekeeping-button {
+    width: 100%;
+  }
+}
+
+/* ============================================================
+   FINAL OPERATIONS UI — HOUSEKEEPING
+============================================================ */
+
+.housekeeping-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.housekeeping-page__header {
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.housekeeping-page__eyebrow {
+  margin-bottom: 5px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.housekeeping-page__header h1 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.housekeeping-page__subtitle {
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  line-height: 1.55;
+}
+
+.housekeeping-filters {
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.5fr)
+    repeat(4, minmax(130px, 1fr))
+    auto;
+
+  gap: var(--space-3);
+
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--hms-panel-radius);
+
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.housekeeping-field {
+  min-width: 0;
+}
+
+.housekeeping-field > span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.housekeeping-field input,
+.housekeeping-field select {
+  min-height: 40px;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.housekeeping-filters__actions {
+  align-self: end;
+}
+
+.housekeeping-button {
+  min-height: 40px;
+  border-radius: var(--radius-lg);
+}
+
+.housekeeping-button--primary {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.housekeeping-button--secondary,
+.housekeeping-button--ghost {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.housekeeping-panel {
+  overflow: hidden;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--hms-panel-radius);
+
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.housekeeping-panel__header {
+  padding: var(--space-4) var(--space-5);
+
+  border-bottom:
+    1px solid var(--color-divider);
+}
+
+.housekeeping-panel__header h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.housekeeping-panel__header p {
+  color: var(--color-text-muted);
+}
+
+.housekeeping-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.housekeeping-table {
+  width: 100%;
+  min-width: 900px;
+}
+
+.housekeeping-table th {
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.housekeeping-table td {
+  color: var(--color-text);
+  vertical-align: middle;
+}
+
+.housekeeping-table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+.housekeeping-pagination {
+  border-top: 1px solid var(--color-divider);
+}
+
+.housekeeping-alert {
+  border-radius: var(--radius-lg);
+}
+
+@media (max-width: 1200px) {
+  .housekeeping-filters {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .housekeeping-page__header {
+    flex-direction: column;
+  }
+
+  .housekeeping-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .housekeeping-filters__actions {
+    width: 100%;
+  }
+
+  .housekeeping-filters__actions .housekeeping-button {
+    width: 100%;
+  }
+}
+
+
+/* UI-HK2 HOUSEKEEPING PROFESSIONAL REDESIGN */
+
+
+/* ============================================================
+   PAGE FOUNDATION
+============================================================ */
+
+.housekeeping-page {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+
+  overflow-x: hidden;
+
+  padding:
+    0
+    0
+    28px;
+}
+
+
+.housekeeping-page *,
+.housekeeping-page *::before,
+.housekeeping-page *::after {
+  box-sizing: border-box;
+}
+
+
+/* ============================================================
+   PAGE HEADER
+============================================================ */
+
+.housekeeping-page__header {
+  display: flex;
+
+  align-items: flex-end;
+  justify-content: space-between;
+
+  gap: 24px;
+
+  width: 100%;
+
+  height: auto;
+  min-height: 0;
+
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+
+.housekeeping-page__header > div:first-child {
+  min-width: 0;
+}
+
+
+.housekeeping-page__eyebrow {
+  margin:
+    0
+    0
+    4px;
+
+  color:
+    #64748b;
+
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+
+.housekeeping-page__header h1 {
+  margin: 0;
+
+  color:
+    #0f172a;
+
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+
+.housekeeping-page__subtitle {
+  margin:
+    5px
+    0
+    0;
+
+  max-width: 720px;
+
+  color:
+    #64748b;
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+
+.housekeeping-page__actions {
+  display: flex;
+
+  flex: 0 0 auto;
+
+  align-items: center;
+
+  gap: 8px;
+}
+
+
+/* ============================================================
+   BUTTON SYSTEM
+============================================================ */
+
+.housekeeping-button {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 7px;
+
+  min-height: 40px;
+
+  padding:
+    0
+    14px;
+
+  border-radius: 9px;
+
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+
+  white-space: nowrap;
+
+  cursor: pointer;
+
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+
+.housekeeping-button:not(:disabled):active {
+  transform:
+    translateY(1px);
+}
+
+
+.housekeeping-button--primary {
+  border:
+    1px solid
+    #0f235b;
+
+  background:
+    #0f235b;
+
+  color:
+    #ffffff;
+}
+
+
+.housekeeping-button--primary:hover:not(:disabled) {
+  background:
+    #172f70;
+}
+
+
+.housekeeping-button--secondary,
+.housekeeping-button--ghost {
+  border:
+    1px solid
+    #d7dfeb;
+
+  background:
+    #ffffff;
+
+  color:
+    #0f172a;
+}
+
+
+.housekeeping-button--secondary:hover:not(:disabled),
+.housekeeping-button--ghost:hover:not(:disabled) {
+  border-color:
+    #b9c6da;
+
+  background:
+    #f8fafc;
+}
+
+
+/* ============================================================
+   FILTER PANEL
+============================================================ */
+
+.housekeeping-filters {
+  display: grid;
+
+  grid-template-columns:
+    minmax(220px, 1.5fr)
+    minmax(170px, 1fr)
+    minmax(180px, 1fr)
+    minmax(150px, 1fr)
+    auto;
+
+  align-items: end;
+
+  gap: 12px;
+
+  width: 100%;
+
+  margin:
+    0
+    0
+    16px;
+
+  padding: 16px;
+
+  border:
+    1px solid
+    #dce3ed;
+
+  border-radius: 12px;
+
+  background:
+    #ffffff;
+
+  box-shadow:
+    0 1px 2px
+    rgba(15, 23, 42, 0.03);
+}
+
+
+.housekeeping-field {
+  display: flex;
+
+  min-width: 0;
+
+  flex-direction: column;
+
+  gap: 6px;
+}
+
+
+.housekeeping-field > span {
+  color:
+    #475569;
+
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+
+.housekeeping-field input,
+.housekeeping-field select,
+.housekeeping-field textarea {
+  width: 100%;
+  min-width: 0;
+
+  min-height: 40px;
+
+  border:
+    1px solid
+    #d7dfeb;
+
+  border-radius: 8px;
+
+  background:
+    #ffffff;
+
+  color:
+    #0f172a;
+
+  font-size: 13px;
+}
+
+
+.housekeeping-field input,
+.housekeeping-field select {
+  padding:
+    0
+    12px;
+}
+
+
+.housekeeping-field textarea {
+  padding:
+    10px
+    12px;
+}
+
+
+.housekeeping-field input:focus,
+.housekeeping-field select:focus,
+.housekeeping-field textarea:focus {
+  outline: none;
+
+  border-color:
+    #6b82bb;
+
+  box-shadow:
+    0 0 0 3px
+    rgba(15, 35, 91, 0.07);
+}
+
+
+.housekeeping-filters__actions {
+  display: flex;
+
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 8px;
+
+  min-width: 0;
+}
+
+
+/* ============================================================
+   ALERTS
+============================================================ */
+
+.housekeeping-alert {
+  margin-bottom: 14px;
+
+  padding:
+    11px
+    13px;
+
+  border-radius: 9px;
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   MAIN TASK PANEL
+============================================================ */
+
+.housekeeping-panel {
+  width: 100%;
+  min-width: 0;
+
+  overflow: hidden;
+
+  border:
+    1px solid
+    #dce3ed;
+
+  border-radius: 12px;
+
+  background:
+    #ffffff;
+
+  box-shadow:
+    0 1px 2px
+    rgba(15, 23, 42, 0.03);
+}
+
+
+.housekeeping-panel__header {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  padding:
+    14px
+    16px;
+
+  border-bottom:
+    1px solid
+    #e5eaf1;
+
+  background:
+    #ffffff;
+}
+
+
+.housekeeping-panel__header h2 {
+  margin: 0;
+
+  color:
+    #0f172a;
+
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+
+.housekeeping-panel__header p {
+  margin:
+    3px
+    0
+    0;
+
+  color:
+    #64748b;
+
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+
+/* ============================================================
+   DESKTOP TABLE
+============================================================ */
+
+.housekeeping-table-wrap {
+  width: 100%;
+  min-width: 0;
+
+  overflow-x: auto;
+}
+
+
+.housekeeping-table {
+  width: 100%;
+
+  min-width: 1000px;
+
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+
+.housekeeping-table thead {
+  background:
+    #f8fafc;
+}
+
+
+.housekeeping-table th {
+  padding:
+    11px
+    12px;
+
+  border-bottom:
+    1px solid
+    #e5eaf1;
+
+  color:
+    #64748b;
+
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+
+  text-align: left;
+
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+
+  white-space: nowrap;
+}
+
+
+.housekeeping-table td {
+  padding:
+    12px;
+
+  border-bottom:
+    1px solid
+    #e8edf3;
+
+  vertical-align: middle;
+
+  color:
+    #0f172a;
+
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+
+.housekeeping-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+
+.housekeeping-table tbody tr:hover td {
+  background:
+    #fbfcfe;
+}
+
+
+/* ============================================================
+   TASK COLUMN
+============================================================ */
+
+.housekeeping-table th:first-child,
+.housekeeping-table td:first-child {
+  width: 170px;
+  min-width: 170px;
+}
+
+
+.housekeeping-table td:first-child {
+  vertical-align: top;
+}
+
+
+.housekeeping-table td:first-child > strong {
+  display: block;
+
+  margin:
+    0
+    0
+    8px;
+
+  color:
+    #0f172a;
+
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+
+.housekeeping-table td:first-child
+.housekeeping-button {
+  width: auto;
+  min-width: 108px;
+
+  min-height: 34px;
+
+  margin: 0;
+
+  padding:
+    0
+    12px;
+
+  font-size: 11px;
+}
+
+
+/* ============================================================
+   TABLE CONTENT STACKS
+============================================================ */
+
+.housekeeping-cell-stack {
+  display: flex;
+
+  min-width: 0;
+
+  flex-direction: column;
+
+  gap: 2px;
+}
+
+
+.housekeeping-cell-stack strong {
+  color:
+    #0f172a;
+
+  font-size: 12px;
+  font-weight: 700;
+}
+
+
+.housekeeping-cell-stack span {
+  color:
+    #64748b;
+
+  font-size: 11px;
+  line-height: 1.4;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* ============================================================
+   STATUS BADGES
+============================================================ */
+
+.housekeeping-status {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  min-height: 26px;
+
+  padding:
+    4px
+    9px;
+
+  border-radius: 999px;
+
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   PAGINATION
+============================================================ */
+
+.housekeeping-pagination {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  padding:
+    12px
+    16px;
+
+  border-top:
+    1px solid
+    #e5eaf1;
+
+  background:
+    #fbfcfe;
+
+  color:
+    #64748b;
+
+  font-size: 11px;
+}
+
+
+.housekeeping-pagination__actions {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+}
+
+
+.housekeeping-pagination
+.housekeeping-button {
+  min-height: 36px;
+}
+
+
+/* ============================================================
+   TASK DETAILS / MANUAL MODAL VISUAL CONSISTENCY
+============================================================ */
+
+.housekeeping-modal,
+.housekeeping-task-detail {
+  max-width:
+    min(
+      720px,
+      calc(100vw - 32px)
+    );
+
+  border-radius: 14px;
+}
+
+
+.housekeeping-modal__header,
+.housekeeping-task-detail__header {
+  padding:
+    16px
+    18px;
+
+  border-bottom:
+    1px solid
+    #e5eaf1;
+}
+
+
+.housekeeping-modal__body,
+.housekeeping-task-detail__body {
+  padding:
+    18px;
+}
+
+
+.housekeeping-modal__footer {
+  padding:
+    14px
+    18px;
+
+  border-top:
+    1px solid
+    #e5eaf1;
+}
+
+
+/* ============================================================
+   TABLET
+============================================================ */
+
+@media (max-width: 1180px) {
+
+  .housekeeping-filters {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+
+
+  .housekeeping-filters__actions {
+    grid-column:
+      1 / -1;
+
+    justify-content:
+      flex-end;
+  }
+}
+
+
+/* ============================================================
+   MOBILE HEADER HARD RESET
+============================================================ */
+
+@media (max-width: 760px) {
+
+  /*
+   * Prevent the legacy flex-height bug that created the same
+   * large blank space previously seen on Booking Desk.
+   */
+
+  .housekeeping-page
+  > .housekeeping-page__header {
+    display: grid !important;
+
+    grid-template-columns:
+      minmax(0, 1fr) !important;
+
+    grid-template-rows:
+      max-content
+      max-content !important;
+
+    grid-auto-rows:
+      max-content !important;
+
+    align-items:
+      start !important;
+
+    align-content:
+      start !important;
+
+    justify-items:
+      stretch !important;
+
+    justify-content:
+      stretch !important;
+
+    width:
+      100% !important;
+
+    height:
+      auto !important;
+
+    min-height:
+      0 !important;
+
+    max-height:
+      none !important;
+
+    block-size:
+      auto !important;
+
+    min-block-size:
+      0 !important;
+
+    max-block-size:
+      none !important;
+
+    flex:
+      none !important;
+
+    gap:
+      12px !important;
+
+    margin:
+      0 0 14px !important;
+
+    padding:
+      0 !important;
+  }
+
+
+  .housekeeping-page
+  > .housekeeping-page__header
+  > div:first-child {
+    width:
+      100% !important;
+
+    height:
+      auto !important;
+
+    min-height:
+      0 !important;
+
+    max-height:
+      none !important;
+
+    block-size:
+      auto !important;
+
+    min-block-size:
+      0 !important;
+
+    margin:
+      0 !important;
+
+    padding:
+      0 !important;
+  }
+
+
+  .housekeeping-page__actions {
+    display: grid !important;
+
+    grid-template-columns:
+      1fr !important;
+
+    gap:
+      8px !important;
+
+    width:
+      100% !important;
+
+    height:
+      auto !important;
+
+    min-height:
+      0 !important;
+
+    margin:
+      0 !important;
+
+    padding:
+      0 !important;
+  }
+
+
+  .housekeeping-page__actions
+  .housekeeping-button {
+    width: 100%;
+  }
+
+
+  /* ========================================================
+     MOBILE FILTERS
+  ======================================================== */
+
+  .housekeeping-filters {
+    grid-template-columns:
+      1fr;
+
+    gap: 12px;
+
+    margin-bottom: 14px;
+
+    padding: 14px;
+  }
+
+
+  .housekeeping-filters__actions {
+    grid-column: auto;
+
+    display: grid;
+
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+
+    width: 100%;
+  }
+
+
+  .housekeeping-filters__actions
+  .housekeeping-button {
+    width: 100%;
+  }
+
+
+  /* ========================================================
+     MOBILE TASK CARDS
+  ======================================================== */
+
+  .housekeeping-panel {
+    overflow: visible;
+
+    border: 0;
+
+    background: transparent;
+
+    box-shadow: none;
+  }
+
+
+  .housekeeping-panel__header {
+    margin-bottom: 10px;
+
+    padding:
+      14px;
+
+    border:
+      1px solid
+      #dce3ed;
+
+    border-radius: 12px;
+
+    background:
+      #ffffff;
+  }
+
+
+  .housekeeping-table-wrap {
+    overflow: visible;
+  }
+
+
+  .housekeeping-table {
+    display: block;
+
+    width: 100%;
+    min-width: 0;
+  }
+
+
+  .housekeeping-table thead {
+    display: none;
+  }
+
+
+  .housekeeping-table tbody {
+    display: grid;
+
+    gap: 10px;
+
+    width: 100%;
+  }
+
+
+  .housekeeping-table tbody tr {
+    display: grid;
+
+    grid-template-columns:
+      1fr;
+
+    width: 100%;
+
+    overflow: hidden;
+
+    border:
+      1px solid
+      #dce3ed;
+
+    border-radius: 12px;
+
+    background:
+      #ffffff;
+
+    box-shadow:
+      0 1px 2px
+      rgba(15, 23, 42, 0.03);
+  }
+
+
+  .housekeeping-table tbody tr:hover td {
+    background:
+      transparent;
+  }
+
+
+  .housekeeping-table tbody td {
+    display: grid;
+
+    grid-template-columns:
+      92px
+      minmax(0, 1fr);
+
+    align-items: start;
+
+    gap: 12px;
+
+    width: 100%;
+    min-width: 0;
+
+    padding:
+      10px
+      13px;
+
+    border:
+      0;
+
+    border-bottom:
+      1px solid
+      #edf1f5;
+
+    background:
+      #ffffff;
+
+    font-size: 12px;
+
+    overflow-wrap: anywhere;
+  }
+
+
+  .housekeeping-table tbody td:last-child {
+    border-bottom: 0;
+  }
+
+
+  .housekeeping-table tbody td::before {
+    color:
+      #64748b;
+
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.4;
+
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+
+  .housekeeping-table tbody td:nth-child(1)::before {
+    content: "Task";
+  }
+
+
+  .housekeeping-table tbody td:nth-child(2)::before {
+    content: "Room";
+  }
+
+
+  .housekeeping-table tbody td:nth-child(3)::before {
+    content: "Source";
+  }
+
+
+  .housekeeping-table tbody td:nth-child(4)::before {
+    content: "Type";
+  }
+
+
+  .housekeeping-table tbody td:nth-child(5)::before {
+    content: "Status";
+  }
+
+
+  .housekeeping-table tbody td:nth-child(6)::before {
+    content: "Assignment";
+  }
+
+
+  .housekeeping-table tbody td:nth-child(7)::before {
+    content: "Created";
+  }
+
+
+  /*
+   * Task row gets stronger visual hierarchy.
+   */
+
+  .housekeeping-table tbody td:first-child {
+    grid-template-columns:
+      92px
+      minmax(0, 1fr);
+
+    width: 100%;
+    min-width: 0;
+
+    padding:
+      12px
+      13px;
+
+    border-bottom:
+      1px solid
+      #e5eaf1;
+
+    background:
+      #f8fafc;
+  }
+
+
+  .housekeeping-table tbody td:first-child > strong {
+    display: block;
+
+    margin:
+      0
+      0
+      8px;
+
+    font-size: 14px;
+  }
+
+
+  .housekeeping-table tbody td:first-child
+  .housekeeping-button {
+    width: 100%;
+
+    min-width: 0;
+    min-height: 36px;
+  }
+
+
+  /*
+   * Loading / empty state row.
+   */
+
+  .housekeeping-table tbody td.housekeeping-table__state {
+    display: block;
+
+    grid-column:
+      1 / -1;
+
+    padding:
+      28px
+      16px;
+
+    text-align: center;
+  }
+
+
+  .housekeeping-table tbody
+  td.housekeeping-table__state::before {
+    display: none;
+  }
+
+
+  /* ========================================================
+     MOBILE PAGINATION
+  ======================================================== */
+
+  .housekeeping-pagination {
+    align-items: stretch;
+
+    flex-direction: column;
+
+    margin-top: 10px;
+
+    padding: 12px;
+
+    border:
+      1px solid
+      #dce3ed;
+
+    border-radius: 12px;
+
+    background:
+      #ffffff;
+  }
+
+
+  .housekeeping-pagination__actions {
+    display: grid;
+
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+
+    width: 100%;
+  }
+
+
+  .housekeeping-pagination__actions
+  .housekeeping-button {
+    width: 100%;
+  }
+
+
+  /* ========================================================
+     MOBILE MODALS
+  ======================================================== */
+
+  .housekeeping-modal,
+  .housekeeping-task-detail {
+    width:
+      calc(100vw - 24px);
+
+    max-width:
+      calc(100vw - 24px);
+
+    max-height:
+      calc(100vh - 24px);
+
+    border-radius: 12px;
+  }
+
+
+  .housekeeping-modal__header,
+  .housekeeping-task-detail__header {
+    padding:
+      14px;
+  }
+
+
+  .housekeeping-modal__body,
+  .housekeeping-task-detail__body {
+    padding:
+      14px;
+  }
+
+
+  .housekeeping-modal__footer {
+    display: grid;
+
+    grid-template-columns:
+      1fr;
+
+    gap: 8px;
+
+    padding:
+      12px
+      14px;
+  }
+
+
+  .housekeeping-modal__footer
+  .housekeeping-button {
+    width: 100%;
+  }
+}
+
+
+/* ============================================================
+   SMALL MOBILE
+============================================================ */
+
+@media (max-width: 420px) {
+
+  .housekeeping-page__header {
+    gap:
+      10px !important;
+  }
+
+
+  .housekeeping-filters__actions {
+    grid-template-columns:
+      1fr;
+  }
+
+
+  .housekeeping-table tbody td,
+  .housekeeping-table tbody td:first-child {
+    grid-template-columns:
+      76px
+      minmax(0, 1fr);
+
+    gap: 10px;
+  }
+
+
+  .housekeeping-pagination__actions {
+    grid-template-columns:
+      1fr;
+  }
+}
+

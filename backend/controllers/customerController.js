@@ -1719,3 +1719,573 @@ exports.getCustomerStats =
       );
     }
   };
+
+/* ============================================================
+   GET COMPLETE CUSTOMER DETAILS
+
+   Read-only hotel-scoped customer history endpoint.
+
+   Source of truth:
+   - customers
+   - bookings
+   - booking_room_history
+   - rooms
+   - payments
+   - reservation_groups
+   - reservation_group_payments
+   - customer_documents
+
+   Important:
+   - hotel_id comes only from authenticated Admin context
+   - client cannot choose hotel_id
+   - no duplicated customer history is stored
+============================================================ */
+
+exports.getCustomerDetails =
+  async (req, res) => {
+    const hotelId =
+      getHotelId(req);
+
+    const customerId =
+      parsePositiveInteger(
+        req.params.id
+      );
+
+    if (!hotelId) {
+      return sendError(
+        res,
+        403,
+        "HOTEL_CONTEXT_MISSING",
+        "Your Admin account is not linked to a valid hotel."
+      );
+    }
+
+    if (!customerId) {
+      return sendError(
+        res,
+        400,
+        "INVALID_CUSTOMER_ID",
+        "The customer ID is invalid."
+      );
+    }
+
+    try {
+      const [[profile]] =
+        await db.query(
+          `
+            SELECT
+              customer_id,
+              full_name,
+              email,
+              phone,
+              gender,
+              nationality,
+              address,
+              id_proof_type,
+              id_proof_number,
+              profile_image,
+              created_at,
+              updated_at
+
+            FROM customers
+
+            WHERE hotel_id = ?
+              AND customer_id = ?
+
+            LIMIT 1
+          `,
+          [
+            hotelId,
+            customerId,
+          ]
+        );
+
+      if (!profile) {
+        return sendError(
+          res,
+          404,
+          "CUSTOMER_NOT_FOUND",
+          "The customer was not found in your hotel."
+        );
+      }
+
+      const [
+        [bookings],
+        [roomHistory],
+        [payments],
+        [reservationPayments],
+        [documents],
+        [summaryRows],
+      ] =
+        await Promise.all([
+          db.query(
+            `
+              SELECT
+                b.booking_id,
+                b.reservation_group_id,
+                b.booking_code,
+                b.booking_source,
+                b.stay_type,
+                b.room_id,
+                r.room_number,
+                r.room_type,
+                b.booked_rate_per_night,
+                b.check_in,
+                b.check_out,
+                b.actual_check_in,
+                b.actual_check_out,
+                b.cancellation_source,
+                b.cancellation_reason,
+                b.cancelled_at,
+                b.total_guests,
+                b.guest_roster_captured,
+                b.booking_status,
+                b.payment_status,
+                b.total_amount,
+                b.special_request,
+                b.created_at,
+                b.updated_at
+
+              FROM bookings b
+
+              LEFT JOIN rooms r
+                ON r.hotel_id = b.hotel_id
+               AND r.room_id = b.room_id
+
+              WHERE b.hotel_id = ?
+                AND b.customer_id = ?
+
+              ORDER BY
+                COALESCE(
+                  b.actual_check_in,
+                  b.check_in
+                ) DESC,
+                b.booking_id DESC
+            `,
+            [
+              hotelId,
+              customerId,
+            ]
+          ),
+
+          db.query(
+            `
+              SELECT
+                brh.room_history_id,
+                brh.booking_id,
+                b.booking_code,
+                brh.room_id,
+                r.room_number,
+                r.room_type,
+                brh.assignment_start,
+                brh.assignment_end,
+                brh.assignment_status,
+                brh.rate_per_night,
+                brh.change_reason,
+                brh.notes,
+                brh.changed_by_admin_id,
+                brh.created_at
+
+              FROM booking_room_history brh
+
+              INNER JOIN bookings b
+                ON b.hotel_id = brh.hotel_id
+               AND b.booking_id = brh.booking_id
+               AND b.customer_id = ?
+
+              LEFT JOIN rooms r
+                ON r.hotel_id = brh.hotel_id
+               AND r.room_id = brh.room_id
+
+              WHERE brh.hotel_id = ?
+
+              ORDER BY
+                brh.assignment_start DESC,
+                brh.room_history_id DESC
+            `,
+            [
+              customerId,
+              hotelId,
+            ]
+          ),
+
+          db.query(
+            `
+              SELECT
+                p.payment_id,
+                p.booking_id,
+                b.booking_code,
+                p.group_payment_id,
+                p.transaction_type,
+                p.payment_stage,
+                p.amount,
+                p.payment_method,
+                p.transaction_id,
+                p.created_by_admin_id,
+                p.notes,
+                p.payment_status,
+                p.payment_date
+
+              FROM payments p
+
+              INNER JOIN bookings b
+                ON b.hotel_id = p.hotel_id
+               AND b.booking_id = p.booking_id
+
+              WHERE p.hotel_id = ?
+                AND b.customer_id = ?
+
+              ORDER BY
+                p.payment_date DESC,
+                p.payment_id DESC
+            `,
+            [
+              hotelId,
+              customerId,
+            ]
+          ),
+
+          db.query(
+            `
+              SELECT
+                rgp.group_payment_id,
+                rgp.reservation_group_id,
+                rg.group_code,
+                rgp.amount,
+                rgp.payment_method,
+                rgp.transaction_id,
+                rgp.notes,
+                rgp.created_by_admin_id,
+                rgp.payment_status,
+                rgp.created_at
+
+              FROM reservation_group_payments rgp
+
+              INNER JOIN reservation_groups rg
+                ON rg.hotel_id = rgp.hotel_id
+               AND rg.reservation_group_id =
+                   rgp.reservation_group_id
+
+              WHERE rgp.hotel_id = ?
+                AND rg.customer_id = ?
+
+              ORDER BY
+                rgp.created_at DESC,
+                rgp.group_payment_id DESC
+            `,
+            [
+              hotelId,
+              customerId,
+            ]
+          ),
+
+          db.query(
+            `
+              SELECT
+                document_id,
+                document_type,
+                document_number,
+                original_file_name,
+                mime_type,
+                file_size_bytes,
+                is_verified,
+                uploaded_by_admin_id,
+                created_at,
+                updated_at
+
+              FROM customer_documents
+
+              WHERE hotel_id = ?
+                AND customer_id = ?
+
+              ORDER BY
+                created_at DESC,
+                document_id DESC
+            `,
+            [
+              hotelId,
+              customerId,
+            ]
+          ),
+
+          db.query(
+            `
+              SELECT
+                COUNT(*) AS lifetimeBookings,
+
+                SUM(
+                  CASE
+                    WHEN actual_check_in IS NOT NULL
+                    THEN 1
+                    ELSE 0
+                  END
+                ) AS stayedBookings,
+
+                COALESCE(
+                  SUM(
+                    CASE
+                      WHEN actual_check_in IS NOT NULL
+                      THEN GREATEST(
+                        1,
+                        CEIL(
+                          TIMESTAMPDIFF(
+                            MINUTE,
+                            actual_check_in,
+                            COALESCE(
+                              actual_check_out,
+                              NOW()
+                            )
+                          ) / 1440.0
+                        )
+                      )
+                      ELSE 0
+                    END
+                  ),
+                  0
+                ) AS totalNights,
+
+                SUM(
+                  CASE
+                    WHEN booking_status = 'cancelled'
+                    THEN 1
+                    ELSE 0
+                  END
+                ) AS cancellations,
+
+                SUM(
+                  CASE
+                    WHEN booking_status = 'no_show'
+                    THEN 1
+                    ELSE 0
+                  END
+                ) AS noShows,
+
+                MIN(
+                  CASE
+                    WHEN actual_check_in IS NOT NULL
+                    THEN actual_check_in
+                    ELSE NULL
+                  END
+                ) AS firstStay,
+
+                MAX(
+                  CASE
+                    WHEN actual_check_in IS NOT NULL
+                    THEN actual_check_in
+                    ELSE NULL
+                  END
+                ) AS lastStay,
+
+                MIN(
+                  CASE
+                    WHEN booking_status IN (
+                      'confirmed',
+                      'pending'
+                    )
+                     AND check_in > NOW()
+                    THEN check_in
+                    ELSE NULL
+                  END
+                ) AS upcomingStay
+
+              FROM bookings
+
+              WHERE hotel_id = ?
+                AND customer_id = ?
+            `,
+            [
+              hotelId,
+              customerId,
+            ]
+          ),
+        ]);
+
+      const rawSummary =
+        summaryRows?.[0] || {};
+
+      const lifetimeBookings =
+        Number(
+          rawSummary.lifetimeBookings || 0
+        );
+
+      const stayedBookings =
+        Number(
+          rawSummary.stayedBookings || 0
+        );
+
+      const totalNights =
+        Number(
+          rawSummary.totalNights || 0
+        );
+
+      const cancellations =
+        Number(
+          rawSummary.cancellations || 0
+        );
+
+      const noShows =
+        Number(
+          rawSummary.noShows || 0
+        );
+
+      const totalSpent =
+        payments.reduce(
+          (
+            total,
+            payment
+          ) => {
+            if (
+              payment.payment_status !==
+              "success"
+            ) {
+              return total;
+            }
+
+            const amount =
+              Number(
+                payment.amount || 0
+              );
+
+            return (
+              payment.transaction_type ===
+              "refund"
+            )
+              ? total - amount
+              : total + amount;
+          },
+          0
+        );
+
+      const currentBooking =
+        bookings.find(
+          (booking) =>
+            booking.booking_status ===
+            "checked_in"
+        ) || null;
+
+      const upcomingBooking =
+        bookings
+          .filter(
+            (booking) =>
+              (
+                booking.booking_status ===
+                  "confirmed" ||
+                booking.booking_status ===
+                  "pending"
+              ) &&
+              new Date(
+                booking.check_in
+              ).getTime() >
+                Date.now()
+          )
+          .sort(
+            (left, right) =>
+              new Date(
+                left.check_in
+              ).getTime() -
+              new Date(
+                right.check_in
+              ).getTime()
+          )[0] || null;
+
+      const stats = {
+        lifetimeBookings,
+        stayedBookings,
+        totalNights,
+
+        averageStayNights:
+          stayedBookings > 0
+            ? Number(
+                (
+                  totalNights /
+                  stayedBookings
+                ).toFixed(2)
+              )
+            : 0,
+
+        totalSpent:
+          Math.max(
+            0,
+            Number(
+              totalSpent.toFixed(2)
+            )
+          ),
+
+        cancellations,
+        noShows,
+
+        firstStay:
+          rawSummary.firstStay ||
+          null,
+
+        lastStay:
+          rawSummary.lastStay ||
+          null,
+
+        upcomingStay:
+          rawSummary.upcomingStay ||
+          null,
+      };
+
+      const insights = {
+        isRepeatGuest:
+          stayedBookings > 1,
+
+        bookingFrequency:
+          lifetimeBookings,
+
+        completedStays:
+          stayedBookings,
+
+        documentCount:
+          documents.length,
+
+        successfulPaymentCount:
+          payments.filter(
+            (payment) =>
+              payment.payment_status ===
+              "success"
+          ).length,
+
+        currentStatus:
+          currentBooking
+            ? "checked_in"
+            : upcomingBooking
+              ? "upcoming"
+              : stayedBookings > 0
+                ? "returning_guest"
+                : "new_guest",
+      };
+
+      return res
+        .status(200)
+        .json({
+          success: true,
+
+          data: {
+            profile,
+            stats,
+            insights,
+            currentBooking,
+            upcomingBooking,
+            bookings,
+            roomHistory,
+            payments,
+            reservationPayments,
+            documents,
+          },
+        });
+    } catch (error) {
+      logCustomerError(
+        "GET_CUSTOMER_DETAILS",
+        error
+      );
+
+      return sendError(
+        res,
+        500,
+        "CUSTOMER_DETAILS_FETCH_FAILED",
+        "Complete customer details could not be loaded. Please try again."
+      );
+    }
+  };

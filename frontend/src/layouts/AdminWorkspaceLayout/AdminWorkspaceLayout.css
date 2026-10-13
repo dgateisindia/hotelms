@@ -351,3 +351,323 @@
     animation: none;
   }
 }
+
+/* ============================================================
+   FINAL ADMIN SHELL CONSISTENCY FAST V3
+============================================================ */
+
+
+/* ============================================================
+   ONE HORIZONTAL GRID
+
+   Breadcrumb + visible page content use the same left/right edge.
+============================================================ */
+
+.admin-workspace__page > .maintenance-page,
+.admin-workspace__page > .housekeeping-page,
+.admin-workspace__page > .bookings-page,
+.admin-workspace__page > .rooms-page,
+.admin-workspace__page > .customers-page {
+  box-sizing: border-box;
+
+  width: 100%;
+
+  padding-left: var(--page-padding);
+  padding-right: var(--page-padding);
+}
+
+
+/* Reduce unnecessary extra vertical gap below breadcrumbs. */
+.admin-workspace__page > .maintenance-page,
+.admin-workspace__page > .housekeeping-page,
+.admin-workspace__page > .bookings-page,
+.admin-workspace__page > .rooms-page,
+.admin-workspace__page > .customers-page {
+  padding-top: var(--space-2);
+}
+
+
+/* ============================================================
+   DUPLICATE TITLE RULE
+
+   AdminTopbar already displays the exact page title.
+   Keep semantic heading in DOM but don't visually repeat it.
+============================================================ */
+
+.admin-workspace .maintenance-page__header h1,
+.admin-workspace .housekeeping-page__header h1,
+.admin-workspace .bookings-page-header h1,
+.admin-workspace .rooms-page .page-header-left h2,
+.admin-workspace .customers-page .page-header-left h2 {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  padding: 0;
+  margin: -1px;
+
+  overflow: hidden;
+
+  clip: rect(0, 0, 0, 0);
+
+  white-space: nowrap;
+
+  border: 0;
+}
+
+
+/* ============================================================
+   PAGE CONTEXT LABELS
+============================================================ */
+
+.admin-workspace .bookings-page-header > div:first-child::before {
+  content: "RESERVATION MANAGEMENT";
+}
+
+.admin-workspace .rooms-page .page-header-left::before {
+  content: "ROOM INVENTORY";
+}
+
+.admin-workspace .customers-page .page-header-left::before {
+  content: "GUEST MANAGEMENT";
+}
+
+
+.admin-workspace .bookings-page-header > div:first-child::before,
+.admin-workspace .rooms-page .page-header-left::before,
+.admin-workspace .customers-page .page-header-left::before {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: var(--color-text-muted);
+
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+
+  letter-spacing: 0.06em;
+
+  text-transform: uppercase;
+}
+
+
+/* ============================================================
+   MAINTENANCE HEADER
+
+   Left:
+   ROOM OPERATIONS + description
+
+   Right:
+   New Maintenance Request + Refresh
+============================================================ */
+
+.admin-workspace .maintenance-page__header {
+  display: flex;
+
+  align-items: flex-start;
+
+  justify-content: flex-start;
+
+  width: 100%;
+
+  gap: var(--space-3);
+
+  margin-bottom: var(--space-5);
+}
+
+
+.admin-workspace .maintenance-page__header > :first-child {
+  flex: 1 1 auto;
+
+  min-width: 0;
+}
+
+
+.admin-workspace .maintenance-page__header > :not(:first-child) {
+  flex: 0 0 auto;
+
+  margin-left: 0;
+
+  white-space: nowrap;
+}
+
+
+.admin-workspace .maintenance-page__subtitle {
+  max-width: 760px;
+
+  margin-top: 5px;
+  margin-bottom: 0;
+
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   HOUSEKEEPING SAME ACTION RULE
+============================================================ */
+
+.admin-workspace .housekeeping-page__header {
+  display: flex;
+
+  align-items: flex-start;
+
+  width: 100%;
+
+  gap: var(--space-3);
+
+  margin-bottom: var(--space-5);
+}
+
+
+.admin-workspace .housekeeping-page__header > :first-child {
+  flex: 1 1 auto;
+
+  min-width: 0;
+}
+
+
+.admin-workspace .housekeeping-page__header > :not(:first-child) {
+  flex: 0 0 auto;
+
+  margin-left: 0;
+
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   BOOKINGS / ROOMS / CUSTOMERS HEADER
+============================================================ */
+
+.admin-workspace .bookings-page-header,
+.admin-workspace .rooms-page .page-header,
+.admin-workspace .customers-page .page-header {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    auto;
+
+  align-items: start;
+
+  gap: var(--space-4);
+
+  margin-bottom: var(--space-5);
+}
+
+
+.admin-workspace .bookings-page-header > :last-child,
+.admin-workspace .rooms-page .page-header-right,
+.admin-workspace .customers-page .page-header-right {
+  justify-self: end;
+}
+
+
+/* Descriptions stay visible and become the actual page intro. */
+.admin-workspace .bookings-page-header p,
+.admin-workspace .rooms-page .page-header-left p,
+.admin-workspace .customers-page .page-header-left p,
+.admin-workspace .housekeeping-page__subtitle {
+  margin-top: 0;
+
+  color: var(--color-text-muted);
+
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 760px) {
+
+  .admin-workspace .maintenance-page__header,
+  .admin-workspace .housekeeping-page__header {
+    flex-direction: column;
+
+    align-items: stretch;
+  }
+
+
+  .admin-workspace .maintenance-page__header > :not(:first-child),
+  .admin-workspace .housekeeping-page__header > :not(:first-child) {
+    width: 100%;
+  }
+
+
+  .admin-workspace .bookings-page-header,
+  .admin-workspace .rooms-page .page-header,
+  .admin-workspace .customers-page .page-header {
+    grid-template-columns: 1fr;
+  }
+
+
+  .admin-workspace .bookings-page-header > :last-child,
+  .admin-workspace .rooms-page .page-header-right,
+  .admin-workspace .customers-page .page-header-right {
+    width: 100%;
+
+    justify-self: stretch;
+  }
+}
+
+/* ============================================================
+   FINAL HMS PAGE TYPOGRAPHY STANDARD V2
+============================================================ */
+
+/* meaningful page titles */
+.admin-workspace__page .hms-page-header__title,
+.admin-workspace__page .admin-dashboard-page__title,
+.admin-workspace__page .page-header-left h1,
+.admin-workspace__page .page-header-left h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* context / eyebrow */
+.admin-workspace__page .hms-page-header__eyebrow,
+.admin-workspace__page .maintenance-page__eyebrow,
+.admin-workspace__page .housekeeping-page__eyebrow {
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/*
+   Topbar already displays "Maintenance".
+   Don't repeat exact same title in content.
+*/
+.admin-workspace__page
+.maintenance-page
+.maintenance-page__header h1 {
+  display: none;
+}
+
+/* common descriptions */
+.admin-workspace__page
+.maintenance-page__subtitle,
+.admin-workspace__page
+.housekeeping-page__subtitle,
+.admin-workspace__page
+.page-header-left p,
+.admin-workspace__page
+.admin-dashboard-page__subtitle {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* common panel headings */
+.admin-workspace__page
+.admin-dashboard-page__panel-title,
+.admin-workspace__page
+.hms-panel h2 {
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 800;
+}

@@ -12,6 +12,8 @@ import {
   HotelierCrown,
 } from "../../../utils/icons/LoginIcons";
 
+import { IcoHousekeeping } from "../../../utils/icons/DashboardIcons";
+
 import "./AdminSidebar.css";
 
 
@@ -160,6 +162,15 @@ function CustomersIcon() {
   );
 }
 
+function MaintenanceIcon() {
+  return (
+    <IconBase>
+      <path d="M14.7 6.3a4 4 0 0 0-5 5L3.5 17.5a2.1 2.1 0 0 0 3 3l6.2-6.2a4 4 0 0 0 5-5l-2.4 2.4-3-3 2.4-2.4Z" />
+      <path d="m5.5 18.5 1-1" />
+    </IconBase>
+  );
+}
+
 
 function BillingIcon() {
   return (
@@ -249,6 +260,20 @@ function PayrollIcon() {
 }
 
 
+function QrCodeIcon() {
+  return (
+    <IconBase>
+      <rect x="3" y="3" width="6" height="6" rx="1" />
+      <rect x="15" y="3" width="6" height="6" rx="1" />
+      <rect x="3" y="15" width="6" height="6" rx="1" />
+      <path d="M15 15h2v2h-2z" />
+      <path d="M19 15h2v6h-6v-2" />
+      <path d="M15 19h2" />
+    </IconBase>
+  );
+}
+
+
 function RequestsIcon() {
   return (
     <IconBase>
@@ -259,6 +284,20 @@ function RequestsIcon() {
   );
 }
 
+
+function ProfileIcon() {
+  return (
+    <IconBase>
+      <circle
+        cx="12"
+        cy="8"
+        r="4"
+      />
+
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </IconBase>
+  );
+}
 
 function SettingsIcon() {
   return (
@@ -349,6 +388,22 @@ const NAVIGATION_SECTIONS = [
       },
 
       {
+        key: "housekeeping",
+        label: "Housekeeping",
+        to: "/housekeeping",
+        icon: IcoHousekeeping,
+        end: true,
+      },
+
+      {
+        key: "maintenance",
+        label: "Maintenance",
+        to: "/maintenance",
+        icon: MaintenanceIcon,
+        end: true,
+      },
+
+      {
         key: "customers",
         label: "Customers",
         to: "/customers",
@@ -421,6 +476,14 @@ const NAVIGATION_SECTIONS = [
 
     items: [
       {
+        key: "qr-code",
+        label: "QR Code",
+        to: "/qrcode",
+        icon: QrCodeIcon,
+        end: true,
+      },
+
+      {
         key: "customer-requests",
         label: "Customer Requests",
         to: "/notifications",
@@ -442,6 +505,13 @@ const NAVIGATION_SECTIONS = [
         label: "Settings",
         to: "/settings",
         icon: SettingsIcon,
+        end: true,
+      },
+      {
+        key: "profile-security",
+        label: "Profile & Security",
+        to: "/profile-security",
+        icon: ProfileIcon,
         end: true,
       },
     ],

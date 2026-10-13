@@ -296,9 +296,80 @@ async function createHotelAdmin(
    SERVICE
 ============================================================ */
 
+/* ============================================================
+   SUPER ADMIN-SA3A
+   PORTFOLIO HOTEL ADMIN LIST
+   GET /api/superadmin/admins
+============================================================ */
+
+async function getPortfolioAdmins() {
+  const response = await apiClient.get("/superadmin/admins");
+
+  const data = getResponseData(response);
+
+  return {
+    success: data?.success === true,
+    admins: Array.isArray(data?.admins) ? data.admins : [],
+  };
+}
+
+/* SUPER ADMIN-SA3B-2-R1 */
+
+function sa3bNormalizeAdminId(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+
+  if (!/^ADM-\d+$/.test(normalized)) {
+    throw new Error("Invalid Hotel Admin ID.");
+  }
+
+  return normalized;
+}
+
+async function updateHotelAdminProfile(hotelDisplayId, adminDisplayId, details) {
+  const hotel = normalizeHotelDisplayId(hotelDisplayId);
+  const admin = sa3bNormalizeAdminId(adminDisplayId);
+
+  const fullName = String(details?.fullName || "").trim();
+  const phone = String(details?.phone || "").trim();
+
+  if (!fullName || fullName.length > 150) {
+    throw new Error("Full Name must contain 1 to 150 characters.");
+  }
+
+  if (phone.length > 30) {
+    throw new Error("Phone number must not exceed 30 characters.");
+  }
+
+  const response = await apiClient.patch(
+    `/superadmin/hotels/${encodeURIComponent(hotel)}/admins/${encodeURIComponent(admin)}`,
+    { fullName, phone: phone || null }
+  );
+
+  return getResponseData(response);
+}
+
+async function updateHotelAdminStatus(hotelDisplayId, adminDisplayId, status) {
+  const hotel = normalizeHotelDisplayId(hotelDisplayId);
+  const admin = sa3bNormalizeAdminId(adminDisplayId);
+
+  if (!["active", "inactive"].includes(status)) {
+    throw new Error("Invalid Admin status.");
+  }
+
+  const response = await apiClient.patch(
+    `/superadmin/hotels/${encodeURIComponent(hotel)}/admins/${encodeURIComponent(admin)}/status`,
+    { status }
+  );
+
+  return getResponseData(response);
+}
+
 const superAdminAdminService = {
+  getPortfolioAdmins,
   getHotelAdmins,
   createHotelAdmin,
+  updateHotelAdminProfile,
+  updateHotelAdminStatus,
 };
 
 

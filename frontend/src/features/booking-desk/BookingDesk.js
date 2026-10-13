@@ -108,6 +108,28 @@ const EMPTY_PAYMENT = {
   notes: "",
 };
 
+
+const DEFAULT_PAYMENT_POLICY = {
+  allow_partial_payment:
+    true,
+
+  advance_requirement: {
+    method:
+      "none",
+
+    value:
+      0,
+  },
+
+  allowed_methods: [
+    "cash",
+    "upi",
+    "card",
+    "bank_transfer",
+  ],
+};
+
+
 const EMPTY_REFUND = {
   payment_method: "cash",
   transaction_id: "",
@@ -856,6 +878,14 @@ function BookingDesk() {
 
 
   const [
+    paymentPolicy,
+    setPaymentPolicy,
+  ] = useState(
+    DEFAULT_PAYMENT_POLICY
+  );
+
+
+  const [
     groupPrimaryGuestAllocated,
     setGroupPrimaryGuestAllocated,
   ] = useState(false);
@@ -1233,6 +1263,15 @@ function BookingDesk() {
             .guest_requirements ||
           null
         );
+
+
+        setPaymentPolicy(
+          settings.payment &&
+          typeof settings.payment ===
+            "object"
+            ? settings.payment
+            : DEFAULT_PAYMENT_POLICY
+        );
       } catch (error) {
         if (!active) {
           return;
@@ -1245,6 +1284,11 @@ function BookingDesk() {
 
         setGuestRequirementsPolicy(
           null
+        );
+
+
+        setPaymentPolicy(
+          DEFAULT_PAYMENT_POLICY
         );
 
 
@@ -1694,6 +1738,13 @@ function BookingDesk() {
           bookingPolicySnapshot
             ?.guest_requirements ||
           null
+        );
+
+
+        setPaymentPolicy(
+          bookingPolicySnapshot
+            ?.payment ||
+          DEFAULT_PAYMENT_POLICY
         );
 
 
@@ -4097,6 +4148,7 @@ function BookingDesk() {
         payment,
         isEditMode,
         grandTotal,
+        paymentPolicy,
         refund,
         pricingQuote,
       });
@@ -4197,6 +4249,7 @@ function BookingDesk() {
         payment,
         isEditMode,
         grandTotal,
+        paymentPolicy,
         refund,
         pricingQuote,
       });
@@ -5163,6 +5216,9 @@ function BookingDesk() {
             }
             grandTotal={
               grandTotal
+            }
+            paymentPolicy={
+              paymentPolicy
             }
             paymentNow={
               paymentNow

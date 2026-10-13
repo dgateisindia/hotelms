@@ -15,12 +15,29 @@ const {
   getHotels,
   getHotelByDisplayId,
   createHotel,
+  updateHotel,
 } = require("../controllers/hotelController");
 
 const {
   getHotelAdmins,
   createHotelAdmin,
+  updateHotelAdmin,
+  updateHotelAdminStatus,
 } = require("../controllers/superAdminAdminController");
+
+const { getSuperAdminReportsOverview } = require('../controllers/superAdminReportsController');
+
+const {
+  getHotelOperationsOverview,
+} = require("../controllers/superAdminOperationsController");
+
+const {
+  getSelectedHotelQrOverview,
+} = require("../controllers/superAdminQrController");
+
+const {
+  getSelectedHotelSettingsSnapshot,
+} = require("../controllers/superAdminSettingsSnapshotController");
 
 const router = express.Router();
 
@@ -103,6 +120,19 @@ router.post(
 );
 
 
+/**
+ * PATCH /api/superadmin/hotels/:hotelDisplayId
+ *
+ * Updates hotel profile details and active/inactive state.
+ *
+ * Controller verifies authenticated Super Admin ownership.
+ */
+router.patch(
+  "/hotels/:hotelDisplayId",
+  updateHotel
+);
+
+
 /* ============================================================
    SELECTED HOTEL - ADMIN MANAGEMENT
 ============================================================ */
@@ -142,6 +172,23 @@ router.post(
 );
 
 /* ============================================================
+   SUPER ADMIN-SA3B-1 ACCOUNT LIFECYCLE
+
+   Protected by router-level Clerk + DB role checks.
+   Each controller also verifies Hotel / Admin ownership.
+============================================================ */
+
+router.patch(
+  "/hotels/:hotelDisplayId/admins/:adminDisplayId",
+  updateHotelAdmin
+);
+
+router.patch(
+  "/hotels/:hotelDisplayId/admins/:adminDisplayId/status",
+  updateHotelAdminStatus
+);
+
+/* ============================================================
    SELECTED HOTEL DETAILS
 ============================================================ */
 
@@ -159,5 +206,39 @@ router.get(
   getHotelByDisplayId
 );
 
+
+/* SUPER ADMIN-SA4A — Owner-scoped portfolio reporting */
+router.get('/reports/overview', getSuperAdminReportsOverview);
+
+
+/* ============================================================
+   SUPER ADMIN-SA5A — SELECTED HOTEL OPERATIONS
+   GET only. Existing router-level role guard applies.
+============================================================ */
+
+router.get(
+  "/hotels/:hotelDisplayId/operations/overview",
+  getHotelOperationsOverview
+);
+
+
+/* ============================================================
+   SA5C - SELECTED HOTEL QR OVERVIEW
+   Authenticated Super Admin - GET only
+============================================================ */
+
+router.get(
+  "/hotels/:hotelDisplayId/qr/overview",
+  getSelectedHotelQrOverview
+);
+
+
+/* SA5C-P3 - owner-scoped SELECT-only settings snapshot */
+
+router.get(
+  "/hotels/:hotelDisplayId/settings/snapshot",
+  requireRole("super_admin"),
+  getSelectedHotelSettingsSnapshot
+);
 
 module.exports = router;

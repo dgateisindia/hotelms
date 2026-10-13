@@ -14,6 +14,13 @@ import {
   ManageGuestsDialog,
 } from "../../features/reservations";
 
+import {
+  collectBookingPayment,
+  finalizeFinancialSettlementReview,
+  getFinancialSettlementReview,
+  processLifecycleRefund,
+} from "../../features/reservations/api/reservationFinancialApi";
+
 
 import "../../styles/Bookings.css";
 
@@ -2087,11 +2094,14 @@ function Bookings() {
     setFinancialReviewLoading(true);
 
     try {
-      const response = await apiClient.get(
-        `/bookings/${booking.booking_id}/financial-settlement-review`
-      );
+      const response =
+        await getFinancialSettlementReview(
+          booking.booking_id
+        );
 
-      const review = response.data?.data || null;
+      const review =
+        response.data?.data ||
+        null;
 
       setFinancialReviewData(review);
 
@@ -2159,13 +2169,17 @@ function Bookings() {
     setFinancialReviewSuccess("");
 
     try {
-      const response = await apiClient.post(
-        `/bookings/${financialReviewBooking.booking_id}/financial-settlement-review/finalize`,
-        {
-          final_payable_amount: finalPayable,
-          review_notes: notes,
-        }
-      );
+      const response =
+        await finalizeFinancialSettlementReview(
+          financialReviewBooking.booking_id,
+          {
+            finalPayableAmount:
+              finalPayable,
+
+            reviewNotes:
+              notes,
+          }
+        );
 
       setFinancialReviewBooking(null);
       setFinancialReviewData(null);
@@ -2334,42 +2348,146 @@ function Bookings() {
      COLLECT PAYMENT
   ========================================================== */
 
-  function openCollectPayment(
+  async function openCollectPayment(
     booking
   ) {
-    const outstanding =
-      Number(
-        booking
-          .outstanding_amount ||
-        0
-      );
-
-
-    setPaymentBooking(
-      booking
-    );
-
-    setPaymentAmount(
-      outstanding > 0
-        ? outstanding.toFixed(2)
-        : ""
-    );
-
-    setPaymentMethod(
-      "cash"
-    );
-
-    setPaymentTransactionId(
-      ""
-    );
-
-    setPaymentNotes(
-      ""
-    );
 
     setPaymentError(
       ""
     );
+
+    setError(
+      ""
+    );
+
+
+    try {
+
+      const bookingId =
+        Number(
+          booking?.booking_id ||
+          0
+        );
+
+
+      if (
+        !Number.isSafeInteger(
+          bookingId
+        ) ||
+        bookingId <= 0
+      ) {
+        throw new Error(
+          "Invalid booking ID."
+        );
+      }
+
+
+      const { data } =
+        await apiClient.get(
+          `/bookings/${bookingId}`
+        );
+
+
+      const details =
+        data &&
+        typeof data ===
+          "object"
+          ? data
+          : {};
+
+
+      const paymentBookingDetails = {
+        ...booking,
+        ...details,
+      };
+
+
+      const outstanding =
+        Number(
+          paymentBookingDetails
+            .outstanding_amount ||
+          0
+        );
+
+
+      const policyMethods =
+        Array.isArray(
+          paymentBookingDetails
+            ?.payment_policy
+            ?.allowed_methods
+        )
+          ? paymentBookingDetails
+              .payment_policy
+              .allowed_methods
+              .map(
+                (value) =>
+                  String(value || "")
+                    .trim()
+                    .toLowerCase()
+              )
+          : null;
+
+
+      const supportedMethods =
+        [
+          "cash",
+          "upi",
+          "card",
+          "bank_transfer",
+        ];
+
+
+      const initialMethod =
+        policyMethods
+          ? supportedMethods.find(
+              (value) =>
+                policyMethods.includes(
+                  value
+                )
+            ) ||
+            ""
+          : "cash";
+
+
+      setPaymentBooking(
+        paymentBookingDetails
+      );
+
+      setPaymentAmount(
+        outstanding > 0
+          ? outstanding.toFixed(2)
+          : ""
+      );
+
+      setPaymentMethod(
+        initialMethod
+      );
+
+      setPaymentTransactionId(
+        ""
+      );
+
+      setPaymentNotes(
+        ""
+      );
+    } catch (
+      paymentLoadError
+    ) {
+
+      setPaymentBooking(
+        null
+      );
+
+      setPaymentError(
+        ""
+      );
+
+      setError(
+        getApiErrorMessage(
+          paymentLoadError
+        )
+      );
+    }
   }
 
 
@@ -2433,13 +2551,6 @@ function Bookings() {
     }
 
 
-    const outstanding =
-      Number(
-        paymentBooking
-          .outstanding_amount ||
-        0
-      );
-
 
     setPaymentProcessing(
       true
@@ -2451,40 +2562,19 @@ function Bookings() {
 
 
     try {
-      await apiClient.post(
-        `/bookings/${paymentBooking.booking_id}/payments`,
+      await collectBookingPayment(
+        paymentBooking,
         {
           amount,
 
-          payment_method:
+          method:
             paymentMethod,
 
-          payment_stage:
-            [
-              "no_show",
-              "cancelled",
-            ].includes(
-              normalizeText(
-                paymentBooking.booking_status
-              )
-            )
-              ? "other"
-              : amount + 0.009 >=
-                  outstanding
-                ? "checkout"
-                : "during_stay",
-
-          transaction_id:
-            paymentMethod ===
-              "cash"
-              ? null
-              : paymentTransactionId
-                  .trim(),
+          transactionId:
+            paymentTransactionId,
 
           notes:
-            paymentNotes
-              .trim() ||
-            null,
+            paymentNotes,
         }
       );
 
@@ -2588,14 +2678,11 @@ function Bookings() {
         refundBooking.booking_status
       );
 
-    const refundPath =
-      status === "cancelled"
-        ? "cancellation-refund"
-        : status === "no_show"
-          ? "no-show-refund"
-          : null;
+    const refundEligible =
+      status === "cancelled" ||
+      status === "no_show";
 
-    if (!refundPath) {
+    if (!refundEligible) {
       setRefundError(
         "This booking is not eligible for a lifecycle settlement refund."
       );
@@ -2621,20 +2708,16 @@ function Bookings() {
 
     try {
       const response =
-        await apiClient.post(
-          `/bookings/${refundBooking.booking_id}/${refundPath}`,
+        await processLifecycleRefund(
+          refundBooking,
           {
-            refund_method:
+            method:
               refundMethod,
 
-            transaction_id:
-              refundMethod === "cash"
-                ? null
-                : transactionId,
+            transactionId,
 
             notes:
-              refundNotes.trim() ||
-              null,
+              refundNotes,
           }
         );
 
@@ -3090,6 +3173,7 @@ function Bookings() {
 
                       const canCollectPayment =
                         (
+                          status === "confirmed" ||
                           status === "checked_in" ||
                           (
                             isLifecycleSettlement &&

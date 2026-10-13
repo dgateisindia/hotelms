@@ -7,7 +7,7 @@ function BookingDeskHeader({
   onBack,
 }) {
   return (
-<div className="booking-desk-header">
+<div className={`booking-desk-header${!isEditMode && !isAddRoomMode ? " booking-desk-header--default" : ""}`}>
 
         <div>
           <h1>

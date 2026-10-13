@@ -14,6 +14,12 @@ const {
 );
 
 const {
+  resolveBookingPaymentPolicyWithConnection,
+} = require(
+  "../../services/bookingPayments/paymentPolicyService"
+);
+
+const {
   getBookingGuestsWithConnection,
   getReservationGroupGuestsWithConnection,
 } = require(
@@ -27,6 +33,61 @@ const {
 } = require(
   "../../services/bookingStatusService"
 );
+function serializePaymentPolicy(
+  policy
+) {
+
+  if (
+    !policy ||
+    typeof policy !==
+      "object"
+  ) {
+    return null;
+  }
+
+
+  return {
+    source:
+      policy.source ||
+      "legacy_fallback",
+
+    snapshot_id:
+      policy.snapshotId ??
+      null,
+
+    allow_partial_payment:
+      policy.allowPartialPayment !==
+      false,
+
+    full_payment_required_before_checkout:
+      policy
+        .fullPaymentRequiredBeforeCheckout !==
+      false,
+
+    allowed_methods:
+      Array.isArray(
+        policy.allowedMethods
+      )
+        ? [
+            ...policy.allowedMethods,
+          ]
+        : [],
+
+    advance_requirement:
+      policy.advanceRequirement &&
+      typeof policy.advanceRequirement ===
+        "object"
+        ? policy.advanceRequirement
+        : {
+            method:
+              "none",
+
+            value:
+              0,
+          },
+  };
+}
+
 function sendError(
   res,
   status,
@@ -1478,6 +1539,18 @@ exports.getBooking = async (
         }
       );
 
+
+    const paymentPolicy =
+      await resolveBookingPaymentPolicyWithConnection(
+        db,
+        {
+          hotelId:
+            context.hotelId,
+
+          bookingId,
+        }
+      );
+
     return res
       .status(200)
       .json({
@@ -1509,6 +1582,11 @@ exports.getBooking = async (
                   null,
               }
             : null,
+
+        payment_policy:
+          serializePaymentPolicy(
+            paymentPolicy
+          ),
 
         payments,
 
@@ -1647,6 +1725,45 @@ exports.getReservationGroupDetails = async (
 
 
     /* ========================================================
+       GROUP CUSTOMER-FACING INVOICE
+
+       Room-level child invoices remain internal financial
+       history. Once a reservation-group invoice exists, this
+       is the single customer-facing invoice for the workspace.
+    ======================================================== */
+
+    const [[groupInvoice]] =
+      await db.query(
+        `
+          SELECT
+            invoice_id,
+            invoice_number,
+            invoice_status,
+
+            total_amount,
+            paid_amount,
+            pending_amount,
+
+            generated_at
+
+          FROM invoices
+
+          WHERE hotel_id = ?
+            AND reservation_group_id = ?
+            AND invoice_scope =
+                'reservation_group'
+            AND customer_facing = 1
+
+          LIMIT 1
+        `,
+        [
+          context.hotelId,
+          reservationGroupId,
+        ]
+      );
+
+
+    /* ========================================================
        CHILD BOOKINGS
 
        Financial state is derived from successful ledger rows.
@@ -1687,6 +1804,10 @@ exports.getReservationGroupDetails = async (
             b.guest_roster_captured,
             b.booking_status,
             b.total_amount,
+
+            i.invoice_id,
+            i.invoice_number,
+            i.invoice_status,
 
             bfs.settlement_id
               AS financial_settlement_id,
@@ -1898,6 +2019,12 @@ exports.getReservationGroupDetails = async (
            AND r.room_id =
               b.room_id
 
+          LEFT JOIN invoices i
+            ON i.hotel_id =
+              b.hotel_id
+           AND i.booking_id =
+              b.booking_id
+
           LEFT JOIN (
             SELECT
               hotel_id,
@@ -2041,22 +2168,48 @@ exports.getReservationGroupDetails = async (
 
 
     const bookingsWithOccupancy =
-      bookings.map(
-        (booking) => ({
-          ...booking,
+      await Promise.all(
+        bookings.map(
+          async (booking) => {
 
-          occupancy:
-            buildBookingOccupancy(
-              booking,
+            const bookingId =
+              Number(
+                booking.booking_id
+              );
 
-              guestsByBookingId.get(
-                Number(
-                  booking.booking_id
-                )
-              ) ||
-              []
-            ),
-        })
+
+            const paymentPolicy =
+              await resolveBookingPaymentPolicyWithConnection(
+                db,
+                {
+                  hotelId:
+                    context.hotelId,
+
+                  bookingId,
+                }
+              );
+
+
+            return {
+              ...booking,
+
+              payment_policy:
+                serializePaymentPolicy(
+                  paymentPolicy
+                ),
+
+              occupancy:
+                buildBookingOccupancy(
+                  booking,
+
+                  guestsByBookingId.get(
+                    bookingId
+                  ) ||
+                  []
+                ),
+            };
+          }
+        )
       );
 
     /* ========================================================
@@ -2381,6 +2534,50 @@ exports.getReservationGroupDetails = async (
 
           group_code:
             group.group_code,
+
+          group_invoice:
+            groupInvoice
+              ? {
+                  invoice_id:
+                    Number(
+                      groupInvoice
+                        .invoice_id
+                    ),
+
+                  invoice_number:
+                    groupInvoice
+                      .invoice_number,
+
+                  invoice_status:
+                    groupInvoice
+                      .invoice_status,
+
+                  total_amount:
+                    Number(
+                      groupInvoice
+                        .total_amount ||
+                      0
+                    ),
+
+                  paid_amount:
+                    Number(
+                      groupInvoice
+                        .paid_amount ||
+                      0
+                    ),
+
+                  pending_amount:
+                    Number(
+                      groupInvoice
+                        .pending_amount ||
+                      0
+                    ),
+
+                  generated_at:
+                    groupInvoice
+                      .generated_at,
+                }
+              : null,
 
           customer: {
             customer_id:

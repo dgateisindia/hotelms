@@ -732,6 +732,50 @@ async function createBookingForHotel({
     );
 
 
+  /*
+   * QR request room-type integrity.
+   *
+   * Frontend filtering is convenience only.
+   * The transactional booking engine is authoritative.
+   */
+  if (
+    sourceRequest?.room_type
+  ) {
+    const selectedRoom =
+      roomMap.get(
+        items[0].roomId
+      );
+
+    const requestedRoomType =
+      String(
+        sourceRequest.room_type ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+    const selectedRoomType =
+      String(
+        selectedRoom?.room_type ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      requestedRoomType &&
+      requestedRoomType !==
+        selectedRoomType
+    ) {
+      throwHttp(
+        409,
+        "SOURCE_REQUEST_ROOM_TYPE_MISMATCH",
+        `This customer requested ${sourceRequest.room_type}. Please select a matching room type.`
+      );
+    }
+  }
+
+
   if (
     sourceRequest
       ?.assigned_room_id &&

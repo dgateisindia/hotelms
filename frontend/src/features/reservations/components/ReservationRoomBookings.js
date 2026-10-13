@@ -6,6 +6,11 @@ function ReservationRoomBookings({
   onToggleExpanded,
   onManageGuests,
   onEdit,
+  onReviewSettlement,
+  onCollectPayment,
+  onRefund,
+  hideInvoiceActions = false,
+  onViewInvoice,
 }) {
   return (
 <div className="bookings-card">
@@ -68,6 +73,21 @@ function ReservationRoomBookings({
                   onToggleExpanded={() => onToggleExpanded(Number(booking.booking_id))}
                   onManageGuests={() => onManageGuests(booking)}
                   onEdit={() => onEdit(Number(booking.booking_id))}
+                  onReviewSettlement={() =>
+                    onReviewSettlement(booking)
+                  }
+                  onCollectPayment={() =>
+                    onCollectPayment(booking)
+                  }
+                  onRefund={() =>
+                    onRefund(booking)
+                  }
+                  hideInvoiceAction={
+                    hideInvoiceActions
+                  }
+                  onViewInvoice={() =>
+                    onViewInvoice(booking)
+                  }
                 />
               ))}
 

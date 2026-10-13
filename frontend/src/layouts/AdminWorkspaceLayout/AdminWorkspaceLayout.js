@@ -109,6 +109,44 @@ const PAGE_CONFIG = {
   },
 
 
+  "/housekeeping": {
+    title: "Housekeeping",
+
+    breadcrumbs: [
+      {
+        label: "Dashboard",
+        to: "/admin-dashboard",
+      },
+
+      {
+        label: "Front Desk",
+      },
+
+      {
+        label: "Housekeeping",
+      },
+    ],
+  },
+
+  "/maintenance": {
+    title: "Maintenance",
+
+    breadcrumbs: [
+      {
+        label: "Dashboard",
+        to: "/admin-dashboard",
+      },
+
+      {
+        label: "Front Desk",
+      },
+
+      {
+        label: "Maintenance",
+      },
+    ],
+  },
+
   "/customers": {
     title: "Customers",
 
@@ -244,6 +282,26 @@ const PAGE_CONFIG = {
 
       {
         label: "Customer Requests",
+      },
+    ],
+  },
+
+
+  "/qrcode": {
+    title: "QR Code",
+
+    breadcrumbs: [
+      {
+        label: "Dashboard",
+        to: "/admin-dashboard",
+      },
+
+      {
+        label: "Requests",
+      },
+
+      {
+        label: "QR Code",
       },
     ],
   },
@@ -396,6 +454,19 @@ function AdminWorkspaceLayout() {
   ] = useState(0);
 
 
+  const syncPendingRequests =
+    useCallback(
+      (value) => {
+        setPendingRequests(
+          normalizeCount(
+            value
+          )
+        );
+      },
+      []
+    );
+
+
   const [
     loading,
     setLoading,
@@ -473,6 +544,77 @@ function AdminWorkspaceLayout() {
               {
                 label:
                   "Reservation Group",
+              },
+            ],
+          };
+        }
+
+        if (
+          currentPath.startsWith(
+            "/customers/"
+          )
+        ) {
+          return {
+            title:
+              "Customer Details",
+
+            breadcrumbs: [
+              {
+                label:
+                  "Dashboard",
+                to:
+                  "/admin-dashboard",
+              },
+
+              {
+                label:
+                  "Front Desk",
+              },
+
+              {
+                label:
+                  "Customers",
+                to:
+                  "/customers",
+              },
+
+              {
+                label:
+                  "Customer Details",
+              },
+            ],
+          };
+        }
+
+        if (
+          currentPath.startsWith(
+            "/rooms/"
+          )
+        ) {
+          return {
+            title:
+              "Room Details",
+
+            breadcrumbs: [
+              {
+                label:
+                  "Dashboard",
+                to:
+                  "/admin-dashboard",
+              },
+              {
+                label:
+                  "Front Desk",
+              },
+              {
+                label:
+                  "Rooms",
+                to:
+                  "/rooms",
+              },
+              {
+                label:
+                  "Room Details",
               },
             ],
           };
@@ -894,6 +1036,8 @@ function AdminWorkspaceLayout() {
               selectedHotel,
 
               pendingRequests,
+
+              syncPendingRequests,
 
               refreshAdminContext:
                 loadAdminContext,

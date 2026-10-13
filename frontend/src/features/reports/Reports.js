@@ -31,9 +31,10 @@ const PERIODS = [
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
+  { value: 'custom', label: 'Custom' },
 ];
 
-const PERIOD_TITLE = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
+const PERIOD_TITLE = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', custom: 'Custom' };
 
 const VIEWS = [
   { value: 'revenue', label: 'Collections' },
@@ -50,8 +51,8 @@ const VIEW_HEADER = {
 };
 
 // ── Dual-series chart (line / area / bar) ──────────────────────
-const DualSeriesChart = ({ data, aKey, bKey, type = 'line', aColor = '#3b82f6', bColor = '#9ca3af', gradId }) => {
-  const W = 600, H = 180, PAD = { top: 14, right: 16, bottom: 28, left: 48 };
+const DualSeriesChart = ({ data, aKey, bKey, type = 'line', aColor = '#0f235b', bColor = '#a7b4cb', gradId }) => {
+  const W = 640, H = 250, PAD = { top: 20, right: 24, bottom: 36, left: 52 };
   const iW = W - PAD.left - PAD.right, iH = H - PAD.top - PAD.bottom;
   const n = data.length;
   const allVals = data.flatMap(d => [d[aKey], d[bKey]]).filter(v => v != null);
@@ -68,7 +69,31 @@ const DualSeriesChart = ({ data, aKey, bKey, type = 'line', aColor = '#3b82f6', 
           <text x={PAD.left - 6} y={y(t) + 4} textAnchor="end" fontSize="10" fill="#9ca3af">{t === 0 ? '0' : `${Math.round(t / 1000)}k`}</text>
         </g>
       ))}
-      {data.map((d, i) => <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="#9ca3af">{d.label}</text>)}
+      {data.map((d, i) => {
+        const step = Math.max(1, Math.ceil(n / 5));
+        const visible = i % step === 0 || i === n - 1;
+
+        if (!visible) return null;
+
+        const label = String(d.label || '');
+        const shortLabel = label.includes(' - ')
+          ? label.split(' - ')[0]
+          : label;
+
+        return (
+          <text
+            key={i}
+            x={x(i)}
+            y={H - 8}
+            textAnchor="middle"
+            fontSize="10"
+            fill="#94a3b8"
+          >
+            <title>{label}</title>
+            {shortLabel}
+          </text>
+        );
+      })}
     </>
   );
 
@@ -132,8 +157,8 @@ const DualSeriesChart = ({ data, aKey, bKey, type = 'line', aColor = '#3b82f6', 
 };
 
 // ── Single-series chart (bar / line) ─
-const SingleSeriesChart = ({ data, valueKey, type = 'bar', color = '#3b82f6' }) => {
-  const W = 600, H = 150, PAD = { top: 10, right: 10, bottom: 22, left: 30 };
+const SingleSeriesChart = ({ data, valueKey, type = 'bar', color = '#0f235b' }) => {
+  const W = 600, H = 230, PAD = { top: 18, right: 22, bottom: 36, left: 34 };
   const iW = W - PAD.left - PAD.right, iH = H - PAD.top - PAD.bottom;
   const n = data.length;
   const max = Math.max(1, ...data.map(d => d[valueKey] || 0));
@@ -233,7 +258,7 @@ function buildReportCsv(data, anchorDate, view) {
   lines.push('Hotel Management System - Reports Export');
   lines.push(`View,${view}`);
   lines.push(`Period,${period}`);
-  lines.push(`Anchor Date,${anchorDate}`);
+  lines.push(`Report Date,${data.rangeEnd || anchorDate}`);
   lines.push(`Range,${rangeLabel}`);
   lines.push('');
 
@@ -353,6 +378,71 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 function Reports() {
   const [period, setPeriod] = useState('monthly');
   const [anchorDate, setAnchorDate] = useState(todayStr());
+  // UI-R6B CUSTOM DATE
+  const [customFrom, setCustomFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 29);
+    return [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, '0'),
+      String(d.getDate()).padStart(2, '0')
+    ].join('-');
+  });
+
+  const [customTo, setCustomTo] = useState(todayStr());
+
+  const [appliedCustom, setAppliedCustom] = useState(null);
+
+  const [customError, setCustomError] = useState('');
+
+  const customDirty = period === 'custom' && (
+    !appliedCustom ||
+    appliedCustom.from !== customFrom ||
+    appliedCustom.to !== customTo
+  );
+
+  const applyCustomReport = () => {
+    const fromDate = new Date(customFrom + 'T00:00:00Z');
+    const toDate = new Date(customTo + 'T00:00:00Z');
+
+    const validFrom =
+      /^\d{4}-\d{2}-\d{2}$/.test(customFrom) &&
+      !Number.isNaN(fromDate.getTime()) &&
+      fromDate.toISOString().slice(0, 10) === customFrom;
+
+    const validTo =
+      /^\d{4}-\d{2}-\d{2}$/.test(customTo) &&
+      !Number.isNaN(toDate.getTime()) &&
+      toDate.toISOString().slice(0, 10) === customTo;
+
+    const duration = Math.round(
+      (toDate - fromDate) / 86400000
+    ) + 1;
+
+    if (
+      !validFrom ||
+      !validTo ||
+      customFrom > customTo ||
+      customTo > todayStr() ||
+      duration < 1 ||
+      duration > 366
+    ) {
+      setCustomError(
+        'Select a valid From-To range of 1 to 366 days.'
+      );
+      return;
+    }
+
+    setCustomError('');
+
+    setData(null);
+
+    setAppliedCustom({
+      from: customFrom,
+      to: customTo
+    });
+  };
+
   const [view, setView] = useState('revenue'); // revenue | bookings | rooms | staff — defaults to revenue
   const dateInputRef = useRef(null);
   const [data, setData] = useState(null);
@@ -378,10 +468,28 @@ function Reports() {
   const setChartType = (key, value) => setChartTypes(prev => ({ ...prev, [key]: value }));
 
   const fetchReports = useCallback(async () => {
+    if (period === 'custom' && !appliedCustom) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.get('/reports/overview', { params: { period, date: anchorDate } });
+      const params = period === 'custom'
+        ? {
+            period: 'custom',
+            from: appliedCustom.from,
+            to: appliedCustom.to
+          }
+        : {
+            period,
+            date: anchorDate
+          };
+
+      const res = await apiClient.get(
+        '/reports/overview',
+        { params }
+      );
       setData(res.data.data);
     } catch (err) {
       console.error(err);
@@ -389,18 +497,22 @@ function Reports() {
     } finally {
       setLoading(false);
     }
-  }, [period, anchorDate]);
+  }, [period, anchorDate, appliedCustom]);
 
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
   const handleExport = () => {
-    if (!data) return;
-    const csvContent = buildReportCsv(data, anchorDate, view);
+    if (!data || loading || customDirty) return;
+    const csvContent = buildReportCsv(
+      data,
+      data.rangeEnd || anchorDate,
+      view
+    );
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `hotel-report-${view}-${data.period}-${anchorDate}.csv`;
+    a.download = `hotel-report-${view}-${data.period}-${data.rangeStart || anchorDate}-${data.rangeEnd || anchorDate}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -408,7 +520,7 @@ function Reports() {
   };
 
   const handleExportPdf = async () => {
-    if (!data || exportingPdf) return;
+    if (!data || loading || customDirty || exportingPdf) return;
     setExportingPdf(true);
     try {
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
@@ -460,7 +572,7 @@ function Reports() {
         pdf.text(`Page ${i} of ${pageCount}`, pageWidth - margin - 60, pageHeight - 14);
       }
 
-      pdf.save(`hotel-report-${view}-${data.period}-${anchorDate}.pdf`);
+      pdf.save(`hotel-report-${view}-${data.period}-${data.rangeStart || anchorDate}-${data.rangeEnd || anchorDate}.pdf`);
     } catch (err) {
       console.error('PDF export failed:', err);
       alert('Failed to generate the PDF — check the browser console for details.');
@@ -491,12 +603,12 @@ function Reports() {
   return (
     <>
       {/* ── Page Header ── */}
-      <div className="page-header">
+      <div className="page-header hms-report-v3-header">
         <div className="page-header-left">
           <h2>{VIEW_HEADER[view].title}</h2>
           <p>{VIEW_HEADER[view].subtitle}</p>
         </div>
-        <div className="page-header-right">
+        <div className="page-header-right hms-report-v3-controls">
           <select
             value={view}
             onChange={(e) => setView(e.target.value)}
@@ -505,49 +617,78 @@ function Reports() {
           >
             {VIEWS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
           </select>
-          <div className="date-range-badge" style={{ display: 'flex', gap: 4, padding: 4, alignItems: 'center', position: 'relative' }}>
-            <button
-              type="button"
-              title="Choose a date"
-              onClick={() => {
-                const el = dateInputRef.current;
-                if (!el) return;
-                if (typeof el.showPicker === 'function') el.showPicker();
-                else el.focus();
-              }}
-              style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 4px' }}
-            >
-              <IcoCalendar />
-            </button>
-            <input
-              ref={dateInputRef}
-              type="date"
-              value={anchorDate}
-              max={todayStr()}
-              onChange={(e) => e.target.value && setAnchorDate(e.target.value)}
-              style={{ border: 'none', background: 'transparent', fontSize: 13, color: '#374151', cursor: 'pointer', width: 118 }}
-            />
-            {PERIODS.map(p => (
-              <button
-                key={p.value}
-                onClick={() => setPeriod(p.value)}
-                style={{
-                  border: 'none', cursor: 'pointer', borderRadius: 6, padding: '4px 10px', fontSize: 13,
-                  background: period === p.value ? '#3b82f6' : 'transparent',
-                  color: period === p.value ? '#fff' : '#374151',
-                }}
-              >
-                {p.label}
-              </button>
-            ))}
+          <div className="date-range-badge hms-r6-periods">
+            {period !== 'custom' && (
+              <div className="hms-r6-anchor">
+                <button
+                  type="button"
+                  aria-label="Choose report date"
+                  onClick={() => {
+                    const input = dateInputRef.current;
+                    if (!input) return;
+
+                    if (typeof input.showPicker === 'function') {
+                      input.showPicker();
+                    } else {
+                      input.focus();
+                    }
+                  }}
+                >
+                  <IcoCalendar />
+                </button>
+
+                <input
+                  ref={dateInputRef}
+                  type="date"
+                  value={anchorDate}
+                  max={todayStr()}
+                  onChange={e => {
+                    if (e.target.value) {
+                      setAnchorDate(e.target.value);
+                    }
+                  }}
+                />
+              </div>
+            )}
+
+            <div className="hms-r6-period-buttons">
+              {PERIODS.map(p => (
+                <button
+                  type="button"
+                  key={p.value}
+                  className={
+                    period === p.value ? 'active' : ''
+                  }
+                  onClick={() => {
+                    if (p.value === 'custom') {
+                      if (period !== 'custom') {
+                        setCustomError('');
+                        setData(null);
+                        setAppliedCustom({
+                          from: customFrom,
+                          to: customTo
+                        });
+                      }
+                    } else {
+                      setData(null);
+                      setAppliedCustom(null);
+                    }
+
+                    setPeriod(p.value);
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <button className="btn-export-report" onClick={handleExport} disabled={!data} style={!data ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}>
+          <button className="btn-export-report" onClick={handleExport} disabled={!data || loading || customDirty} style={!data ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}>
             <IcoExport /> Export CSV
           </button>
           <button
             className="btn-export-report"
             onClick={handleExportPdf}
-            disabled={!data || exportingPdf}
+            disabled={!data || loading || customDirty || exportingPdf}
             style={(!data || exportingPdf) ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
           >
             <IcoExport /> {exportingPdf ? 'Generating PDF…' : 'Export PDF'}
@@ -555,8 +696,71 @@ function Reports() {
         </div>
       </div>
 
+      {period === 'custom' && (
+        <div className="hms-r6-range-panel">
+          <div className="hms-r6-range-grid">
+
+            <label>
+              <span>From Date</span>
+              <input
+                type="date"
+                value={customFrom}
+                max={todayStr()}
+                onChange={e => {
+                  setCustomFrom(e.target.value);
+                  setCustomError('');
+                }}
+              />
+            </label>
+
+            <label>
+              <span>To Date</span>
+              <input
+                type="date"
+                value={customTo}
+                max={todayStr()}
+                onChange={e => {
+                  setCustomTo(e.target.value);
+                  setCustomError('');
+                }}
+              />
+            </label>
+
+            <button
+              type="button"
+              className="hms-r6-apply"
+              onClick={applyCustomReport}
+              disabled={loading}
+            >
+              Apply Report
+            </button>
+          </div>
+
+          {customDirty && (
+            <p className="hms-r6-notice">
+              Select dates and click Apply Report.
+              Draft changes are not applied automatically.
+            </p>
+          )}
+
+          {!customDirty && appliedCustom && (
+            <p className="hms-r6-applied">
+              Selected range: {appliedCustom.from}
+              {' to '}
+              {appliedCustom.to}
+            </p>
+          )}
+
+          {customError && (
+            <p className="hms-r6-error" role="alert">
+              {customError}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* ── Stat Cards — fully customized per view ── */}
-      <div className="rep-stats" ref={statsRef}>
+      <div className="rep-stats hms-report-v3-stats" ref={statsRef}>
         {view === 'staff' && staffOverview ? (
           <>
             <div className="repstat-card">
@@ -669,7 +873,7 @@ function Reports() {
       </div>
 
       {/* ── Row 1: view-dependent (3 cards) ── */}
-      <div className="rep-row-1" ref={row1Ref}>
+      <div className="rep-row-1 hms-report-v3-primary" ref={row1Ref}>
 
         {view === 'revenue' && (
           <>
@@ -943,7 +1147,7 @@ function Reports() {
 
       {/* ── Row 2: bonus detail cards — only shown for the Revenue view ── */}
       {view === 'revenue' && (
-        <div className="rep-row-2" ref={row2Ref}>
+        <div className="rep-row-2 hms-report-v3-secondary" ref={row2Ref}>
 
           {/* Booked Overnight Occupancy by Current Room Type */}
           <div className="rep-card">
@@ -1012,12 +1216,12 @@ function Reports() {
       )}
 
       {/* ── Row 3: view-dependent summary table + insights (+ forecast for Revenue) ── */}
-      <div className="rep-row-3" ref={row3Ref}>
+      <div className="rep-row-3 hms-report-v3-summary" ref={row3Ref}>
 
         {view === 'revenue' && (
           <>
             <div className="rep-card">
-              <div className="rep-card-title">Monthly Performance Summary</div>
+              <div className="rep-card-title">Monthly Performance Summary (Last 6 Calendar Months)</div>
               <table className="perf-table">
                 <thead>
                   <tr>
@@ -1040,7 +1244,7 @@ function Reports() {
               </table>
             </div>
 
-            <div className="rep-card">
+            {period !== 'custom' && <div className="rep-card">
               <CardHeader
                 title={`Net Collections Projection (Next ${forecast.length - revenueTrend.length} ${period === 'daily' ? 'Days' : period === 'weekly' ? 'Weeks' : 'Months'})`}
                 chartType={chartTypes.forecast}
@@ -1055,7 +1259,7 @@ function Reports() {
               <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
                 Simple growth-rate projection based on recent trend — a rough estimate, not a financial forecast.
               </div>
-            </div>
+            </div>}
 
             <div className="rep-card">
               <div className="rep-card-title">Insights</div>
@@ -1074,7 +1278,7 @@ function Reports() {
         {view === 'bookings' && (
           <>
             <div className="rep-card">
-              <div className="rep-card-title">Monthly Performance Summary</div>
+              <div className="rep-card-title">Monthly Performance Summary (Last 6 Calendar Months)</div>
               <table className="perf-table">
                 <thead>
                   <tr><th>Month</th><th>Total Bookings</th><th>Overnight Occupancy Rate</th></tr>
@@ -1108,7 +1312,7 @@ function Reports() {
         {view === 'rooms' && (
           <>
             <div className="rep-card">
-              <div className="rep-card-title">Monthly Performance Summary</div>
+              <div className="rep-card-title">Monthly Performance Summary (Last 6 Calendar Months)</div>
               <table className="perf-table">
                 <thead>
                   <tr><th>Month</th><th>Overnight Occupancy Rate</th><th>Collections / Available Room-Night (₹)</th></tr>
@@ -1142,7 +1346,7 @@ function Reports() {
         {view === 'staff' && staffOverview && (
           <>
             <div className="rep-card">
-              <div className="rep-card-title">Staff Monthly Summary</div>
+              <div className="rep-card-title">Staff Monthly Summary (Last 6 Calendar Months)</div>
               <table className="perf-table">
                 <thead>
                   <tr><th>Month</th><th>Total Staff</th><th>Attendance Rate</th></tr>

@@ -21,6 +21,8 @@ import React, {
   useState,
 } from "react";
 
+import { useNavigate } from "react-router-dom";
+
 import apiClient from "../../shared/api/apiClient";
 
 import "./Customers.css";
@@ -860,6 +862,9 @@ function CustomerEmptyState({
 ============================================================ */
 
 function Customers() {
+  const navigate =
+    useNavigate();
+
   const [
     customers,
     setCustomers,
@@ -2072,8 +2077,8 @@ function Customers() {
                               viewLoading
                             }
                             onClick={() =>
-                              openView(
-                                customer
+                              navigate(
+                                `/customers/${customer.customer_id}`
                               )
                             }
                           >

@@ -2179,6 +2179,110 @@ function validateSetting(
   }
 
 
+  /*
+   * payment.advance_requirement uses the generic ChargeRule
+   * editor, but payment supports only these operational modes:
+   *
+   * none         -> no automatic minimum
+   * fixed_amount -> fixed reservation-level minimum
+   * percentage   -> percentage of reservation total
+   * manual       -> admin decides; no automatic minimum
+   */
+  if (
+    section ===
+      "payment" &&
+    key ===
+      "advance_requirement"
+  ) {
+
+    const advanceMethod =
+      String(
+        value?.method ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+
+    const allowedAdvanceMethods =
+      new Set([
+        "none",
+        "fixed_amount",
+        "percentage",
+        "manual",
+      ]);
+
+
+    if (
+      !allowedAdvanceMethods
+        .has(
+          advanceMethod
+        )
+    ) {
+
+      throw serviceError(
+        400,
+        "INVALID_PAYMENT_ADVANCE_METHOD",
+        "Payment advance requirement must use none, fixed_amount, percentage, or manual."
+      );
+    }
+
+
+    const advanceValue =
+      Number(
+        value?.value ??
+        0
+      );
+
+
+    if (
+      !Number.isFinite(
+        advanceValue
+      ) ||
+      advanceValue < 0
+    ) {
+
+      throw serviceError(
+        400,
+        "INVALID_PAYMENT_ADVANCE_VALUE",
+        "Payment advance requirement contains an invalid value."
+      );
+    }
+
+
+    if (
+      advanceMethod ===
+        "percentage" &&
+      advanceValue > 100
+    ) {
+
+      throw serviceError(
+        400,
+        "INVALID_PAYMENT_ADVANCE_PERCENTAGE",
+        "Payment advance percentage cannot exceed 100%."
+      );
+    }
+
+
+    if (
+      (
+        advanceMethod ===
+          "none" ||
+        advanceMethod ===
+          "manual"
+      ) &&
+      advanceValue !== 0
+    ) {
+
+      throw serviceError(
+        400,
+        "INVALID_PAYMENT_ADVANCE_VALUE",
+        "None and manual advance requirements must use value 0."
+      );
+    }
+  }
+
+
   if (
     section ===
       "room_change" &&

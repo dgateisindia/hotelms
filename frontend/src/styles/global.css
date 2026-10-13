@@ -1600,3 +1600,1503 @@ table {
     box-shadow: none;
   }
 }
+/* ============================================================
+   FINAL HMS UI FOUNDATION
+   ------------------------------------------------------------
+   Namespaced migration layer.
+
+   Rules:
+   - No existing selector is overridden here.
+   - Existing locked pages remain visually unchanged until they
+     explicitly adopt hms-* classes.
+   - Page migrations must reuse these primitives rather than
+     inventing another design system.
+============================================================ */
+
+
+/* ============================================================
+   FINAL UI TOKENS
+============================================================ */
+
+:root {
+  --hms-page-gap: var(--space-6);
+  --hms-section-gap: var(--space-5);
+  --hms-card-gap: var(--space-4);
+
+  --hms-page-padding-x: var(--page-padding);
+  --hms-page-padding-y: var(--space-6);
+
+  --hms-panel-radius: var(--radius-lg);
+  --hms-control-radius: var(--radius-md);
+
+  --hms-panel-border: var(--color-border);
+  --hms-panel-shadow: var(--shadow-xs);
+
+  --hms-control-height: 40px;
+  --hms-icon-button-size: 36px;
+
+  --hms-table-row-height: 52px;
+
+  --hms-page-title-size: var(--font-size-2xl);
+  --hms-section-title-size: var(--font-size-lg);
+
+  --hms-content-width: var(--content-max-width);
+}
+
+
+/* ============================================================
+   PAGE SHELL
+============================================================ */
+
+.hms-page {
+  width: 100%;
+  min-width: 0;
+
+  background:
+    var(--color-background);
+
+  color:
+    var(--color-text);
+}
+
+
+.hms-page__inner {
+  width: 100%;
+  max-width:
+    var(--hms-content-width);
+
+  margin:
+    0 auto;
+
+  padding:
+    var(--hms-page-padding-y)
+    var(--hms-page-padding-x)
+    var(--space-8);
+}
+
+
+.hms-page__stack {
+  display: flex;
+  flex-direction: column;
+
+  gap:
+    var(--hms-page-gap);
+}
+
+
+/* ============================================================
+   PAGE HEADER
+============================================================ */
+
+.hms-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap:
+    var(--space-5);
+}
+
+
+.hms-page-header__content {
+  min-width: 0;
+}
+
+
+.hms-page-header__eyebrow {
+  margin-bottom:
+    var(--space-1);
+
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-semibold);
+
+  text-transform:
+    uppercase;
+
+  letter-spacing:
+    0.06em;
+}
+
+
+.hms-page-header__title {
+  margin: 0;
+
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--hms-page-title-size);
+
+  font-weight:
+    var(--font-weight-extrabold);
+
+  line-height:
+    var(--line-height-tight);
+
+  letter-spacing:
+    -0.025em;
+}
+
+
+.hms-page-header__description {
+  max-width:
+    760px;
+
+  margin-top:
+    var(--space-2);
+
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-base);
+
+  line-height:
+    var(--line-height-normal);
+}
+
+
+.hms-page-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+
+  gap:
+    var(--space-2);
+
+  flex-shrink: 0;
+}
+
+
+/* ============================================================
+   TOOLBAR / FILTER BAR
+============================================================ */
+
+.hms-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+
+  gap:
+    var(--space-3);
+
+  min-height:
+    56px;
+
+  padding:
+    var(--space-2)
+    var(--space-3);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--hms-panel-shadow);
+}
+
+
+.hms-toolbar__group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+
+  gap:
+    var(--space-2);
+}
+
+
+.hms-toolbar__group--grow {
+  flex:
+    1 1 280px;
+
+  min-width:
+    220px;
+}
+
+
+.hms-toolbar__group--end {
+  margin-left:
+    auto;
+}
+
+
+/* ============================================================
+   STANDARD CONTROLS
+============================================================ */
+
+.hms-control {
+  min-height:
+    var(--hms-control-height);
+
+  padding:
+    0 var(--space-3);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-control-radius);
+
+  background:
+    var(--color-surface);
+
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-sm);
+
+  outline:
+    none;
+
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition),
+    background-color var(--transition);
+}
+
+
+.hms-control:hover:not(:disabled) {
+  border-color:
+    var(--color-border-strong);
+}
+
+
+.hms-control:focus,
+.hms-control:focus-visible {
+  border-color:
+    var(--color-primary);
+
+  box-shadow:
+    0 0 0 3px
+    rgba(13, 27, 75, 0.08);
+
+  outline:
+    none;
+}
+
+
+.hms-control::placeholder {
+  color:
+    var(--color-placeholder);
+}
+
+
+.hms-control:disabled {
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text-muted);
+}
+
+
+/* ============================================================
+   BUTTONS
+============================================================ */
+
+.hms-button {
+  min-height:
+    var(--hms-control-height);
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  gap:
+    var(--space-2);
+
+  padding:
+    0 var(--space-4);
+
+  border:
+    1px solid transparent;
+
+  border-radius:
+    var(--hms-control-radius);
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-semibold);
+
+  line-height:
+    1;
+
+  white-space:
+    nowrap;
+
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    box-shadow var(--transition),
+    transform var(--transition);
+}
+
+
+.hms-button:hover:not(:disabled) {
+  transform:
+    translateY(-1px);
+}
+
+
+.hms-button:active:not(:disabled) {
+  transform:
+    translateY(0);
+}
+
+
+.hms-button:disabled {
+  opacity:
+    0.55;
+
+  cursor:
+    not-allowed;
+
+  transform:
+    none;
+}
+
+
+.hms-button--primary {
+  border-color:
+    var(--color-primary);
+
+  background:
+    var(--color-primary);
+
+  color:
+    var(--color-text-inverse);
+}
+
+
+.hms-button--primary:hover:not(:disabled) {
+  border-color:
+    var(--color-primary-hover);
+
+  background:
+    var(--color-primary-hover);
+
+  box-shadow:
+    var(--shadow-sm);
+}
+
+
+.hms-button--secondary {
+  border-color:
+    var(--color-border);
+
+  background:
+    var(--color-surface);
+
+  color:
+    var(--color-text);
+}
+
+
+.hms-button--secondary:hover:not(:disabled) {
+  border-color:
+    var(--color-border-strong);
+
+  background:
+    var(--color-surface-hover);
+}
+
+
+.hms-button--danger {
+  border-color:
+    var(--color-danger);
+
+  background:
+    var(--color-danger);
+
+  color:
+    var(--color-text-inverse);
+}
+
+
+.hms-button--ghost {
+  border-color:
+    transparent;
+
+  background:
+    transparent;
+
+  color:
+    var(--color-text-secondary);
+}
+
+
+.hms-button--ghost:hover:not(:disabled) {
+  background:
+    var(--color-surface-hover);
+
+  color:
+    var(--color-primary);
+}
+
+
+/* ============================================================
+   ICON BUTTON
+============================================================ */
+
+.hms-icon-button {
+  width:
+    var(--hms-icon-button-size);
+
+  height:
+    var(--hms-icon-button-size);
+
+  min-width:
+    var(--hms-icon-button-size);
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  padding:
+    0;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-control-radius);
+
+  background:
+    var(--color-surface);
+
+  color:
+    var(--color-text-secondary);
+
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    transform var(--transition);
+}
+
+
+.hms-icon-button:hover:not(:disabled) {
+  border-color:
+    var(--color-border-strong);
+
+  background:
+    var(--color-surface-hover);
+
+  color:
+    var(--color-primary);
+
+  transform:
+    translateY(-1px);
+}
+
+
+/* ============================================================
+   STAT GRID / STAT CARD
+============================================================ */
+
+.hms-stat-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(
+        min(100%, 210px),
+        1fr
+      )
+    );
+
+  gap:
+    var(--space-3);
+}
+
+
+.hms-stat-card {
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+
+  gap:
+    var(--space-3);
+
+  min-height:
+    96px;
+
+  padding:
+    var(--space-4);
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--hms-panel-shadow);
+}
+
+
+.hms-stat-card__icon {
+  width:
+    42px;
+
+  height:
+    42px;
+
+  min-width:
+    42px;
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    var(--color-primary-light);
+
+  color:
+    var(--color-primary);
+}
+
+
+.hms-stat-card__content {
+  min-width:
+    0;
+}
+
+
+.hms-stat-card__label {
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-medium);
+}
+
+
+.hms-stat-card__value {
+  margin-top:
+    2px;
+
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-xl);
+
+  font-weight:
+    var(--font-weight-extrabold);
+
+  line-height:
+    var(--line-height-tight);
+}
+
+
+.hms-stat-card__meta {
+  margin-top:
+    var(--space-1);
+
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-xs);
+}
+
+
+/* ============================================================
+   PANEL / SECTION
+============================================================ */
+
+.hms-panel {
+  min-width: 0;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--hms-panel-shadow);
+}
+
+
+.hms-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap:
+    var(--space-4);
+
+  padding:
+    var(--space-4)
+    var(--space-5);
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+}
+
+
+.hms-panel__title {
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--hms-section-title-size);
+
+  font-weight:
+    var(--font-weight-bold);
+}
+
+
+.hms-panel__description {
+  margin-top:
+    var(--space-1);
+
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-sm);
+}
+
+
+.hms-panel__body {
+  min-width:
+    0;
+
+  padding:
+    var(--space-5);
+}
+
+
+.hms-panel__body--flush {
+  padding:
+    0;
+}
+
+
+/* ============================================================
+   TABLE
+============================================================ */
+
+.hms-table-shell {
+  width: 100%;
+
+  overflow-x:
+    auto;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--hms-panel-radius);
+
+  background:
+    var(--color-surface);
+}
+
+
+.hms-table {
+  width: 100%;
+
+  min-width:
+    760px;
+
+  border-collapse:
+    collapse;
+}
+
+
+.hms-table th,
+.hms-table td {
+  min-height:
+    var(--hms-table-row-height);
+
+  padding:
+    var(--space-3)
+    var(--space-4);
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+
+  text-align:
+    left;
+
+  vertical-align:
+    middle;
+}
+
+
+.hms-table th {
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text-secondary);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-bold);
+
+  text-transform:
+    uppercase;
+
+  letter-spacing:
+    0.035em;
+
+  white-space:
+    nowrap;
+}
+
+
+.hms-table td {
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-sm);
+}
+
+
+.hms-table tbody tr:hover {
+  background:
+    var(--color-surface-hover);
+}
+
+
+.hms-table tbody tr:last-child td {
+  border-bottom:
+    0;
+}
+
+
+/* ============================================================
+   STATUS
+============================================================ */
+
+.hms-status {
+  min-height:
+    24px;
+
+  display:
+    inline-flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  gap:
+    var(--space-1);
+
+  padding:
+    3px 9px;
+
+  border:
+    1px solid transparent;
+
+  border-radius:
+    var(--radius-pill);
+
+  font-size:
+    var(--font-size-xs);
+
+  font-weight:
+    var(--font-weight-semibold);
+
+  line-height:
+    1;
+
+  white-space:
+    nowrap;
+}
+
+
+.hms-status--success {
+  border-color:
+    var(--color-success-border);
+
+  background:
+    var(--color-success-bg);
+
+  color:
+    var(--color-success);
+}
+
+
+.hms-status--warning {
+  border-color:
+    var(--color-warning-border);
+
+  background:
+    var(--color-warning-bg);
+
+  color:
+    var(--color-warning);
+}
+
+
+.hms-status--danger {
+  border-color:
+    var(--color-danger-border);
+
+  background:
+    var(--color-danger-bg);
+
+  color:
+    var(--color-danger);
+}
+
+
+.hms-status--info {
+  border-color:
+    var(--color-info-border);
+
+  background:
+    var(--color-info-bg);
+
+  color:
+    var(--color-info);
+}
+
+
+.hms-status--neutral {
+  border-color:
+    var(--color-border);
+
+  background:
+    var(--color-surface-muted);
+
+  color:
+    var(--color-text-secondary);
+}
+
+
+/* ============================================================
+   EMPTY / LOADING
+============================================================ */
+
+.hms-empty {
+  min-height:
+    220px;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  gap:
+    var(--space-3);
+
+  padding:
+    var(--space-8);
+
+  text-align:
+    center;
+
+  color:
+    var(--color-text-muted);
+}
+
+
+.hms-empty__title {
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-lg);
+
+  font-weight:
+    var(--font-weight-bold);
+}
+
+
+.hms-empty__description {
+  max-width:
+    520px;
+
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-sm);
+}
+
+
+.hms-loading {
+  min-height:
+    220px;
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  color:
+    var(--color-text-muted);
+}
+
+
+/* ============================================================
+   FORM LAYOUT
+============================================================ */
+
+.hms-form-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap:
+    var(--space-4);
+}
+
+
+.hms-form-field {
+  min-width:
+    0;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  gap:
+    var(--space-2);
+}
+
+
+.hms-form-field--full {
+  grid-column:
+    1 / -1;
+}
+
+
+.hms-form-label {
+  color:
+    var(--color-text);
+
+  font-size:
+    var(--font-size-sm);
+
+  font-weight:
+    var(--font-weight-semibold);
+}
+
+
+.hms-form-help {
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--font-size-xs);
+}
+
+
+/* ============================================================
+   MODAL
+============================================================ */
+
+.hms-modal-backdrop {
+  position:
+    fixed;
+
+  inset:
+    0;
+
+  z-index:
+    var(--z-overlay);
+
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    center;
+
+  padding:
+    var(--space-5);
+
+  background:
+    rgba(15, 23, 42, 0.48);
+
+  backdrop-filter:
+    blur(2px);
+}
+
+
+.hms-modal {
+  width:
+    min(
+      100%,
+      680px
+    );
+
+  max-height:
+    calc(100vh - 48px);
+
+  overflow:
+    hidden;
+
+  display:
+    flex;
+
+  flex-direction:
+    column;
+
+  border:
+    1px solid
+    var(--color-border);
+
+  border-radius:
+    var(--radius-xl);
+
+  background:
+    var(--color-surface);
+
+  box-shadow:
+    var(--shadow-xl);
+}
+
+
+.hms-modal__header {
+  display:
+    flex;
+
+  align-items:
+    flex-start;
+
+  justify-content:
+    space-between;
+
+  gap:
+    var(--space-4);
+
+  padding:
+    var(--space-5);
+
+  border-bottom:
+    1px solid
+    var(--color-divider);
+}
+
+
+.hms-modal__body {
+  overflow-y:
+    auto;
+
+  padding:
+    var(--space-5);
+}
+
+
+.hms-modal__footer {
+  display:
+    flex;
+
+  align-items:
+    center;
+
+  justify-content:
+    flex-end;
+
+  flex-wrap:
+    wrap;
+
+  gap:
+    var(--space-2);
+
+  padding:
+    var(--space-4)
+    var(--space-5);
+
+  border-top:
+    1px solid
+    var(--color-divider);
+}
+
+
+/* ============================================================
+   RESPONSIVE CONTRACT
+============================================================ */
+
+@media (max-width: 1024px) {
+  :root {
+    --hms-page-padding-x:
+      var(--space-5);
+  }
+
+  .hms-page-header {
+    flex-direction:
+      column;
+  }
+
+  .hms-page-header__actions {
+    width:
+      100%;
+
+    justify-content:
+      flex-start;
+  }
+}
+
+
+@media (max-width: 768px) {
+  :root {
+    --hms-page-padding-x:
+      var(--space-4);
+
+    --hms-page-padding-y:
+      var(--space-4);
+  }
+
+  .hms-toolbar {
+    align-items:
+      stretch;
+  }
+
+  .hms-toolbar__group,
+  .hms-toolbar__group--grow,
+  .hms-toolbar__group--end {
+    width:
+      100%;
+
+    margin-left:
+      0;
+  }
+
+  .hms-control,
+  .hms-button {
+    min-width:
+      0;
+  }
+
+  .hms-stat-grid {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+
+  .hms-form-grid {
+    grid-template-columns:
+      1fr;
+  }
+
+  .hms-panel__header {
+    flex-direction:
+      column;
+  }
+}
+
+
+@media (max-width: 520px) {
+  .hms-stat-grid {
+    grid-template-columns:
+      1fr;
+  }
+
+  .hms-page-header__actions,
+  .hms-toolbar__group {
+    align-items:
+      stretch;
+  }
+
+  .hms-page-header__actions
+  .hms-button,
+  .hms-toolbar__group
+  .hms-button {
+    width:
+      100%;
+  }
+
+  .hms-modal-backdrop {
+    align-items:
+      flex-end;
+
+    padding:
+      var(--space-3);
+  }
+
+  .hms-modal {
+    max-height:
+      calc(100vh - 24px);
+
+    border-radius:
+      var(--radius-lg);
+  }
+}
+
+
+/* ============================================================
+   REDUCED MOTION
+============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .hms-button,
+  .hms-icon-button,
+  .hms-control {
+    transition:
+      none;
+  }
+
+  .hms-button:hover:not(:disabled),
+  .hms-icon-button:hover:not(:disabled) {
+    transform:
+      none;
+  }
+}
+
+/* ============================================================
+   HMS GLOBAL UX CONTRACT V1
+
+   Permanent shared product rules:
+   - Page title       : 22px
+   - Context label    : 11px
+   - Description      : 13px
+   - Breadcrumb       : 12px
+   - Section heading  : 15px
+   - Control height   : 40px
+   - Shared page gaps : consistent across Admin portals
+============================================================ */
+
+:root {
+  --hms-page-title-size: 22px;
+  --hms-context-label-size: 11px;
+  --hms-page-description-size: 13px;
+  --hms-breadcrumb-size: 12px;
+  --hms-section-title-size: 15px;
+
+  --hms-control-height: 40px;
+
+  --hms-page-intro-gap: 20px;
+  --hms-section-gap: 16px;
+  --hms-card-radius: 14px;
+}
+
+
+/* ============================================================
+   PRIMARY PAGE TITLES
+============================================================ */
+
+:where(
+  .admin-layout__content,
+  .super-admin-layout__content
+)
+:where(
+  .page-header h1,
+  .page-header h2,
+  .page-header-left h1,
+  .page-header-left h2,
+  .hms-page-header__title,
+  .booking-desk-header h1,
+  .hotel-team__intro h1,
+  .hotel-overview-header__title-row h1
+) {
+  margin-top: 0;
+
+  font-size:
+    var(--hms-page-title-size);
+
+  line-height: 1.2;
+
+  font-weight: 800;
+
+  letter-spacing: -0.02em;
+}
+
+
+/* ============================================================
+   PAGE CONTEXT LABEL
+============================================================ */
+
+:where(
+  .admin-layout__content,
+  .super-admin-layout__content
+)
+:where(
+  .hms-page-eyebrow,
+  .profile-security__eyebrow,
+  [class*="eyebrow"]
+) {
+  font-size:
+    var(--hms-context-label-size);
+
+  line-height: 1.3;
+
+  font-weight: 700;
+
+  letter-spacing: 0.06em;
+
+  text-transform: uppercase;
+}
+
+
+/* ============================================================
+   PAGE DESCRIPTIONS
+============================================================ */
+
+:where(
+  .admin-layout__content,
+  .super-admin-layout__content
+)
+:where(
+  .page-header p,
+  .page-header-left p,
+  .hms-page-header__description,
+  .booking-desk-header p,
+  .hotel-team__intro p,
+  .profile-security__intro p
+) {
+  font-size:
+    var(--hms-page-description-size);
+
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   STANDARD SECTION TITLES
+============================================================ */
+
+:where(
+  .admin-layout__content,
+  .super-admin-layout__content
+)
+:where(
+  .hms-panel__title,
+  .profile-security__card-header h2
+) {
+  font-size:
+    var(--hms-section-title-size);
+
+  line-height: 1.35;
+
+  font-weight: 800;
+}
+
+
+/* ============================================================
+   COMMON INTERACTIVE CONTROL HEIGHT
+============================================================ */
+
+:where(
+  .admin-layout__content,
+  .super-admin-layout__content
+)
+:where(
+  .hms-button,
+  .hms-control,
+  .search-input,
+  .filter-select
+) {
+  min-height:
+    var(--hms-control-height);
+}
+
+
+/* ============================================================
+   COMMON CARD RADIUS
+============================================================ */
+
+:where(
+  .admin-layout__content,
+  .super-admin-layout__content
+)
+:where(
+  .hms-panel,
+  .hms-stat-card
+) {
+  border-radius:
+    var(--hms-card-radius);
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 768px) {
+
+  :root {
+    --hms-page-title-size: 20px;
+    --hms-page-intro-gap: 16px;
+    --hms-section-gap: 14px;
+  }
+}

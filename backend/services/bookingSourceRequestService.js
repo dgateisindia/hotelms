@@ -56,6 +56,7 @@ async function lockSourceRequest(
         SELECT
           request_id,
           status,
+          room_type,
           assigned_room_id
 
         FROM customer_requests

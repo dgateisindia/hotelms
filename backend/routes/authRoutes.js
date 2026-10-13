@@ -3,6 +3,11 @@ const express = require("express");
 const { registerSuperAdmin } = require("../controllers/authController");
 
 const {
+  getAccountProfile,
+  updateAccountProfile,
+} = require("../controllers/accountProfileController");
+
+const {
   requireClerkSession,
   attachDbUser,
 } = require("../middleware/roleMiddleware");
@@ -46,5 +51,25 @@ router.get(
     });
   }
 );
+
+/* ============================================================
+   AUTHENTICATED HMS ACCOUNT PROFILE
+============================================================ */
+
+router.get(
+  "/profile",
+  requireClerkSession,
+  attachDbUser(),
+  getAccountProfile
+);
+
+
+router.patch(
+  "/profile",
+  requireClerkSession,
+  attachDbUser(),
+  updateAccountProfile
+);
+
 
 module.exports = router;

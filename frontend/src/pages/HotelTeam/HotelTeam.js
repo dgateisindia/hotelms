@@ -196,6 +196,7 @@ function normalizeStatus(
 function HotelTeam() {
   const {
     selectedHotel,
+    workspaceRefreshKey = 0,
   } = useOutletContext();
 
 
@@ -340,6 +341,7 @@ function HotelTeam() {
       [
         selectedHotel
           ?.displayId,
+        workspaceRefreshKey,
       ]
     );
 

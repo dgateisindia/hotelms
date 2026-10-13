@@ -59,7 +59,8 @@ function attachDbUser() {
             NULL AS hotel_id,
             full_name,
             email,
-            status
+            status,
+            NULL AS hotel_status
           FROM superadmins
           WHERE clerk_id = ?
 
@@ -68,13 +69,17 @@ function attachDbUser() {
           SELECT
             'admin' AS role,
             NULL AS superadmin_id,
-            admin_id,
-            hotel_id,
-            full_name,
-            email,
-            status
-          FROM admins
-          WHERE clerk_id = ?
+            a.admin_id,
+            a.hotel_id,
+            a.full_name,
+            a.email,
+            a.status,
+            h.status AS hotel_status
+          FROM admins a
+          INNER JOIN hotels h
+            ON h.hotel_id = a.hotel_id
+           AND h.superadmin_id = a.superadmin_id
+          WHERE a.clerk_id = ?
         `,
         [clerkUserId, clerkUserId]
       );
@@ -110,6 +115,25 @@ function attachDbUser() {
         });
       }
 
+
+      /*
+       * A Hotel Admin may operate only while the assigned hotel
+       * itself is active.
+       *
+       * Super Admin accounts have no hotel_status.
+       */
+      if (
+        account.role === "admin" &&
+        account.hotel_status !== "active"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code: "HOTEL_NOT_ACTIVE",
+          message:
+            "Your assigned hotel is not active. Contact the business owner.",
+        });
+      }
+
       req.dbUser = {
         clerkId: clerkUserId,
         role: account.role,
@@ -121,6 +145,10 @@ function attachDbUser() {
         fullName: account.full_name,
         email: account.email,
         status: account.status,
+
+        hotelStatus:
+          account.hotel_status ||
+          null,
       };
 
       return next();

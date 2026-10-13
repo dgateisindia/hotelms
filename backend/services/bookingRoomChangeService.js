@@ -2,6 +2,14 @@ const { ensureNoOverlap } = require("./bookingRoomService");
 const { getLockedPaymentState } = require("./bookingPaymentService");
 const { getBookingPolicySnapshotWithConnection } = require("./hotelSettingsService");
 const { syncSourceRequestRoom } = require("./bookingSourceRequestService");
+const {
+  createRoomChangeCleaningTaskWithConnection,
+} = require("./housekeeping/housekeepingService");
+
+const {
+  createBookingMaintenanceTaskWithConnection,
+  SOURCE_TYPES,
+} = require("./maintenance/maintenanceService");
 
 function throwHttp(status, code, message) {
   const error = new Error(message);
@@ -193,6 +201,26 @@ function resolveRate({
   );
 }
 
+function resolveAdjustmentReason(source, reasonCategory) {
+  if (source === "guest_request") return "guest_request";
+
+  const category = String(reasonCategory || "")
+    .trim()
+    .toLowerCase();
+
+  if (
+    [
+      "maintenance",
+      "hotel_operational",
+      "hotel_policy",
+      "other",
+    ].includes(category)
+  ) {
+    return category;
+  }
+
+  return "hotel_operational";
+}
 function resolveHistoryReason(source, direction, reasonCategory) {
   if (source === "guest_request") {
     if (direction === "upgrade") return "guest_upgrade";
@@ -512,6 +540,10 @@ async function changeCheckedInRoom(
     round2(paymentState.netPaid)
   );
 
+  const adjustmentReason = resolveAdjustmentReason(
+    source,
+    reasonCategory
+  );
   const historyReason = resolveHistoryReason(
     source,
     direction,
@@ -525,6 +557,44 @@ async function changeCheckedInRoom(
   const historyNote =
     normalizedReason ||
     `Permanent room change from Room ${currentRoom.room_number} to Room ${targetRoom.room_number}`;
+  const [adjustmentResult] = await connection.query(
+    `
+      INSERT INTO booking_adjustments (
+        hotel_id,
+        booking_id,
+        adjustment_type,
+        room_change_mode,
+        original_room_id,
+        replacement_room_id,
+        room_change_status,
+        reason,
+        amount,
+        description,
+        created_by_admin_id
+      )
+      VALUES (
+        ?, ?,
+        'room_change',
+        'permanent',
+        ?, ?,
+        NULL,
+        ?,
+        ?,
+        ?,
+        ?
+      )
+    `,
+    [
+      hId,
+      bId,
+      currentRoomId,
+      targetRoomId,
+      adjustmentReason,
+      totalDifference,
+      historyNote,
+      aId,
+    ]
+  );
 
   await connection.query(
     `
@@ -595,15 +665,63 @@ async function changeCheckedInRoom(
     ]
   );
 
-  await connection.query(
-    `
-      UPDATE rooms
-      SET status = ?
-      WHERE hotel_id = ?
-        AND room_id = ?
-    `,
-    [oldRoomNextStatus, hId, currentRoomId]
-  );
+  if (
+    oldRoomNextStatus ===
+      "maintenance"
+  ) {
+
+    await createBookingMaintenanceTaskWithConnection(
+      connection,
+      {
+        hotelId:
+          hId,
+
+        adminId:
+          aId,
+
+        roomId:
+          currentRoomId,
+
+        bookingId:
+          bId,
+
+        bookingAdjustmentId:
+          Number(
+            adjustmentResult.insertId
+          ),
+
+        sourceType:
+          SOURCE_TYPES.PERMANENT_ROOM_CHANGE,
+
+        issueDescription:
+          historyNote,
+      }
+    );
+  }
+  else {
+
+    await createRoomChangeCleaningTaskWithConnection(
+      connection,
+      {
+        hotelId:
+          hId,
+
+        adminId:
+          aId,
+
+        adjustmentId:
+          Number(
+            adjustmentResult.insertId
+          ),
+
+        roomId:
+          currentRoomId,
+
+        notes:
+          "Previous room released for cleaning after permanent room change.",
+      }
+    );
+  }
 
   await connection.query(
     `

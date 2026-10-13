@@ -148,6 +148,8 @@ function SelectedHotelLayout() {
     setRedirectStatus,
   ] = useState(null);
 
+  const [workspaceRefreshKey, setWorkspaceRefreshKey] = useState(0);
+
 
   /* ==========================================================
      LOAD SELECTED HOTEL
@@ -478,9 +480,10 @@ function SelectedHotelLayout() {
               .breadcrumb,
         },
       ]}
-      onRefresh={() =>
-        loadSelectedHotel()
-      }
+      onRefresh={() => {
+        setWorkspaceRefreshKey((value) => value + 1);
+        return loadSelectedHotel();
+      }}
       isRefreshing={
         refreshing
       }
@@ -506,6 +509,8 @@ function SelectedHotelLayout() {
 
           refreshSelectedHotel:
             loadSelectedHotel,
+
+          workspaceRefreshKey,
         }}
       />
     </SuperAdminLayout>

@@ -1,10 +1,35 @@
-const express = require("express");
-const router = express.Router();
+const express =
+  require("express");
 
-const { createRequest } = require("../controllers/customerRequestController");
+const router =
+  express.Router();
 
-// Public guest route.
-// Hotel identity is resolved ONLY from the active QR public token.
-router.post("/:publicToken", createRequest);
+const {
+  createRequest,
+  getPublicRequestContext,
+} = require(
+  "../controllers/customerRequestController"
+);
 
-module.exports = router;
+
+/* ============================================================
+   PUBLIC QR CUSTOMER REQUEST
+
+   These routes intentionally require no Clerk session.
+
+   Hotel tenancy is derived only from the active public QR token.
+============================================================ */
+
+router.get(
+  "/public/:publicToken",
+  getPublicRequestContext
+);
+
+router.post(
+  "/public/:publicToken",
+  createRequest
+);
+
+
+module.exports =
+  router;

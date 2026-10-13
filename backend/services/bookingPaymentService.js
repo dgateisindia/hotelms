@@ -12,6 +12,20 @@
 ============================================================ */
 
 
+const {
+  SUPPORTED_PAYMENT_METHODS,
+  normalizePaymentMethodForPolicy,
+  resolveBookingPaymentPolicyWithConnection,
+} = require(
+  "./bookingPayments/paymentPolicyService"
+);
+
+
+/* ============================================================
+   SET-PROP PAYMENT POLICY
+============================================================ */
+
+
 /* ============================================================
    SERVICE ERROR
 ============================================================ */
@@ -466,6 +480,197 @@ async function syncBookingPaymentStatus(
 
 
 /* ============================================================
+   REQUIRED INITIAL ADVANCE
+
+   Advance requirement is reservation-level.
+
+   fixed_amount:
+   - applied once to the complete reservation
+   - NOT multiplied by child booking count
+
+   percentage:
+   - calculated from the complete reservation total
+
+   manual / none:
+   - no automatically enforced numeric minimum
+
+   If child snapshots differ unexpectedly, enforce the strongest
+   automatic minimum without rewriting any snapshot.
+============================================================ */
+
+function calculateRequiredAdvanceAmount(
+  policies,
+  grandTotal
+) {
+
+  const total =
+    Number(
+      Math.max(
+        0,
+        Number(
+          grandTotal ||
+          0
+        )
+      ).toFixed(2)
+    );
+
+
+  if (
+    total <= 0
+  ) {
+    return 0;
+  }
+
+
+  let required =
+    0;
+
+
+  for (
+    const policy of
+    (
+      Array.isArray(
+        policies
+      )
+        ? policies
+        : []
+    )
+  ) {
+
+    const rule =
+      policy
+        ?.advanceRequirement;
+
+
+    if (
+      !rule ||
+      typeof rule !==
+        "object" ||
+      Array.isArray(
+        rule
+      )
+    ) {
+      continue;
+    }
+
+
+    const method =
+      String(
+        rule.method ||
+        "none"
+      )
+        .trim()
+        .toLowerCase();
+
+
+    if (
+      ![
+        "none",
+        "fixed_amount",
+        "percentage",
+        "manual",
+      ].includes(
+        method
+      )
+    ) {
+
+      throwHttp(
+        500,
+        "INVALID_ADVANCE_PAYMENT_POLICY",
+        "The booking contains an unsupported advance payment policy."
+      );
+    }
+
+
+    const value =
+      Number(
+        rule.value ??
+        0
+      );
+
+
+    if (
+      !Number.isFinite(
+        value
+      ) ||
+      value < 0
+    ) {
+
+      throwHttp(
+        500,
+        "INVALID_ADVANCE_PAYMENT_POLICY",
+        "The booking contains an invalid advance payment policy value."
+      );
+    }
+
+
+    if (
+      method ===
+        "percentage" &&
+      value > 100
+    ) {
+
+      throwHttp(
+        500,
+        "INVALID_ADVANCE_PAYMENT_POLICY",
+        "The booking contains an invalid advance payment percentage."
+      );
+    }
+
+
+    let candidate =
+      0;
+
+
+    if (
+      method ===
+        "fixed_amount"
+    ) {
+
+      candidate =
+        value;
+    }
+    else if (
+      method ===
+        "percentage"
+    ) {
+
+      candidate =
+        (
+          total *
+          value
+        ) /
+        100;
+    }
+
+
+    candidate =
+      Math.min(
+        total,
+        Math.max(
+          0,
+          candidate
+        )
+      );
+
+
+    required =
+      Math.max(
+        required,
+        candidate
+      );
+  }
+
+
+  return Number(
+    required.toFixed(
+      2
+    )
+  );
+}
+
+
+/* ============================================================
    APPLY INITIAL PAYMENT
 
    Multi-room bookings currently create separate booking rows.
@@ -503,7 +708,55 @@ async function applyInitialPayment(
     );
 
 
+  const initialPolicies =
+    [];
+
+
+  for (
+    const booking
+    of bookings
+  ) {
+
+    const policy =
+      await resolveBookingPaymentPolicyWithConnection(
+        connection,
+        {
+          hotelId,
+
+          bookingId:
+            booking.bookingId,
+        }
+      );
+
+
+    initialPolicies.push(
+      policy
+    );
+  }
+
+
+  const requiredAdvanceAmount =
+    calculateRequiredAdvanceAmount(
+      initialPolicies,
+      grandTotal
+    );
+
+
   if (!payment) {
+
+    if (
+      requiredAdvanceAmount >
+        0.009
+    ) {
+
+      throwHttp(
+        409,
+        "ADVANCE_PAYMENT_REQUIRED_BY_POLICY",
+        `An initial payment of at least ${requiredAdvanceAmount.toFixed(2)} is required by the booking payment policy.`
+      );
+    }
+
+
     return {
       amountReceived: 0,
       grandTotal,
@@ -529,6 +782,83 @@ async function applyInitialPayment(
       400,
       "PAYMENT_EXCEEDS_BOOKING_TOTAL",
       "Initial payment cannot be greater than the booking total."
+    );
+  }
+
+
+  const normalizedInitialMethod =
+    normalizePaymentMethodForPolicy(
+      payment.method
+    );
+
+
+  if (
+    !SUPPORTED_PAYMENT_METHODS
+      .has(
+        normalizedInitialMethod
+      )
+  ) {
+    throwHttp(
+      400,
+      "INVALID_PAYMENT_METHOD",
+      "Select a valid payment method."
+    );
+  }
+
+
+  for (
+    const policy
+    of initialPolicies
+  ) {
+
+    if (
+      !policy
+        .allowedMethods
+        .includes(
+          normalizedInitialMethod
+        )
+    ) {
+
+      throwHttp(
+        409,
+        "PAYMENT_METHOD_NOT_ALLOWED_BY_POLICY",
+        "This payment method is not allowed by the policy saved for this booking."
+      );
+    }
+  }
+
+
+  if (
+    requiredAdvanceAmount >
+      0.009 &&
+    amountReceived +
+      0.009 <
+      requiredAdvanceAmount
+  ) {
+
+    throwHttp(
+      409,
+      "ADVANCE_PAYMENT_REQUIRED_BY_POLICY",
+      `An initial payment of at least ${requiredAdvanceAmount.toFixed(2)} is required by the booking payment policy.`
+    );
+  }
+
+
+  if (
+    initialPolicies.some(
+      (policy) =>
+        policy
+          .allowPartialPayment ===
+        false
+    ) &&
+    amountReceived +
+      0.009 <
+      grandTotal
+  ) {
+    throwHttp(
+      409,
+      "PARTIAL_PAYMENT_NOT_ALLOWED_BY_POLICY",
+      "Partial payment is not allowed by the policy saved for this reservation."
     );
   }
 
@@ -778,6 +1108,16 @@ async function collectBookingPayment(
       }
     );
 
+
+  const paymentPolicy =
+    await resolveBookingPaymentPolicyWithConnection(
+      connection,
+      {
+        hotelId,
+        bookingId,
+      }
+    );
+
   /* ==========================================================
      AMOUNT
   ========================================================== */
@@ -857,12 +1197,7 @@ async function collectBookingPayment(
 
 
   const paymentMethods =
-    new Set([
-      "cash",
-      "card",
-      "upi",
-      "bank_transfer",
-    ]);
+    SUPPORTED_PAYMENT_METHODS;
 
 
   if (
@@ -874,6 +1209,21 @@ async function collectBookingPayment(
       400,
       "INVALID_PAYMENT_METHOD",
       "Select a valid payment method."
+    );
+  }
+
+
+  if (
+    !paymentPolicy
+      .allowedMethods
+      .includes(
+        normalizedMethod
+      )
+  ) {
+    throwHttp(
+      409,
+      "PAYMENT_METHOD_NOT_ALLOWED_BY_POLICY",
+      "This payment method is not allowed by the policy saved for this booking."
     );
   }
 
@@ -1094,6 +1444,22 @@ async function collectBookingPayment(
       409,
       "PAYMENT_EXCEEDS_OUTSTANDING",
       `Only ₹${outstandingAmount.toFixed(2)} is outstanding on this booking.`
+    );
+  }
+
+
+  if (
+    paymentPolicy
+      .allowPartialPayment ===
+      false &&
+    paymentAmount +
+      0.009 <
+      outstandingAmount
+  ) {
+    throwHttp(
+      409,
+      "PARTIAL_PAYMENT_NOT_ALLOWED_BY_POLICY",
+      "Partial payment is not allowed by the policy saved for this booking. Collect the full outstanding amount."
     );
   }
 

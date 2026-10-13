@@ -43,6 +43,12 @@ const bookingRoutes =
 const roomRoutes =
   require("./routes/roomRoutes");
 
+const housekeepingRoutes =
+  require("./routes/housekeepingRoutes");
+
+const maintenanceRoutes =
+  require("./routes/maintenanceRoutes");
+
 const customerRoutes =
   require("./routes/customerRoutes");
 
@@ -366,6 +372,18 @@ app.use(
   "/api/rooms",
   ...requireHotelAdmin,
   roomRoutes
+);
+
+app.use(
+  "/api/housekeeping",
+  ...requireHotelAdmin,
+  housekeepingRoutes
+);
+
+app.use(
+  "/api/maintenance",
+  ...requireHotelAdmin,
+  maintenanceRoutes
 );
 
 app.use(

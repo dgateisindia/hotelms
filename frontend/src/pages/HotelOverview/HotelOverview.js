@@ -1,10 +1,13 @@
 import React, {
   useMemo,
+  useState,
 } from "react";
 
 import {
   useOutletContext,
 } from "react-router-dom";
+
+import EditHotelModal from "../../components/hotels/EditHotelModal/EditHotelModal";
 
 import "./HotelOverview.css";
 
@@ -240,6 +243,21 @@ function HotelOverview() {
   const selectedHotel =
     context?.selectedHotel;
 
+  const refreshSelectedHotel =
+    context?.refreshSelectedHotel;
+
+
+  const [
+    editOpen,
+    setEditOpen,
+  ] = useState(false);
+
+
+  const [
+    notice,
+    setNotice,
+  ] = useState("");
+
 
   const metrics =
     useMemo(() => {
@@ -316,6 +334,15 @@ function HotelOverview() {
   return (
     <div className="hotel-overview">
 
+      {notice && (
+        <div
+          className="alert alert-success"
+          role="status"
+        >
+          {notice}
+        </div>
+      )}
+
       {/* ======================================================
           HOTEL HEADER
       ====================================================== */}
@@ -374,6 +401,18 @@ function HotelOverview() {
           </div>
 
         </div>
+
+        <button
+          type="button"
+          className="btn btn-outline"
+          onClick={() => {
+            setNotice("");
+            setEditOpen(true);
+          }}
+        >
+          Edit Hotel
+        </button>
+
       </section>
 
 
@@ -635,6 +674,30 @@ function HotelOverview() {
           </p>
         </section>
       )}
+
+      <EditHotelModal
+        isOpen={editOpen}
+        hotel={selectedHotel}
+        onClose={() => {
+          setEditOpen(false);
+        }}
+        onUpdated={async (
+          updatedHotel,
+          message
+        ) => {
+          setNotice(
+            message ||
+              `${updatedHotel?.name || "Hotel"} updated successfully.`
+          );
+
+          if (
+            typeof refreshSelectedHotel ===
+            "function"
+          ) {
+            await refreshSelectedHotel();
+          }
+        }}
+      />
 
     </div>
   );

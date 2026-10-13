@@ -10,6 +10,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import apiClient, { getApiErrorMessage } from '../../shared/api/apiClient';
 import './Payroll.css';
 import {
@@ -214,7 +215,7 @@ function Payroll() {
 
     return (
       <div className="modal-overlay" onClick={()=>setShowSlip(false)}>
-        <div className="modal-box" onClick={e=>e.stopPropagation()}>
+        <div className="modal-box" role="dialog" aria-modal="true" onClick={e=>e.stopPropagation()}>
           <div className="modal-header">
             <h3>Payslip — PAY{String(p.payroll_id).padStart(3,'0')}</h3>
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
@@ -315,11 +316,38 @@ function Payroll() {
   //  RENDER
   // ════════════════════════════════════════════════════════════
   return (
-    <>
+    <div className="hms-payroll-page" data-hms-fast-ui="payroll">
+<>
+      <div
+        className="hms-page-header hms-payroll-page__header"
+        data-hms-page-header-lock="payroll"
+      >
+        <div className="hms-page-header__content">
+          <div className="hms-page-header__eyebrow">
+            TEAM OPERATIONS
+          </div>
+
+          <h1 className="hms-page-header__title">
+            Payroll
+          </h1>
+
+          <p className="hms-page-header__description">
+            Manage hotel payroll, salary processing and payment status.
+          </p>
+        </div>
+      </div>
+      {/* PAYROLL-P2-R1-RESPONSIVE-REDESIGN */}
       <div className="payroll-topbar">
+        <div className="payroll-toolbar-heading">
+          <div>
+            <strong>Payroll Controls</strong>
+            <span>Choose a month, filter records and manage payroll</span>
+          </div>
+          <span className="payroll-toolbar-period">{monthLabel}</span>
+        </div>
         <div style={{display:'flex',alignItems:'center',gap:6}}>
           <button className="pg-btn" onClick={()=>goToMonth(-1)}><IcoChevL/></button>
-          <button className="payroll-date-btn"><IcoCalendar/> {monthLabel}</button>
+          <span className="payroll-date-btn"><IcoCalendar/> {monthLabel}</span>
           <button className="pg-btn" onClick={()=>goToMonth(1)}><IcoChevR/></button>
           {userPickedPeriodRef.current && (
             <button className="payroll-date-btn" onClick={useCurrentPeriod} style={{fontSize:12}}>
@@ -357,44 +385,58 @@ function Payroll() {
           <div>
             <div className="payroll-stat-label">Total Employees</div>
             <div className="payroll-stat-value">{activeStaffCount ?? payrollRows.length}</div>
-            <div className="payroll-stat-sub">All Departments</div>
+            <div className="payroll-stat-sub">Active hotel staff</div>
           </div>
         </div>
         <div className="payroll-stat-card">
           <div className="payroll-stat-icon green"><IcoPayroll/></div>
           <div>
             <div className="payroll-stat-label">Total Payroll</div>
-            <div className="payroll-stat-value" style={{fontSize:15}}>₹ {(totalPayroll/100000).toFixed(2)}L</div>
-            <div className="payroll-stat-sub">This Period</div>
+            <div className="payroll-stat-value">{fmt(totalPayroll)}</div>
+            <div className="payroll-stat-sub">Matching payroll records</div>
           </div>
         </div>
         <div className="payroll-stat-card">
           <div className="payroll-stat-icon orange"><IcoDeduction/></div>
           <div>
             <div className="payroll-stat-label">Total Deductions</div>
-            <div className="payroll-stat-value" style={{fontSize:15}}>₹ {(totalDeduct/100000).toFixed(2)}L</div>
-            <div className="payroll-stat-sub">This Period</div>
+            <div className="payroll-stat-value">{fmt(totalDeduct)}</div>
+            <div className="payroll-stat-sub">Matching payroll records</div>
           </div>
         </div>
         <div className="payroll-stat-card">
           <div className="payroll-stat-icon purple"><IcoNetPay/></div>
           <div>
             <div className="payroll-stat-label">Net Payroll</div>
-            <div className="payroll-stat-value" style={{fontSize:15}}>₹ {(netPayroll/100000).toFixed(2)}L</div>
-            <div className="payroll-stat-sub">This Period</div>
+            <div className="payroll-stat-value">{fmt(netPayroll)}</div>
+            <div className="payroll-stat-sub">Matching payroll records</div>
           </div>
         </div>
         <div className="payroll-stat-card">
           <div className="payroll-stat-icon red"><IcoPending/></div>
           <div>
             <div className="payroll-stat-label">Pending Payments</div>
-            <div className="payroll-stat-value" style={{fontSize:15}}>₹ {(pendingAmount/100000).toFixed(2)}L</div>
+            <div className="payroll-stat-value">{fmt(pendingAmount)}</div>
             <div className="payroll-stat-sub">{pending.length} Employees</div>
           </div>
         </div>
       </div>
 
+      <div className="payroll-register-heading">
+        <div>
+          <span className="payroll-register-eyebrow">
+            PAYROLL REGISTER
+          </span>
+          <h2>Employee Salary Records</h2>
+          <p>{monthLabel} · Records matching the selected filters</p>
+        </div>
+        <span className="payroll-record-count">
+          {payrollRows.length} Records
+        </span>
+      </div>
+
       <div className="payroll-card">
+        <div className="payroll-table-scroll">
         <table className="payroll-table">
           <thead>
             <tr>
@@ -447,6 +489,7 @@ function Payroll() {
             ))}
           </tbody>
         </table>
+        </div>
 
         <div className="payroll-pagination">
           <span className="pagination-info">
@@ -462,8 +505,9 @@ function Payroll() {
         </div>
       </div>
 
-      {showSlip && selected && PayslipModal()}
+      {showSlip && selected && createPortal(<div className="hms-payroll-modal-portal">{PayslipModal()}</div>, document.body)}
     </>
+</div>
   );
 }
 

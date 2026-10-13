@@ -1,0 +1,1009 @@
+{
+    "updatedAt":  "2026-10-10 10:46:50",
+    "developmentMode":  "PRODUCT_FIRST",
+    "previousStatus":  {
+                           "updatedAt":  "2026-10-02 14:24:27",
+                           "workflow":  "PRODUCT_FIRST_FAST_MODE",
+                           "proofPolicy":  {
+                                               "intermediateArtifactsInRoot":  false,
+                                               "finalLocksPreserved":  true,
+                                               "stagingPolicy":  "KEEP_CURRENT_ROLLBACK_ONLY",
+                                               "futureProofs":  "ONE_CONSOLIDATED_STATUS"
+                                           },
+                           "designContract":  {
+                                                  "pageTitle":  "22px",
+                                                  "contextLabel":  "11px",
+                                                  "description":  "13px",
+                                                  "breadcrumb":  "12px",
+                                                  "sectionHeading":  "15px",
+                                                  "controlHeight":  "40px",
+                                                  "adminAndSuperAdminGrid":  "SHARED"
+                                              },
+                           "lockedCoreModules":  [
+                                                     "Rooms",
+                                                     "Room Details",
+                                                     "Customers",
+                                                     "Housekeeping",
+                                                     "Maintenance",
+                                                     "Finance Functional Core",
+                                                     "Settings Functional Core",
+                                                     "QR Functional Core",
+                                                     "Staff",
+                                                     "Attendance",
+                                                     "Payroll",
+                                                     "Reports",
+                                                     "Dashboard"
+                                                 ],
+                           "currentProductGaps":  [
+                                                      "Hotel Admin Profile \u0026 Security runtime blank screen",
+                                                      "Booking lifecycle UX requires smoother check-in to checkout flow",
+                                                      "Customer must be able to pay advance/partial/during-stay/checkout",
+                                                      "Booking folio and billing must become automated and easy",
+                                                      "Checkout settlement and invoice generation require unified workflow",
+                                                      "QR Code needs clear Admin navigation/access",
+                                                      "QR Code needs Download PNG / Print / Copy Link experience",
+                                                      "Public QR guest request page needs modern mobile-first redesign",
+                                                      "Settings policies require cross-module propagation verification",
+                                                      "Super Admin needs real Hotels management/list page",
+                                                      "Attendance placeholders such as Leave/Birthdays/Performance require product decision/implementation"
+                                                  ],
+                           "nextProductSprint":  "BOOKING_CHECKIN_CHECKOUT_PAYMENT_BILLING_AUTOMATION",
+                           "globalCssSha":  "FBF41F1C85CA34405780F2E18047A4673961300D5367385017F99C08C59B21DC",
+                           "breadcrumbCssSha":  "1232761DBC40FC70B98B86A552BB19901DFBDE9E519022B5D06EDD828FA821F4",
+                           "adminLayoutCssSha":  "CF45044CC1AB774C18921F92645305D14728D5FFBAAA685F0B57DE31E8EF6901",
+                           "superAdminLayoutCssSha":  "7079E5BC4D12BD66F8C3CAE9D154D0A20B2A61B3046663BB0CE2D12919066B8B",
+                           "backendChanged":  false,
+                           "databaseChanged":  false
+                       },
+    "consolidatedEvidence":  [
+                                 {
+                                     "file":  "ATTEND-A3-attendance-functional-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "DEA97AA58430ECBA23DB3ECDF133E6111E4C05018B345C7071C4CB331B237E3D"
+                                 },
+                                 {
+                                     "file":  "CUSTOMER-C6-customer-details-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "F5D877B36EF6C53A1672D92D11DB093E9286810F5C966C02333C00C4645A0CC2"
+                                 },
+                                 {
+                                     "file":  "DASH-D3-dashboard-functional-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "47CFCA5F097E4B156B458F0BAF736AD3A3677522490A27D60A799DE386233E61"
+                                 },
+                                 {
+                                     "file":  "FINAL-BILL-4-billing-visual-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_AND_VISUAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "A46E2A369FCDFFB0DC1F711E1E33AD9F08B9B6BF3A71FC744777E46F286C5087"
+                                 },
+                                 {
+                                     "file":  "FINAL-SET-4-settings-visual-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_AND_VISUAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "9296EB0695FA7A9D4CDD7E251AFFE2C61B58E20FB0B20295A432ADA17C43FA78"
+                                 },
+                                 {
+                                     "file":  "FINANCE-F8R-checkout-payments-billing-functional-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "6CFE7D1738CF4BED39B2191F9642F6FF3FB68D46B4272BBB4EAFA1D2A4064F27"
+                                 },
+                                 {
+                                     "file":  "PAY-A3-payroll-functional-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "720BE109E98284540D16FAD8F9FE97462CC3D2E6CE1BD21BA5BE742F890CECEE"
+                                 },
+                                 {
+                                     "file":  "QR-Q4-qr-requests-functional-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "964E79B3B1AE7F6EE15348D8D0D78B7DA7E444FFE98F2AE54FC02214E527E607"
+                                 },
+                                 {
+                                     "file":  "REPORT-R5-reports-functional-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "2C44E08CF5A726EE9FEAC3541BB9C4CBC6772202DA2D2E85072F26BE7C187459"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-Z10-maintenance-lifecycle-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "5AC8818E546135DB4B92808536BAFCAA470E8456ED1997EFF97678B00356E672"
+                                 },
+                                 {
+                                     "file":  "ROOM-R6L1-room-details-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "56E60DFB38475C6E906252DC9FF45B52982979A9AB283FC89AC8FADAE1C61CC0"
+                                 },
+                                 {
+                                     "file":  "SETTINGS-S5R-settings-functional-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "E8F65554BD75E1558E4F7129A20B835C430E8308C77B4FE07000300714FCBB15"
+                                 },
+                                 {
+                                     "file":  "STAFF-S3-staff-functional-final-lock.json",
+                                     "stage":  "",
+                                     "status":  "FUNCTIONAL_FINAL_LOCKED",
+                                     "decision":  "",
+                                     "sha256":  "BCF381B6C782E93259299D691B192F25C80D3A355C4037E90D33569FF46CEA10"
+                                 },
+                                 {
+                                     "file":  "HMS-CLEAN-A5R1-final-cleanup-lock.json",
+                                     "stage":  "",
+                                     "status":  "FINAL_CLEAN",
+                                     "decision":  "",
+                                     "sha256":  "C72232DBD57FEBE0870C2B0FB819A47CAFA0BE8841B2B05BD107F26CBD8886E8"
+                                 },
+                                 {
+                                     "file":  "HMS-CLEAN-A3-root-proof-archive-index.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "AD040CEC667E347C18B320D47C3CDCA49B84012388A976EF047C45994FEC8B3D"
+                                 },
+                                 {
+                                     "file":  "ATTEND-A1R-live-read-security-runtime.json",
+                                     "stage":  "ATTEND-A1R",
+                                     "status":  "",
+                                     "decision":  "ATTENDANCE_READ_SECURITY_RUNTIME_PASS",
+                                     "sha256":  "B44BDA0EB08FD550E34E78E70871C4C9A0EBB049C9F111795391B0A53B54F875"
+                                 },
+                                 {
+                                     "file":  "CONCEPT-PROFILE-1R2-profile-security.json",
+                                     "stage":  "CONCEPT-PROFILE-1R2",
+                                     "status":  "PASS",
+                                     "decision":  "",
+                                     "sha256":  "6464C7DC0150291A9A5BAF2A1F0CC0060C8D7A6FBB4DADC61EA7C67EB039D426"
+                                 },
+                                 {
+                                     "file":  "CUSTOMER-C1-fast-safe-contract-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "extend_existing_customers_module_with_details",
+                                     "sha256":  "CF226104FE908844B159C65FF35841C230FE73F73B8FB9A6A324690411FFA6A7"
+                                 },
+                                 {
+                                     "file":  "DASH-D1-live-read-isolation-accuracy-runtime.json",
+                                     "stage":  "DASH-D1",
+                                     "status":  "",
+                                     "decision":  "DASHBOARD_RUNTIME_PASS",
+                                     "sha256":  "143602D3D0F641EE37F4ED6CC254B8152F10A19481F50E3E2A939FBCFA4219E2"
+                                 },
+                                 {
+                                     "file":  "FINAL-ANALYTICSUI-1R-analytics-fast-ui-build.json",
+                                     "stage":  "FINAL-ANALYTICSUI-1R",
+                                     "status":  "PASS",
+                                     "decision":  "",
+                                     "sha256":  "AC5DE90FA6B3CC448BC912326385367D2CAA383683254E82BA1096F806B72412"
+                                 },
+                                 {
+                                     "file":  "FINAL-BILL-2-billing-visual-install-build.json",
+                                     "stage":  "FINAL-BILL-2",
+                                     "status":  "",
+                                     "decision":  "BILLING_VISUAL_INSTALL_BUILD_PASS",
+                                     "sha256":  "A163DC19669D20DBB9B71E2CB0D9771CFF5EEE957B0896D754CB092E6754639A"
+                                 },
+                                 {
+                                     "file":  "FINAL-G1-global-ui-security-regression-baseline.json",
+                                     "stage":  "FINAL-G1",
+                                     "status":  "",
+                                     "decision":  "READY_FOR_GLOBAL_UI_IMPLEMENTATION",
+                                     "sha256":  "FFA00FD5F60D58A1AB0B78561A3C1C5F5BE478A99B1BE54A1FA11CBB71F289A9"
+                                 },
+                                 {
+                                     "file":  "FINAL-G3R-global-ui-foundation-install-build-recovery.json",
+                                     "stage":  "FINAL-G3R",
+                                     "status":  "",
+                                     "decision":  "GLOBAL_UI_FOUNDATION_INSTALLED_BUILD_PASS",
+                                     "sha256":  "7C394EFB6F693358550B9A05A78585AEB0507FFB21EA24916551199E96A9B6EA"
+                                 },
+                                 {
+                                     "file":  "FINAL-HEADUI-1R2-heading-consistency.json",
+                                     "stage":  "FINAL-HEADUI-1R2",
+                                     "status":  "PASS",
+                                     "decision":  "",
+                                     "sha256":  "E7C49A03611614DDB0962E78606C83C8817CD62466198657536B740DAE1D78EC"
+                                 },
+                                 {
+                                     "file":  "FINAL-HRUI-1-hr-fast-batch-install-build.json",
+                                     "stage":  "FINAL-HRUI-1",
+                                     "status":  "PASS",
+                                     "decision":  "",
+                                     "sha256":  "84C39C6F54B012E76C72C5C90877F77499D16155D4F606812E77003E4226A3A2"
+                                 },
+                                 {
+                                     "file":  "FINAL-OPSUI-1-operations-fast-css-build.json",
+                                     "stage":  "FINAL-OPSUI-1",
+                                     "status":  "PASS",
+                                     "decision":  "",
+                                     "sha256":  "D98A37620F0F69B514D98AC579BE1E384E4DA4976D1EBF0676806653ACAD8679"
+                                 },
+                                 {
+                                     "file":  "FINAL-OPSUI-1R-maintenance-header-visual-fix.json",
+                                     "stage":  "FINAL-OPSUI-1R",
+                                     "status":  "PASS",
+                                     "decision":  "",
+                                     "sha256":  "25B366E202FBC5F9BA830288E8223B23FE6F042946685280484F5E6B1E8547B3"
+                                 },
+                                 {
+                                     "file":  "FINAL-QRUI-1R-exact-live-qr-anchor-inspection.json",
+                                     "stage":  "FINAL-QRUI-1R",
+                                     "status":  "",
+                                     "decision":  "READY_FOR_ROBUST_QR_VISUAL_CANDIDATE_RECOVERY",
+                                     "sha256":  "D9F0C7B2263DDA96F5FAD115535D6F8519CC3F46AE80AC4CC2240D9A2172C0B5"
+                                 },
+                                 {
+                                     "file":  "FINAL-QRUI-2-qr-requests-fast-install-build.json",
+                                     "stage":  "FINAL-QRUI-2",
+                                     "status":  "PASS",
+                                     "decision":  "",
+                                     "sha256":  "A4BB48C4B9DB58F2159491E3A46C55D6AB20E1C533DAFF27486926061D261192"
+                                 },
+                                 {
+                                     "file":  "FINAL-QRUI-3-fast-route-context-fix.json",
+                                     "stage":  "FINAL-QRUI-3",
+                                     "status":  "FAST_ROUTE_CONTEXT_FIX_PASS",
+                                     "decision":  "",
+                                     "sha256":  "D7FFB550018775180A739C5C0EBFFB63CD1E7A404E821A170DD0237ACB264580"
+                                 },
+                                 {
+                                     "file":  "FINAL-SET-2-settings-visual-install-build.json",
+                                     "stage":  "FINAL-SET-2",
+                                     "status":  "",
+                                     "decision":  "SETTINGS_VISUAL_INSTALL_BUILD_PASS",
+                                     "sha256":  "D81A1DC0E735609CB5BCBC919165DF5A642A8DBD8E1CEA1419E8D322FB50E073"
+                                 },
+                                 {
+                                     "file":  "FINAL-SHELLUI-1R2-fast-shared-header-fix.json",
+                                     "stage":  "FINAL-SHELLUI-1R2",
+                                     "status":  "PASS",
+                                     "decision":  "",
+                                     "sha256":  "43413D6B3FA846C320C8474295EF5F1578EDCBCAB4867AB11DA7772D1BAB3D73"
+                                 },
+                                 {
+                                     "file":  "FINANCE-F1-fast-safe-contract-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "audit_and_harden_existing_finance_workflow",
+                                     "sha256":  "8CFA36275E9A2C125844E8D6AE6AC0FD51FB028D3ECE8434CB56CF2E1AE0ACCC"
+                                 },
+                                 {
+                                     "file":  "FINANCE-F2-financial-integrity-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "RECONCILE_EXISTING_FINANCIAL_STATE_FIRST",
+                                     "sha256":  "921BD4EE5223E30B60DDF206023C3E1F1D41E40EE3B3508AF2B19EF5189B8A47"
+                                 },
+                                 {
+                                     "file":  "FINANCE-F3R-payment-status-mismatch-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "EXACT_STORED_PAYMENT_STATUS_DRIFT_CONFIRMED",
+                                     "sha256":  "8DD0E61282F89EE64579F8F19D389F057F2160C28FF6363DC52CAE132E6547BE"
+                                 },
+                                 {
+                                     "file":  "FINANCE-F4-canonical-payment-status-reconciliation.json",
+                                     "stage":  "FINANCE-F4",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "3031CD1C49FDF193737283AC19993361C6C51CC8938E8DC89D966379A588C34E"
+                                 },
+                                 {
+                                     "file":  "FINANCE-F5-post-reconciliation-integrity.json",
+                                     "stage":  "FINANCE-F5",
+                                     "status":  "",
+                                     "decision":  "FINANCIAL_STATE_RECONCILED_AND_INTEGRITY_CLEAN",
+                                     "sha256":  "B36ACE89E1E21D287A968ACF7ED7930629CD36C3114F3C799A4FFCDDDB06318B"
+                                 },
+                                 {
+                                     "file":  "FINANCE-F6-live-runtime-proof.json",
+                                     "stage":  "FINANCE-F6",
+                                     "status":  "",
+                                     "decision":  "LIVE_FINANCE_READ_AND_GUARD_RUNTIME_PASS",
+                                     "sha256":  "3977E4F41BE7E215AF84610D54101347E96A2782F3786A75F6A5B7EDAD702B74"
+                                 },
+                                 {
+                                     "file":  "HMS-CLEAN-A1-proof-staging-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "FC0F1F87FEC5896CD88FF58A87F80608901D99F3FE2465D42E129F08766BC4C0"
+                                 },
+                                 {
+                                     "file":  "HMS-CLEAN-A2-safe-generated-cleanup.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "8C288A4461856B3FCA8C04621591F6469F1A2B582FA074DDC090F0B3C9ABF810"
+                                 },
+                                 {
+                                     "file":  "HMS-CLEAN-A4-staging-compaction-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "ARCHIVE_WHOLE_STAGING_THEN_RESET",
+                                     "sha256":  "8F8878EEA33F511C3CA3A9BCC526E025997747239327F11840FF80C334AC69FA"
+                                 },
+                                 {
+                                     "file":  "PAY-A1-live-read-security-runtime.json",
+                                     "stage":  "PAY-A1",
+                                     "status":  "",
+                                     "decision":  "PAYROLL_READ_SECURITY_AND_GUARDS_RUNTIME_PASS",
+                                     "sha256":  "891673ABC9014FF41EDEECC1AFE69643347F7B20418B7CC374D5C1423BEAD52E"
+                                 },
+                                 {
+                                     "file":  "QR-Q1R-fast-safe-contract-db-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "VERIFY_EXISTING_QR_RUNTIME",
+                                     "sha256":  "0C5CBFADD4C5269A4FCDEAB21948C58CEF02D4D628F818AAD187CDC7655D9FCD"
+                                 },
+                                 {
+                                     "file":  "QR-Q2A-public-route-contract-inspection.json",
+                                     "stage":  "QR-Q2A",
+                                     "status":  "",
+                                     "decision":  "PUBLIC_QR_ROUTE_CONTRACT_MATCH",
+                                     "sha256":  "1CE4E729D971008383282CCC5F157F2540C12088311721C96E381FE5F26EC9DA"
+                                 },
+                                 {
+                                     "file":  "QR-Q2BR2-live-read-security-guard-runtime.json",
+                                     "stage":  "QR-Q2BR2",
+                                     "status":  "",
+                                     "decision":  "QR_READ_SECURITY_AND_GUARDS_RUNTIME_PASS",
+                                     "sha256":  "DAAE40C19AEA944A96A599916ED24EF83643F040CD352595E5917C1EAA55CA23"
+                                 },
+                                 {
+                                     "file":  "RD-A1-reports-dashboard-contract-audit.json",
+                                     "stage":  "RD-A1",
+                                     "status":  "",
+                                     "decision":  "REVIEW_PROVEN_REPORTS_DASHBOARD_CONTRACT_GAPS",
+                                     "sha256":  "B1A94C41DE06785B6E42E2BF724826E32763C95C7010CD6CCBFA889A2360533D"
+                                 },
+                                 {
+                                     "file":  "RD-A1R-auth-mount-contract-recovery.json",
+                                     "stage":  "RD-A1R",
+                                     "status":  "",
+                                     "decision":  "REPORTS_DASHBOARD_AUTH_CONTRACT_RECOVERED",
+                                     "sha256":  "F1830DE3F4923ED7C71638D0E326BC7089BCAE4CF3208D9511E631028AE354BA"
+                                 },
+                                 {
+                                     "file":  "REPORT-R1R-current-contract-runtime-recovery.json",
+                                     "stage":  "REPORT-R1R",
+                                     "status":  "",
+                                     "decision":  "PROVEN_REPORT_ZERO_ROOM_ACCURACY_DEFECT",
+                                     "sha256":  "3C6C168C0B923648D03905F461CC0013E53EA75B9A7F8F8A97CD52A197890458"
+                                 },
+                                 {
+                                     "file":  "REPORT-R3R-zero-room-fix-runtime-recovery.json",
+                                     "stage":  "REPORT-R3R",
+                                     "status":  "",
+                                     "decision":  "REPORT_ZERO_ROOM_FIX_RUNTIME_PASS",
+                                     "sha256":  "28C7367977B363C22A899418DDECE494CDFE48007A1D0A19B6F366648C73B852"
+                                 },
+                                 {
+                                     "file":  "SETTINGS-S1R-fast-safe-contract-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "VERIFY_EXISTING_SETTINGS_RUNTIME",
+                                     "sha256":  "30E43275A156D7AEEE2FAD40B92A34499921EA8069673838AC40EDC3379EA0F0"
+                                 },
+                                 {
+                                     "file":  "SETTINGS-S2-live-read-security-runtime.json",
+                                     "stage":  "SETTINGS-S2",
+                                     "status":  "",
+                                     "decision":  "SETTINGS_READ_SECURITY_RUNTIME_PASS",
+                                     "sha256":  "7C93CD38B8D7E6D0B65A9DC0AEF66C052AF82984DA034B29D8913E9113FDB339"
+                                 },
+                                 {
+                                     "file":  "SETTINGS-S3R-controlled-update-audit-restore.json",
+                                     "stage":  "SETTINGS-S3R",
+                                     "status":  "",
+                                     "decision":  "SETTINGS_UPDATE_AUDIT_POLICY_VERSION_RESTORE_PASS",
+                                     "sha256":  "CB41D60968041A94AA9527F6EF4A8DE29ED1AA16FCF2DB89BE2D3C17713E88C8"
+                                 },
+                                 {
+                                     "file":  "STAFF-S1R-live-read-security-runtime.json",
+                                     "stage":  "STAFF-S1R",
+                                     "status":  "",
+                                     "decision":  "STAFF_READ_SECURITY_RUNTIME_PASS",
+                                     "sha256":  "95BD68C6ACEDD2D77952F96C34E620A6D6E9375197D3183E38974047A48ECBBA"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4G8J-room101-pre-mutation-snapshot.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "B2EED49E9C5FAF8D4DB6AFF70B7DCB15AC4C462FAD48111BF7DD5BCB55DC1CFF"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4G8L-room101-post-create-snapshot.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "7DAE11BF7C60B4D9355321C4A9101ADD48845B61C8B420F47017685E07B9E4D4"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H1B-read-contract-runtime.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "8EDEA822812B1B1D51E7F23517612514DBEFF6FEBABF9CAC3A2D550C4F9DF68D"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H1B1-flat-detail-contract.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "D7B53F3ADDA9ECB8B22816142D3CE66B1B9C8E525B5965A432133AA758BC515F"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H1J-task13-readonly-db-integrity-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "261FAA1486A619EEBEC716AFC8477109FB0998618A914402AE7A08DE60C26566"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H2H-task13-post-runtime-db-integrity-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "AB287C56AD4ECD447EF2BF7FB51F786D430EFDC82814351DA000A12267356205"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H3H-task13-pre-start-db-baseline.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "6EE34628011CACAADBFFD0EDBDE6C92E7920AF9555701F0A80E2BDC4D5B59AE1"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H3J-V2-task13-post-start-db-integrity-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "E5B4F938F8AACAF4FF2A62E460B9E21C975F509F666CFD89550C3D8B887011D8"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H4I-task13-pre-complete-db-baseline.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "03603357CD111DA97D703F279F9BF14E4E5022B0EE9AC3E626DB2C25B1811C20"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H4K-task13-post-complete-db-integrity-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "11D1AF8D916BA83968D72C20F94E05386C11794C685AFD0E15F06C6035CAC27E"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H5J-task14-pre-cancel-db-baseline.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "A30A0B3E3816090C9BAD5F17AD7F62E5DE1BB1AE498FC5CFC038951D72FF9DA3"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H5Q-task14-post-cancel-db-integrity-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "819D0679D6B312F6CBC463C804D54E11ECACB4DE5D94E237420F1B299E311F82"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H6K-task15-pre-note-db-baseline.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "0E2DB45EB4DA2524D1484B78749890F8A79F84BA17797318FECD95A2ACB581FA"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H6M-task15-post-note-db-integrity-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "90A32AC6A92428689504350D81459EAA73C0E0F6A1482760CE8D402ABD3A4CDD"
+                                 },
+                                 {
+                                     "file":  "ROOM-R4H6O-task15-final-closure-db-integrity-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "6EB14385768B92DB95C593AE94FB1D4965588CE082CAAC2752033654A10E1E37"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-N-maintenance-readonly-db-integrity.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "CEF9C89DBF5643763FDECB365DF5EFE23051EE720D59467ADCF365EF7547F432"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-T6-manual-maintenance-preflight.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "ED2742F4EBBAEF9CCADD4E69301FD280B8F40A6BC6A01A829A575D2F65273BE9"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-T8-maintenance-task4-freeze.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "F19E4C4E6F9671B1A8F88E00ECFEC38BBDD2FA03C5E6A06146C36F9B31DFCD5C"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-Z3Q-note-db-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "69538A9E212E356762142966D57EB29A391FFEA3586E0636607A18DD27D2576D"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-Z4P-staff-preflight.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "5ACD8BBD48A0A1316FB0A8D17DB17ABC796ADB79FC8B951D6573390C51520391"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-Z5Q-start-db-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "E951FA3E88DDB02D346992CA1DDFA90C92A5A935E27B47E242F9D25DDE2B0CDD"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-Z6Q-completion-db-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "9A5BAD99D19E3D058D6DE8F59FD70497DB151C3C0004E085B379F9B543C7C3E6"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-Z7P-cancel-fixture-preflight.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "AA3A264842999170F1EAD3D523E426B0D0286F37A3F98CE2E310E996B0F6A8D2"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-Z8Q-cancel-fixture-create-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "1A3445DF72CE11D5BC041E91FDDD03C22168A6BBA4B66BB6F328671EB9D81F32"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5AJ-Z9Q-cancellation-db-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "FFDF58B06A176E57317CC82587A7035855F61778BCD6327D254AFA58E9E42448"
+                                 },
+                                 {
+                                     "file":  "ROOM-R5F-maintenance-schema-install-proof.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "DD57713CB3FD2E0E5DB1E923503679A585D295CC25B66A32FDFC8F791DAD3AA5"
+                                 },
+                                 {
+                                     "file":  "ROOM-R6A-room-details-source-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "47B8BC77998E843F9781A14C42A53B27A4CCBD9D86D9B1DBB2581DE67B103761"
+                                 },
+                                 {
+                                     "file":  "ROOM-R6B-operational-history-contract-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "45AAB674D00A8C17E6F287345367AF2737E82F253017611B27145E3BEC2BA8E0"
+                                 },
+                                 {
+                                     "file":  "ROOM-R6G2-room-details-frontend-source-audit.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "F079B98922F9B3C83FAD1F7916025529FA13F722BD66E44F3AAA07D98BE1B89B"
+                                 },
+                                 {
+                                     "file":  "HMS-CLEAN-A5R-staging-archive-index.json",
+                                     "stage":  "",
+                                     "status":  "",
+                                     "decision":  "",
+                                     "sha256":  "BEA74DC503973CEA332AB0E959D101F13BD6685CDA25129A50AD3B633C5EA166"
+                                 }
+                             ],
+    "artifactPolicy":  {
+                           "auditFiles":  "DO_NOT_GENERATE",
+                           "moduleProofFiles":  "DO_NOT_GENERATE",
+                           "sourcePackFiles":  "DO_NOT_GENERATE",
+                           "manifestFiles":  "DO_NOT_GENERATE",
+                           "temporaryBackups":  "DELETE_AFTER_SUCCESS",
+                           "permanentProgressFile":  "HMS-PROJECT-STATUS.json",
+                           "normalWorkflow":  "READ_SOURCE_IMPLEMENT_BUILD_RUNTIME_TEST"
+                       },
+    "currentPriorities":  [
+                              "Global UI consistency regression across remaining pages",
+                              "Attendance product decisions for Leave, Birthdays and Performance",
+                              "Remaining previously agreed HMS concepts"
+                          ],
+    "cleanup":  {
+                    "rootGeneratedFound":  14,
+                    "proofFilesFound":  210,
+                    "stagingFilesFound":  10,
+                    "evidenceRecordsCaptured":  83
+                },
+    "backendChanged":  true,
+    "databaseChanged":  true,
+    "currentStatus":  {
+                          "updatedAt":  "2026-10-10 10:46:50",
+                          "workflow":  "PRODUCT_FIRST_FAST_MODE",
+                          "latestLockedPhase":  "SUPER_ADMIN_HOTELS_MANAGEMENT",
+                          "phaseStatus":  "FUNCTIONAL_AND_VISUAL_LOCKED",
+                          "newlyLockedModules":  [
+                                                     "G5 Consolidated Reservation Group Invoice",
+                                                     "G6 Automatic Reservation Group Invoice",
+                                                     "Super Admin Hotels Management"
+                                                 ],
+                          "g5ConsolidatedReservationInvoice":  {
+                                                                   "status":  "FINAL_LOCKED",
+                                                                   "architecture":  "ONE_CUSTOMER_FACING_INVOICE_PER_MULTI_ROOM_RESERVATION_GROUP",
+                                                                   "bookingInvoices":  "PRESERVED_AS_INTERNAL_HISTORY",
+                                                                   "groupInvoice":  "CUSTOMER_FACING",
+                                                                   "groupInvoiceEditable":  false,
+                                                                   "paymentLedger":  "CANONICAL_AND_NOT_DUPLICATED",
+                                                                   "billingList":  "CUSTOMER_FACING_INVOICES_ONLY",
+                                                                   "invoicePreview":  "A4_LAYOUT_VISUALLY_VERIFIED",
+                                                                   "printPreview":  "PASS"
+                                                               },
+                          "g6AutomaticReservationGroupInvoice":  {
+                                                                     "status":  "FINAL_LOCKED",
+                                                                     "individualCheckout":  "AUTOMATIC_GROUP_INVOICE_FINALIZATION",
+                                                                     "groupCheckout":  "AUTOMATIC_GROUP_INVOICE_FINALIZATION",
+                                                                     "partialReservationGroup":  "WAITS_UNTIL_GROUP_IS_TERMINAL",
+                                                                     "exactlyOneGroupInvoice":  "PASS",
+                                                                     "idempotency":  "PASS",
+                                                                     "childInvoiceHistory":  "PRESERVED",
+                                                                     "childInvoicesCustomerFacing":  false,
+                                                                     "paymentLedgerMutationByGroupInvoice":  false,
+                                                                     "historicalReadyGroupsAutomaticBackfill":  false,
+                                                                     "lockOrdering":  "GROUP_FIRST_THEN_BOOKING_FOR_GROUPED_INDIVIDUAL_CHECKOUT"
+                                                                 },
+                          "g6RuntimeProof":  {
+                                                 "reservationGroupId":  19,
+                                                 "groupCode":  "RG-1019",
+                                                 "finalBookingId":  25,
+                                                 "finalBookingCode":  "BK-1025",
+                                                 "finalBookingStatus":  "checked_out",
+                                                 "groupInvoiceId":  45,
+                                                 "groupInvoiceNumber":  "INV-1791278334680-RG-19",
+                                                 "totalAmount":  2900,
+                                                 "paidAmount":  2900,
+                                                 "pendingAmount":  0,
+                                                 "invoiceStatus":  "paid",
+                                                 "childInvoiceIds":  [
+                                                                         23,
+                                                                         44
+                                                                     ],
+                                                 "childInvoicesCustomerFacing":  false,
+                                                 "canonicalPaymentLedgerChanged":  false,
+                                                 "databaseCommit":  true,
+                                                 "result":  "PASS"
+                                             },
+                          "regressionLocks":  {
+                                                  "reservationGroupRG1030":  "PASS",
+                                                  "groupInvoiceImmutability":  "PASS",
+                                                  "billingCustomerFacingFilter":  "PASS",
+                                                  "g5A4InvoiceLayout":  "PASS"
+                                              },
+                          "visualRuntimeVerification":  {
+                                                            "reservationWorkspace":  "PASS",
+                                                            "finalPayableCard":  "PASS",
+                                                            "consolidatedInvoiceCard":  "PASS",
+                                                            "groupInvoicePreview":  "PASS",
+                                                            "reservationGroupReference":  "PASS",
+                                                            "billingList":  "PASS",
+                                                            "groupInvoiceEditHidden":  "PASS"
+                                                        },
+                          "canonicalSources":  [
+                                                   "backend/services/billing/reservationGroupInvoiceService.js",
+                                                   "backend/services/bookingCheckout/automaticGroupInvoiceService.js",
+                                                   "backend/services/bookingCheckout/groupCheckoutService.js",
+                                                   "backend/controllers/booking/bookingLifecycleController.js",
+                                                   "frontend/src/features/reservations/components/ReservationGroupSummary.js",
+                                                   "frontend/src/features/billing/Billing.js"
+                                               ],
+                          "completedProductGaps":  [
+                                                       "Consolidated multi-room customer invoice",
+                                                       "Automatic consolidated invoice after final eligible room checkout",
+                                                       "Unified checkout invoice finalization",
+                                                       "Customer-facing group invoice with internal child invoice history",
+                                                       "Reservation workspace final payable semantics",
+                                                       "Group-aware Billing and invoice references",
+                                                       "Settings payment-policy propagation across booking, payment collection and checkout",
+                                                       "Super Admin Hotels management/list workflow"
+                                                   ],
+                          "minorUiFollowUps":  [
+                                                   "Billing search placeholder can later be changed from Booking ID wording to Booking / Reservation wording"
+                                               ],
+                          "remainingProductGaps":  [
+                                                       "Global UI consistency regression across remaining pages",
+                                                       "Attendance placeholders such as Leave, Birthdays and Performance require product decision or implementation",
+                                                       "Remaining previously agreed HMS concepts"
+                                                   ],
+                          "nextProductSprint":  "GLOBAL_UI_CONSISTENCY_REGRESSION",
+                          "changesSincePreviousStatus":  {
+                                                             "frontendChanged":  true,
+                                                             "backendChanged":  true,
+                                                             "databaseChanged":  true,
+                                                             "databaseSchemaChanged":  true,
+                                                             "superAdminHotelsManagementLocked":  true,
+                                                             "inactiveHotelLifecycleAdded":  true,
+                                                             "inactiveHotelAdminBlockingAdded":  true,
+                                                             "permanentProgressFileUpdated":  true,
+                                                             "newPermanentAuditFiles":  false,
+                                                             "newPermanentProofFiles":  false
+                                                         },
+                          "settingsPaymentPolicyPropagation":  {
+                                                                   "phase":  "SETTINGS_PAYMENT_POLICY_PROPAGATION",
+                                                                   "status":  "FUNCTIONAL_FINAL_LOCKED",
+                                                                   "completedAt":  "2026-10-08 15:04:34",
+                                                                   "policyAuthority":  "booking_policy_snapshots.policy_snapshot.payment",
+                                                                   "immutableExistingBookingPolicy":  true,
+                                                                   "coveredSettings":  [
+                                                                                           "payment.advance_requirement",
+                                                                                           "payment.allowed_methods",
+                                                                                           "payment.allow_partial_payment",
+                                                                                           "payment.full_payment_required_before_checkout"
+                                                                                       ],
+                                                                   "advanceRequirement":  {
+                                                                                              "methods":  [
+                                                                                                              "none",
+                                                                                                              "fixed_amount",
+                                                                                                              "percentage",
+                                                                                                              "manual"
+                                                                                                          ],
+                                                                                              "reservationLevelCalculation":  true,
+                                                                                              "fixedAppliedOncePerReservation":  true,
+                                                                                              "percentageUsesReservationGrandTotal":  true,
+                                                                                              "strongestMixedChildNumericRule":  true,
+                                                                                              "backendRuntimeProof":  "PASS",
+                                                                                              "bookingDeskRenderedProof":  "PASS"
+                                                                                          },
+                                                                   "allowedMethods":  {
+                                                                                          "immutableSnapshotAware":  true,
+                                                                                          "individualExistingPaymentFiltering":  "PASS",
+                                                                                          "groupCommonMethodIntersection":  "PASS",
+                                                                                          "explicitZeroMethodsBlocksCollection":  "PASS",
+                                                                                          "legacyFallbackAllMethods":  "PASS"
+                                                                                      },
+                                                                   "partialPayment":  {
+                                                                                          "initialBookingEnforcement":  "PASS",
+                                                                                          "individualExistingPaymentFullDueLock":  "PASS",
+                                                                                          "groupDeterministicAllocation":  "booking_id ASC",
+                                                                                          "groupInvalidPartialBoundaryProtection":  "PASS",
+                                                                                          "groupPaymentAtomicRollback":  "PASS",
+                                                                                          "legacyFallback":  "PASS"
+                                                                                      },
+                                                                   "checkoutPaymentRequirement":  {
+                                                                                                      "policyTrueBlocksOutstanding":  "PASS",
+                                                                                                      "policyFalseAllowsOutstandingReceivable":  "PASS",
+                                                                                                      "checkoutInvoicePolicyAligned":  "PASS",
+                                                                                                      "groupPaymentContinueToCheckout":  "PASS",
+                                                                                                      "legacyFallbackRequiresFullPayment":  "PASS"
+                                                                                                  },
+                                                                   "automatedRegression":  {
+                                                                                               "combinedTests":  13,
+                                                                                               "passed":  13,
+                                                                                               "failed":  0,
+                                                                                               "result":  "PASS"
+                                                                                           },
+                                                                   "productionBuild":  "PASS",
+                                                                   "backendRuntimeProofs":  "PASS",
+                                                                   "frontendRenderedProofs":  "PASS",
+                                                                   "visualVerification":  {
+                                                                                              "settingsPaymentConfiguration":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                              "bookingDeskAdvanceAndAllowedMethods":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                              "bookingDeskPartialDisabledFullPayment":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                              "outstandingReceivableCheckout":  "USER_CONFIRMED_PASS",
+                                                                                              "note":  "Outstanding-receivable checkout was confirmed by the user; no dedicated final screenshot was retained for that exact balance-due scenario."
+                                                                                          },
+                                                                   "permanentDatabaseProofMutation":  false,
+                                                                   "databaseSchemaChanged":  false,
+                                                                   "newPermanentAuditFiles":  false,
+                                                                   "newPermanentProofFiles":  false,
+                                                                   "canonicalSources":  [
+                                                                                            "backend/services/hotelSettingsService.js",
+                                                                                            "backend/services/bookingPayments/paymentPolicyService.js",
+                                                                                            "backend/services/bookingPaymentService.js",
+                                                                                            "backend/services/bookingLifecycleService.js",
+                                                                                            "backend/services/billing/checkoutInvoiceService.js",
+                                                                                            "backend/services/bookingPayments/groupPaymentService.js",
+                                                                                            "backend/controllers/booking/bookingQueryController.js",
+                                                                                            "frontend/src/features/booking-desk/BookingDesk.js",
+                                                                                            "frontend/src/features/booking-desk/components/ReservationPaymentStep.js",
+                                                                                            "frontend/src/features/booking-desk/validation/bookingValidation.js",
+                                                                                            "frontend/src/features/reservations/actions/CollectPaymentDialog.js",
+                                                                                            "frontend/src/features/reservations/actions/GroupPaymentDialog.js"
+                                                                                        ],
+                                                                   "canonicalHashes":  {
+                                                                                           "bookingDesk":  "9516540F2A84CE88F9777D2D8F75352F07C1C6D07EB1B9BCE60FA58814AFA759",
+                                                                                           "reservationPaymentStep":  "49E5C628B8F1C21CE17CEFF05D36B294C8D929B29534604C680E374DAA69E6DD",
+                                                                                           "bookingValidation":  "2478BAFE0D312E8E0D99CF611E30CE1ABE89BC8DDF2A95099FF9AF5AB2424E3F",
+                                                                                           "collectPaymentDialog":  "9DC443A5593403B57488D831B6882ED6EDD6D317B436C065A91C2C8B67DDE39C",
+                                                                                           "groupPaymentDialog":  "A7730C8EAD9C000779866E8E1EB572A0EF25880FFEB5F21E5822D55221A018D4",
+                                                                                           "hotelSettingsService":  "79FF72FF052CB3CB733439218D536B2D12EFA66391D61E7A8258505B42F8A819",
+                                                                                           "paymentPolicyService":  "B743357F14A6D1B52F89EA5A865CB96D4A7C08B1F135A211EF7381EDA44F483C",
+                                                                                           "bookingPaymentService":  "E7B657E5D139733FCD97420119B03E2288F19A782BCDE0BCE3AD89205BE673E2",
+                                                                                           "bookingLifecycleService":  "FF134ACEB4E6F91E724161AD436E3259FF811135176BB3ADE7655734F5EC5666",
+                                                                                           "checkoutInvoiceService":  "FFE8133ED4F0FDFBDE01A9935FCE379DC82E771C6B54EF8C876DC4C4D48D305D",
+                                                                                           "groupPaymentService":  "908F600EAC5A6CE292BB480A199D7A60191708ACD2D121B52408FCABE63E14B0",
+                                                                                           "bookingQueryController":  "B9DBB4B3CD80723CE51D8950546634A001EC192EA5F886415DA0F7499765D4E3"
+                                                                                       }
+                                                               },
+                          "superAdminHotelsManagement":  {
+                                                             "phase":  "SUPER_ADMIN_HOTELS_MANAGEMENT",
+                                                             "status":  "FUNCTIONAL_AND_VISUAL_LOCKED",
+                                                             "completedAt":  "2026-10-09 12:42:49",
+                                                             "ownershipModel":  "SUPERADMIN_OWNED_HOTEL_PORTFOLIO",
+                                                             "tenantIsolation":  "SUPERADMIN_ID_OWNERSHIP_ENFORCED",
+                                                             "lifecycleModel":  "CREATE_EDIT_DEACTIVATE_REACTIVATE",
+                                                             "hardDeleteSupported":  false,
+                                                             "hardDeleteDecision":  "DEACTIVATION_USED_TO_PRESERVE_OPERATIONAL_HISTORY",
+                                                             "hotelsPage":  {
+                                                                                "dedicatedRoute":  "/superadmin/hotels",
+                                                                                "realPage":  "PASS",
+                                                                                "redirectRemoved":  "PASS",
+                                                                                "portfolioCards":  "PASS",
+                                                                                "search":  "PASS",
+                                                                                "statusFilter":  "PASS",
+                                                                                "addHotel":  "PASS",
+                                                                                "editHotel":  "PASS",
+                                                                                "compactAddHotelAction":  "SCREENSHOT_VERIFIED_PASS"
+                                                                            },
+                                                             "hotelWriteSecurity":  {
+                                                                                        "authenticatedSuperAdminRequired":  "PASS",
+                                                                                        "ownershipCheckBeforeMutation":  "PASS",
+                                                                                        "ownershipScopedUpdate":  "PASS",
+                                                                                        "clientCannotChangeOwnership":  "PASS",
+                                                                                        "crossPortfolioMutationProtection":  "PASS"
+                                                                                    },
+                                                             "hotelStatusLifecycle":  {
+                                                                                          "supportedStatuses":  [
+                                                                                                                    "pending",
+                                                                                                                    "active",
+                                                                                                                    "inactive",
+                                                                                                                    "rejected"
+                                                                                                                ],
+                                                                                          "inactiveAddedToDatabaseEnum":  true,
+                                                                                          "databaseSchemaMigration":  "PASS",
+                                                                                          "deactivate":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                          "inactiveCardDisplay":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                          "inactivePortfolioCounter":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                          "reactivate":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                          "activePortfolioCounterAfterReactivation":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                          "finalTestHotelStatus":  "active"
+                                                                                      },
+                                                             "hotelAdminAccessControl":  {
+                                                                                             "adminMustBeActive":  true,
+                                                                                             "assignedHotelMustBeActive":  true,
+                                                                                             "inactiveHotelErrorCode":  "HOTEL_NOT_ACTIVE",
+                                                                                             "inactiveAccessBlocked":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                             "reactivationRestoresAccess":  "SCREENSHOT_VERIFIED_PASS"
+                                                                                         },
+                                                             "createHotel":  {
+                                                                                 "existingFlowPreserved":  "PASS",
+                                                                                 "hotelAndQrTransactionalCreate":  "PRESERVED",
+                                                                                 "partialCreateProtection":  "PRESERVED"
+                                                                             },
+                                                             "hotelOverview":  {
+                                                                                   "editHotelAction":  "PASS",
+                                                                                   "hotelLogoResponseMapping":  "FIXED",
+                                                                                   "establishedYearResponseMapping":  "FIXED"
+                                                                               },
+                                                             "runtimeVerification":  {
+                                                                                         "hotelsPageRendered":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                         "editHotelSave":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                         "updatedHotelNamePropagation":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                         "inactivePortfolioState":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                         "inactiveAdminAccessBlock":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                         "reactivationPortfolioState":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                         "adminAccessRestored":  "SCREENSHOT_VERIFIED_PASS"
+                                                                                     },
+                                                             "productionBuild":  "PASS",
+                                                             "backendSyntax":  "PASS",
+                                                             "databaseChanged":  true,
+                                                             "databaseSchemaChanged":  true,
+                                                             "databaseSchemaChangeReason":  "Added inactive to hotels.status so hotel deactivation has an explicit valid database state.",
+                                                             "databaseStatusEnum":  "enum(\u0027pending\u0027,\u0027active\u0027,\u0027inactive\u0027,\u0027rejected\u0027)",
+                                                             "permanentAuditFilesCreated":  false,
+                                                             "permanentProofFilesCreated":  false,
+                                                             "canonicalSources":  [
+                                                                                      "backend\\controllers\\hotelController.js",
+                                                                                      "backend\\routes\\superAdmin.js",
+                                                                                      "backend\\middleware\\roleMiddleware.js",
+                                                                                      "frontend\\src\\services\\hotelService.js",
+                                                                                      "frontend\\src\\App.js",
+                                                                                      "frontend\\src\\pages\\SuperAdminHotels\\SuperAdminHotels.js",
+                                                                                      "frontend\\src\\pages\\SuperAdminHotels\\SuperAdminHotels.css",
+                                                                                      "frontend\\src\\components\\hotels\\EditHotelModal\\EditHotelModal.js",
+                                                                                      "frontend\\src\\components\\hotels\\HotelCard\\HotelCard.js",
+                                                                                      "frontend\\src\\pages\\HotelOverview\\HotelOverview.js"
+                                                                                  ],
+                                                             "canonicalHashes":  {
+                                                                                     "hotelController":  "FF3CE0E42E75F324A1B7068484E0F958621E29E0E704A6F1144A12855410A5CC",
+                                                                                     "superAdminRoutes":  "373F96A273C9A68A164C5B8D215956FF157089C8C3B914E21E240FA579E9DCAB",
+                                                                                     "roleMiddleware":  "9E55F52CC6D90C4CF87E3A6C552F2E2BE39EA134C509003C7BC8614C157A6217",
+                                                                                     "hotelService":  "C8668BD071D4003821E8B9DE161D2BA5BEBA2E1EF81A6F800DCF03364C2EE1AB",
+                                                                                     "appRoutes":  "FE1A4A86149E5740333BDCA6C8EEE4146483415230A9DDB8C89E3B352473F0AC",
+                                                                                     "superAdminHotelsPage":  "4E26E70AE5B83B3D9D7949907C209259E8E856145024F199D894D7E806111654",
+                                                                                     "superAdminHotelsCss":  "19B7B628A154C3C75797B8247B051CB13729A0B124BA0214F87ABBCEDBA9A8ED",
+                                                                                     "editHotelModal":  "C334F70A12984F55350E6DEDFAE4C1FF52194C909E421219E9106AE490EB51C7",
+                                                                                     "hotelCard":  "07E37D32B0460C51C47126115AAF5DD26EA767A05086879E96AB13041A1C23FA",
+                                                                                     "hotelOverview":  "0578236D64D78B4EAC5D6D3D7E943993AC8AD682700FCA6BDF8A60975F581C9B"
+                                                                                 }
+                                                         },
+                          "globalUiConsistencyRegression":  {
+                                                                "sprint":  "GLOBAL_UI_CONSISTENCY_REGRESSION",
+                                                                "completedModules":  [
+                                                                                         "Booking Desk",
+                                                                                         "Housekeeping"
+                                                                                     ],
+                                                                "housekeeping":  {
+                                                                                     "phase":  "UI-HK2R",
+                                                                                     "status":  "VISUAL_LOCKED",
+                                                                                     "productionBuild":  "PASS",
+                                                                                     "desktopTable":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                     "mobileHeaderGap":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                     "mobileTaskCards":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                     "manualCleaningModal":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                     "taskDetailsModal":  "SCREENSHOT_VERIFIED_PASS",
+                                                                                     "businessLogicChanged":  false,
+                                                                                     "backendChanged":  false,
+                                                                                     "databaseChanged":  false,
+                                                                                     "visualLockApproved":  true,
+                                                                                     "functionalRetestInThisSprint":  false,
+                                                                                     "housekeepingCssSha256":  "B3B3E8FA2299136B4A1D87A2259891FE6EA80FE566D1A037925E56D09B66A5B3",
+                                                                                     "headerLockSha256":  "4D501DDA8A8AF86BDF06D662005F63A942FCDF1F0278CE089C38749772D8E1A1"
+                                                                                 },
+                                                                "nextModule":  "Maintenance",
+                                                                "nextStage":  "UI-M1_READ_ONLY_AUDIT",
+                                                                "remainingModules":  [
+                                                                                         "Maintenance",
+                                                                                         "Billing",
+                                                                                         "Reports",
+                                                                                         "Staff",
+                                                                                         "Attendance",
+                                                                                         "Payroll",
+                                                                                         "Customer Requests"
+                                                                                     ]
+                                                            }
+                      },
+    "nextProductSprint":  "GLOBAL_UI_CONSISTENCY_REGRESSION",
+    "frontendChanged":  true
+}

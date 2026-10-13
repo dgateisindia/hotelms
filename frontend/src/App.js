@@ -45,11 +45,14 @@ import { Staff } from "./features/staff";
 import { Attendance } from "./features/attendance";
 import { Payroll } from "./features/payroll";
 import { Reports } from "./features/reports";
-import { CustomerRequests } from "./features/customer-requests";
+import {
+  CustomerRequests,
+  CustomerRequestPage,
+} from "./features/customer-requests";
 
-import QRCodePage from "./pages/QRCodePage";
+import { QRCodePage } from "./features/qr-code";
 
-import CustomerRequestPage from "./pages/CustomerRequestPage";
+
 
 /* ============================================================
    ADMIN LAYOUTS
@@ -62,7 +65,10 @@ import {
   RoomDetailsPage,
 } from "./features/rooms";
 
-import { Customers } from "./features/customers";
+import { HousekeepingPage } from "./features/housekeeping";
+import { MaintenancePage } from "./features/maintenance";
+
+import { Customers, CustomerDetailsPage } from "./features/customers";
 
 import Bookings from "./pages/Bookings/Bookings";
 
@@ -72,6 +78,7 @@ import ReservationGroupDetails from "./pages/ReservationGroupDetails/Reservation
 import { ReservationWorkspace } from "./features/reservations";
 
 import { Settings } from "./features/settings";
+import ProfileSecurityPage, { SuperAdminProfileSecurityPage } from "./features/profile-security/ProfileSecurityPage";
 
 /* ============================================================
    SUPER ADMIN PAGES
@@ -79,9 +86,16 @@ import { Settings } from "./features/settings";
 
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 
+import SuperAdminHotels from "./pages/SuperAdminHotels/SuperAdminHotels";
+import SuperAdminAdmins from "./pages/SuperAdminAdmins/SuperAdminAdmins";
+import SuperAdminReports from "./pages/SuperAdminReports/SuperAdminReports";
+
 import HotelOverview from "./pages/HotelOverview/HotelOverview";
 
 import HotelTeam from "./pages/HotelTeam/HotelTeam";
+import HotelOperations from "./pages/HotelOperations/HotelOperations";
+import HotelFinance from "./pages/HotelFinance/HotelFinance";
+import HotelQrSettings from "./pages/HotelQrSettings/HotelQrSettings";
 
 
 /* ============================================================
@@ -120,6 +134,8 @@ import {
   Error503,
 } from "./pages/Error/ErrorPages";
 
+
+import "./styles/HmsPageHeaderLock.css";
 
 /* ============================================================
    API CLIENT AUTH BRIDGE
@@ -312,20 +328,49 @@ function App() {
 
 
           <Route
-            path="/superadmin/hotels"
+            path="/superadmin/profile-security"
             element={
               <ProtectedSuperAdmin>
 
-                <Navigate
-                  to="/superadmin-dashboard"
-                  replace
-                />
+                <SuperAdminProfileSecurityPage />
 
               </ProtectedSuperAdmin>
             }
           />
 
 
+          <Route
+            path="/superadmin/hotels"
+            element={
+              <ProtectedSuperAdmin>
+
+                <SuperAdminHotels />
+
+              </ProtectedSuperAdmin>
+            }
+          />
+
+
+          {/* SUPER ADMIN-SA3A — PORTFOLIO HOTEL ADMINS */}
+
+          <Route
+            path="/superadmin/admins"
+            element={
+              <ProtectedSuperAdmin>
+                <SuperAdminAdmins />
+              </ProtectedSuperAdmin>
+            }
+          />
+
+          {/* SUPER ADMIN-SA4B — PORTFOLIO REPORTS */}
+          <Route
+            path="/superadmin/reports"
+            element={
+              <ProtectedSuperAdmin>
+                <SuperAdminReports />
+              </ProtectedSuperAdmin>
+            }
+          />
           {/* ==================================================
               SELECTED HOTEL WORKSPACE
           ================================================== */}
@@ -359,6 +404,27 @@ function App() {
               }
             />
 
+
+            <Route
+              path="operations"
+              element={
+                <HotelOperations />
+              }
+            />
+
+            <Route
+              path="finance"
+              element={
+                <HotelFinance />
+              }
+            />
+
+            <Route
+              path="settings"
+              element={
+                <HotelQrSettings />
+              }
+            />
 
             <Route
               path="team"
@@ -435,9 +501,30 @@ function App() {
             />
 
             <Route
+              path="/housekeeping"
+              element={
+                <HousekeepingPage />
+              }
+            />
+
+            <Route
+              path="/maintenance"
+              element={
+                <MaintenancePage />
+              }
+            />
+
+            <Route
               path="/customers"
               element={
                 <Customers />
+              }
+            />
+
+            <Route
+              path="/customers/:customerId"
+              element={
+                <CustomerDetailsPage />
               }
             />
 
@@ -477,7 +564,23 @@ function App() {
               }
             />
 
-          </Route>
+          
+
+            <Route
+              path="/qrcode"
+              element={
+                <QRCodePage />
+              }
+            />
+
+            <Route
+              path="/profile-security"
+              element={
+                <ProfileSecurityPage />
+              }
+            />
+
+</Route>
 
 
           {/* ==================================================
@@ -505,50 +608,15 @@ function App() {
           ================================================== */}
 
 
-          {/* ==================================================
-              PROFILE & SECURITY TEMPORARY COMPATIBILITY
 
-              Existing Settings page remains available until
-              dedicated Admin Profile & Security page is built.
-          ================================================== */}
 
-          <Route
-            path="/profile-security"
-            element={
-              <Navigate
-                to="/settings"
-                replace
-              />
-            }
-          />
 
 
           {/* ==================================================
               HOTEL ADMIN QR PAGE
           ================================================== */}
 
-          <Route
-            path="/qrcode"
-            element={
-              <>
-                <SignedIn>
-
-                  <QRCodePage />
-
-                </SignedIn>
-
-
-                <SignedOut>
-
-                  <Navigate
-                    to="/login"
-                    replace
-                  />
-
-                </SignedOut>
-              </>
-            }
-          />
+          
 
 
           {/* ==================================================

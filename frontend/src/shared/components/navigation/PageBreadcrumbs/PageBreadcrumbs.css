@@ -106,3 +106,59 @@
     gap: var(--space-1);
   }
 }
+
+/* ============================================================
+   HMS BREADCRUMB CONTRACT V1
+============================================================ */
+
+.page-breadcrumbs {
+  gap: 6px;
+
+  margin: 0;
+
+  color:
+    var(--color-text-muted);
+
+  font-size:
+    var(--hms-breadcrumb-size);
+
+  line-height: 1.4;
+}
+
+
+.page-breadcrumbs__item {
+  gap: 6px;
+}
+
+
+.page-breadcrumbs__link {
+  font-weight: 500;
+}
+
+
+.page-breadcrumbs__current {
+  color:
+    var(--color-text);
+
+  font-weight: 700;
+}
+
+
+.page-breadcrumbs__separator {
+  opacity: 0.72;
+}
+
+
+@media (max-width: 768px) {
+
+  .page-breadcrumbs {
+    gap: 5px;
+
+    font-size: 11px;
+  }
+
+
+  .page-breadcrumbs__item {
+    gap: 5px;
+  }
+}

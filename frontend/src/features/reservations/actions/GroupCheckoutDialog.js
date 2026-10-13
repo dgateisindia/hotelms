@@ -25,6 +25,7 @@ function GroupCheckoutDialog({
   group,
   onClose,
   onChanged,
+  onCollectPayment,
 }) {
   const [mode, setMode] =
     useState("all");
@@ -114,6 +115,34 @@ function GroupCheckoutDialog({
 
   const wholeGroupBlocked =
     blockedBookings.length > 0;
+
+  const blockedOutstanding =
+    Number(
+      blockedBookings
+        .reduce(
+          (total, booking) =>
+            total +
+            Number(
+              booking?.outstanding_amount ||
+                0
+            ),
+          0
+        )
+        .toFixed(2)
+    );
+
+  const blockedBookingIds =
+    blockedBookings
+      .map((booking) =>
+        Number(
+          booking?.booking_id ||
+            0
+        )
+      )
+      .filter(
+        (bookingId) =>
+          bookingId > 0
+      );
 
   const canSubmit =
     !submitting &&
@@ -455,7 +484,48 @@ function GroupCheckoutDialog({
             mode ===
               "all" && (
               <div className="booking-special-request">
-                Full group checkout is blocked because one or more checked-in rooms still have an outstanding balance. Collect payment first, or switch to Selected Rooms Only.
+                <div>
+                  Full group checkout is blocked because one or more checked-in rooms still have an outstanding balance.
+                </div>
+
+                <div className="booking-confirm-actions">
+                  <button
+                    type="button"
+                    className="booking-btn-primary"
+                    disabled={
+                      submitting ||
+                      blockedBookingIds.length === 0 ||
+                      typeof onCollectPayment !==
+                        "function"
+                    }
+                    onClick={() =>
+                      onCollectPayment?.(
+                        blockedBookingIds
+                      )
+                    }
+                  >
+                    Collect{" "}
+                    {formatCurrency(
+                      blockedOutstanding
+                    )}{" "}
+                    & Continue
+                  </button>
+
+                  {readyBookings.length > 0 && (
+                    <button
+                      type="button"
+                      className="booking-btn-secondary"
+                      disabled={submitting}
+                      onClick={() =>
+                        chooseMode(
+                          "selected"
+                        )
+                      }
+                    >
+                      Check Out Paid Rooms Only
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

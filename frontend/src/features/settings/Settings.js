@@ -1910,7 +1910,7 @@ function Settings({
 
   if (loading) {
     return (
-      <div className="hotel-settings-page">
+      <div className="hotel-settings-page hms-page">
         <div className="hotel-settings-loading-card">
           <div className="hotel-settings-spinner" />
 
@@ -1930,9 +1930,9 @@ function Settings({
 
 
   return (
-    <div className="hotel-settings-page">
+    <div className="hotel-settings-page hms-page">
 
-      <div className="hotel-settings-hero">
+      <div className="hotel-settings-hero hms-page-header">
         <div>
           <div className="hotel-settings-eyebrow">
             Hotel Policy Engine
@@ -1950,7 +1950,7 @@ function Settings({
         </div>
 
 
-        <div className="hotel-settings-hotel-card">
+        <div className="hotel-settings-hotel-card hms-panel">
           <span>
             Current Hotel
           </span>
@@ -1985,7 +1985,7 @@ function Settings({
 
       <div className="hotel-settings-shell">
 
-        <aside className="hotel-settings-nav">
+        <aside className="hotel-settings-nav hms-panel">
           {GROUPS.map(
             ([
               group,
@@ -2077,7 +2077,7 @@ function Settings({
         </aside>
 
 
-        <main className="hotel-settings-content">
+        <main className="hotel-settings-content hms-panel">
 
           <div className="hotel-settings-section-header">
             <div>
@@ -2123,7 +2123,7 @@ function Settings({
               <div className="hotel-settings-audit-filters">
 
                 <select
-                  className="hotel-settings-select"
+                  className="hotel-settings-select hms-control"
                   value={
                     auditFilters
                       .section
@@ -2168,7 +2168,7 @@ function Settings({
 
 
                 <select
-                  className="hotel-settings-select"
+                  className="hotel-settings-select hms-control"
                   value={
                     auditFilters
                       .actorType
@@ -2204,7 +2204,7 @@ function Settings({
 
 
                 <input
-                  className="hotel-settings-input"
+                  className="hotel-settings-input hms-control"
                   type="date"
                   value={
                     auditFilters
@@ -2225,7 +2225,7 @@ function Settings({
 
 
                 <input
-                  className="hotel-settings-input"
+                  className="hotel-settings-input hms-control"
                   type="date"
                   value={
                     auditFilters
@@ -2247,7 +2247,7 @@ function Settings({
 
                 <button
                   type="button"
-                  className="hotel-settings-primary-button"
+                  className="hotel-settings-primary-button hms-button hms-button--primary"
                   onClick={() =>
                     loadAudit({
                       ...auditFilters,
@@ -2265,20 +2265,20 @@ function Settings({
 
               {auditLoading ? (
 
-                <div className="hotel-settings-empty-state">
+                <div className="hotel-settings-empty-state hms-empty">
                   Loading activity history...
                 </div>
 
               ) : !audit.logs.length ? (
 
-                <div className="hotel-settings-empty-state">
+                <div className="hotel-settings-empty-state hms-empty">
                   No setting changes match the selected filters.
                 </div>
 
               ) : (
 
-                <div className="hotel-settings-table-wrap">
-                  <table className="hotel-settings-audit-table">
+                <div className="hotel-settings-table-wrap hms-table-shell">
+                  <table className="hotel-settings-audit-table hms-table">
                     <thead>
                       <tr>
                         <th>
@@ -2592,7 +2592,7 @@ function Settings({
 
 
                   <textarea
-                    className="hotel-settings-textarea"
+                    className="hotel-settings-textarea hms-control"
                     rows="3"
                     placeholder={
                       reasonRequired
@@ -2628,7 +2628,7 @@ function Settings({
 
                     <button
                       type="button"
-                      className="hotel-settings-secondary-button"
+                      className="hotel-settings-secondary-button hms-button hms-button--secondary"
                       onClick={
                         discard
                       }
@@ -2643,7 +2643,7 @@ function Settings({
 
                     <button
                       type="button"
-                      className="hotel-settings-primary-button"
+                      className="hotel-settings-primary-button hms-button hms-button--primary"
                       onClick={
                         save
                       }
@@ -2666,10 +2666,10 @@ function Settings({
 
 
       {dialog && (
-        <div className="hotel-settings-modal-backdrop">
+        <div className="hotel-settings-modal-backdrop hms-modal-backdrop">
 
           <div
-            className="hotel-settings-modal"
+            className="hotel-settings-modal hms-modal"
             role="dialog"
             aria-modal="true"
           >
@@ -2695,7 +2695,7 @@ function Settings({
 
 
             <textarea
-              className="hotel-settings-textarea"
+              className="hotel-settings-textarea hms-control"
               rows="3"
               value={
                 dialogReason
@@ -2717,7 +2717,7 @@ function Settings({
 
               <button
                 type="button"
-                className="hotel-settings-secondary-button"
+                className="hotel-settings-secondary-button hms-button hms-button--secondary"
                 onClick={() => {
                   if (!saving) {
                     setDialog(
@@ -2739,7 +2739,7 @@ function Settings({
 
               <button
                 type="button"
-                className="hotel-settings-primary-button"
+                className="hotel-settings-primary-button hms-button hms-button--primary"
                 onClick={
                   runDialog
                 }

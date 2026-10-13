@@ -1,0 +1,269 @@
+.sa-hotels-page {
+  width: 100%;
+  min-width: 0;
+
+  padding: 0 0 var(--page-padding);
+
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.sa-hotels-page__intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: var(--space-5);
+
+  margin-bottom: var(--space-5);
+}
+
+.sa-hotels-page__eyebrow {
+  display: block;
+
+  margin-bottom: var(--space-1);
+
+  color: var(--color-text-muted);
+
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+
+  letter-spacing: 0.08em;
+}
+
+.sa-hotels-page__intro h1 {
+  margin: 0;
+
+  font-size: 22px;
+  font-weight: var(--font-weight-bold);
+}
+
+.sa-hotels-page__intro p {
+  margin-top: var(--space-2);
+
+  color: var(--color-text-muted);
+
+  font-size: var(--font-size-sm);
+}
+
+.sa-hotels-page__summary {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      4,
+      minmax(0, 1fr)
+    );
+
+  gap: var(--space-4);
+
+  margin-bottom: var(--space-5);
+}
+
+.sa-hotels-page__summary-card {
+  min-width: 0;
+
+  padding: var(--space-4);
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+
+  background: var(--color-surface);
+
+  box-shadow: var(--shadow-sm);
+}
+
+.sa-hotels-page__summary-card span {
+  display: block;
+
+  margin-bottom: var(--space-2);
+
+  color: var(--color-text-muted);
+
+  font-size: var(--font-size-xs);
+}
+
+.sa-hotels-page__summary-card strong {
+  color: var(--color-text);
+
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.sa-hotels-page__toolbar {
+  display: grid;
+
+  grid-template-columns:
+    minmax(260px, 1fr)
+    minmax(180px, 220px)
+    auto;
+
+  align-items: end;
+
+  gap: var(--space-4);
+
+  margin-bottom: var(--space-5);
+
+  padding: var(--space-4);
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+
+  background: var(--color-surface);
+}
+
+.sa-hotels-page__field {
+  display: flex;
+  flex-direction: column;
+
+  gap: var(--space-2);
+}
+
+.sa-hotels-page__field label {
+  color: var(--color-text-muted);
+
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.sa-hotels-page__field input,
+.sa-hotels-page__field select {
+  width: 100%;
+  height: 40px;
+
+  padding:
+    0
+    var(--space-3);
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+
+  background: var(--color-surface);
+  color: var(--color-text);
+
+  font: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.sa-hotels-page__field input:focus,
+.sa-hotels-page__field select:focus {
+  outline: none;
+
+  border-color: var(--color-primary);
+
+  box-shadow:
+    0 0 0 3px
+    var(--color-primary-light);
+}
+
+.sa-hotels-page__count {
+  padding-bottom: 10px;
+
+  color: var(--color-text-muted);
+
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+
+  white-space: nowrap;
+}
+
+.sa-hotels-page__grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
+
+  gap: var(--space-5);
+}
+
+.sa-hotels-page__hotel {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: var(--space-3);
+}
+
+.sa-hotels-page__edit {
+  width: 100%;
+}
+
+.sa-hotels-page__state {
+  padding: var(--space-8);
+
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+
+  background: var(--color-surface);
+
+  text-align: center;
+}
+
+.sa-hotels-page__state h2 {
+  margin: 0;
+
+  font-size: var(--font-size-lg);
+}
+
+.sa-hotels-page__state p {
+  margin:
+    var(--space-2)
+    0
+    var(--space-5);
+
+  color: var(--color-text-muted);
+
+  font-size: var(--font-size-sm);
+}
+
+
+@media (max-width: 1200px) {
+  .sa-hotels-page__summary,
+  .sa-hotels-page__grid {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+}
+
+
+@media (max-width: 760px) {
+  .sa-hotels-page__intro {
+    flex-direction: column;
+  }
+
+  .sa-hotels-page__toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .sa-hotels-page__summary,
+  .sa-hotels-page__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sa-hotels-page__count {
+    padding-bottom: 0;
+  }
+}
+
+/* SA-H2-F3R ACTION POLISH */
+
+.sa-hotels-page__intro > .btn {
+  width: auto;
+  min-width: 150px;
+  align-self: center;
+  flex: 0 0 auto;
+}
+
+/* UI-G7 HOTELS HEADER MOBILE ACTION */
+@media (max-width: 760px) {
+  .sa-hotels-page__intro > .btn {
+    align-self: flex-start;
+  }
+}

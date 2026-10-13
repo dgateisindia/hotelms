@@ -1126,6 +1126,610 @@ function RoomDetailsPage() {
       </section>
 
       {/* ======================================================
+          OPERATIONAL ROOM HISTORY
+      ====================================================== */}
+
+      <section className="room-detail-panel">
+        <div className="room-detail-section-heading">
+          <div>
+            <h2>
+              Maintenance History
+            </h2>
+
+            <p>
+              Real maintenance task and lifecycle
+              history recorded for this room.
+            </p>
+          </div>
+
+          <span>
+            {(roomDetails.maintenanceHistory || []).length}{" "}
+            {(roomDetails.maintenanceHistory || []).length === 1
+              ? "task"
+              : "tasks"}
+          </span>
+        </div>
+
+        {(roomDetails.maintenanceHistory || []).length === 0 ? (
+          <div className="room-detail-empty">
+            No maintenance history exists
+            for this room yet.
+          </div>
+        ) : (
+          <div className="room-detail-operational-list">
+            {(roomDetails.maintenanceHistory || []).map(
+              (task) => (
+                <article
+                  className="room-detail-operational-card"
+                  key={
+                    "maintenance-" +
+                    task.maintenanceTaskId
+                  }
+                >
+                  <div className="room-detail-operational-card-top">
+                    <div>
+                      <span className="room-detail-operational-kicker">
+                        Maintenance Task #
+                        {task.maintenanceTaskId}
+                      </span>
+
+                      <h3>
+                        {displayText(
+                          task.issueTitle,
+                          "Maintenance task"
+                        )}
+                      </h3>
+                    </div>
+
+                    <div className="room-detail-operational-badges">
+                      <span className="room-detail-operational-badge">
+                        {formatStatus(
+                          task.taskStatus
+                        )}
+                      </span>
+
+                      <span className="room-detail-operational-badge room-detail-operational-badge-muted">
+                        {formatStatus(
+                          task.priority
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="room-detail-operational-meta">
+                    <div>
+                      <span>
+                        Source
+                      </span>
+
+                      <strong>
+                        {formatStatus(
+                          task.sourceType
+                        )}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Assigned Staff
+                      </span>
+
+                      <strong>
+                        {task.assignedStaff
+                          ? displayText(
+                              task.assignedStaff.fullName,
+                              task.assignedStaff.staffCode
+                            )
+                          : "Unassigned"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Created
+                      </span>
+
+                      <strong>
+                        {formatDateTime(
+                          task.createdAt
+                        )}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Started
+                      </span>
+
+                      <strong>
+                        {task.startedAt
+                          ? formatDateTime(
+                              task.startedAt
+                            )
+                          : "—"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Completed
+                      </span>
+
+                      <strong>
+                        {task.completedAt
+                          ? formatDateTime(
+                              task.completedAt
+                            )
+                          : "—"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Cancelled
+                      </span>
+
+                      <strong>
+                        {task.cancelledAt
+                          ? formatDateTime(
+                              task.cancelledAt
+                            )
+                          : "—"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {task.issueDescription && (
+                    <div className="room-detail-operational-notes">
+                      <strong>
+                        Issue
+                      </strong>
+
+                      <span>
+                        {displayText(
+                          task.issueDescription
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  {task.resolutionNotes && (
+                    <div className="room-detail-operational-notes">
+                      <strong>
+                        Resolution
+                      </strong>
+
+                      <span>
+                        {displayText(
+                          task.resolutionNotes
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  {task.cancellationReason && (
+                    <div className="room-detail-operational-notes">
+                      <strong>
+                        Cancellation Reason
+                      </strong>
+
+                      <span>
+                        {displayText(
+                          task.cancellationReason
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="room-detail-operational-audit">
+                    <span>
+                      Created by Admin:{" "}
+                      {task.audit?.createdByAdminId ??
+                        "—"}
+                    </span>
+
+                    <span>
+                      Assigned by Admin:{" "}
+                      {task.audit?.assignedByAdminId ??
+                        "—"}
+                    </span>
+
+                    <span>
+                      Completed by Admin:{" "}
+                      {task.audit?.completedByAdminId ??
+                        "—"}
+                    </span>
+
+                    <span>
+                      Cancelled by Admin:{" "}
+                      {task.audit?.cancelledByAdminId ??
+                        "—"}
+                    </span>
+                  </div>
+
+                  <div className="room-detail-operational-events">
+                    <div className="room-detail-operational-events-heading">
+                      <strong>
+                        Lifecycle Timeline
+                      </strong>
+
+                      <span>
+                        {(task.events || []).length}{" "}
+                        {(task.events || []).length === 1
+                          ? "event"
+                          : "events"}
+                      </span>
+                    </div>
+
+                    {(task.events || []).length === 0 ? (
+                      <div className="room-detail-operational-event-empty">
+                        No lifecycle events recorded.
+                      </div>
+                    ) : (
+                      (task.events || []).map(
+                        (event) => (
+                          <div
+                            className="room-detail-operational-event"
+                            key={
+                              "maintenance-event-" +
+                              event.maintenanceEventId
+                            }
+                          >
+                            <div className="room-detail-operational-event-head">
+                              <strong>
+                                {formatStatus(
+                                  event.eventType
+                                )}
+                              </strong>
+
+                              <span>
+                                {formatDateTime(
+                                  event.createdAt
+                                )}
+                              </span>
+                            </div>
+
+                            <div className="room-detail-operational-event-transition">
+                              {event.fromStatus
+                                ? formatStatus(
+                                    event.fromStatus
+                                  )
+                                : "Start"}
+
+                              {" → "}
+
+                              {event.toStatus
+                                ? formatStatus(
+                                    event.toStatus
+                                  )
+                                : "—"}
+                            </div>
+
+                            {event.staff && (
+                              <small>
+                                Staff:{" "}
+                                {displayText(
+                                  event.staff.fullName,
+                                  event.staff.staffCode
+                                )}
+                              </small>
+                            )}
+
+                            <small>
+                              Admin:{" "}
+                              {event.adminId ?? "—"}
+                            </small>
+
+                            {event.notes && (
+                              <p>
+                                {displayText(
+                                  event.notes
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      )
+                    )}
+                  </div>
+                </article>
+              )
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="room-detail-panel">
+        <div className="room-detail-section-heading">
+          <div>
+            <h2>
+              Cleaning History
+            </h2>
+
+            <p>
+              Real housekeeping and cleaning
+              lifecycle history for this room.
+            </p>
+          </div>
+
+          <span>
+            {(roomDetails.cleaningHistory || []).length}{" "}
+            {(roomDetails.cleaningHistory || []).length === 1
+              ? "task"
+              : "tasks"}
+          </span>
+        </div>
+
+        {(roomDetails.cleaningHistory || []).length === 0 ? (
+          <div className="room-detail-empty">
+            No cleaning history exists
+            for this room yet.
+          </div>
+        ) : (
+          <div className="room-detail-operational-list">
+            {(roomDetails.cleaningHistory || []).map(
+              (task) => (
+                <article
+                  className="room-detail-operational-card"
+                  key={
+                    "cleaning-" +
+                    task.housekeepingTaskId
+                  }
+                >
+                  <div className="room-detail-operational-card-top">
+                    <div>
+                      <span className="room-detail-operational-kicker">
+                        Housekeeping Task #
+                        {task.housekeepingTaskId}
+                      </span>
+
+                      <h3>
+                        {formatStatus(
+                          task.taskType
+                        )}
+                      </h3>
+                    </div>
+
+                    <div className="room-detail-operational-badges">
+                      <span className="room-detail-operational-badge">
+                        {formatStatus(
+                          task.taskStatus
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="room-detail-operational-meta">
+                    <div>
+                      <span>
+                        Assigned Staff
+                      </span>
+
+                      <strong>
+                        {task.assignedStaff
+                          ? displayText(
+                              task.assignedStaff.fullName,
+                              task.assignedStaff.staffCode
+                            )
+                          : "Unassigned"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Created
+                      </span>
+
+                      <strong>
+                        {formatDateTime(
+                          task.createdAt
+                        )}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Started
+                      </span>
+
+                      <strong>
+                        {task.startedAt
+                          ? formatDateTime(
+                              task.startedAt
+                            )
+                          : "—"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Completed
+                      </span>
+
+                      <strong>
+                        {task.completedAt
+                          ? formatDateTime(
+                              task.completedAt
+                            )
+                          : "—"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>
+                        Cancelled
+                      </span>
+
+                      <strong>
+                        {task.cancelledAt
+                          ? formatDateTime(
+                              task.cancelledAt
+                            )
+                          : "—"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {task.notes && (
+                    <div className="room-detail-operational-notes">
+                      <strong>
+                        Notes
+                      </strong>
+
+                      <span>
+                        {displayText(
+                          task.notes
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  {task.completionNotes && (
+                    <div className="room-detail-operational-notes">
+                      <strong>
+                        Completion Notes
+                      </strong>
+
+                      <span>
+                        {displayText(
+                          task.completionNotes
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  {task.cancellationReason && (
+                    <div className="room-detail-operational-notes">
+                      <strong>
+                        Cancellation Reason
+                      </strong>
+
+                      <span>
+                        {displayText(
+                          task.cancellationReason
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="room-detail-operational-audit">
+                    <span>
+                      Created by Admin:{" "}
+                      {task.audit?.createdByAdminId ??
+                        "—"}
+                    </span>
+
+                    <span>
+                      Assigned by Admin:{" "}
+                      {task.audit?.assignedByAdminId ??
+                        "—"}
+                    </span>
+
+                    <span>
+                      Completed by Admin:{" "}
+                      {task.audit?.completedByAdminId ??
+                        "—"}
+                    </span>
+
+                    <span>
+                      Cancelled by Admin:{" "}
+                      {task.audit?.cancelledByAdminId ??
+                        "—"}
+                    </span>
+                  </div>
+
+                  <div className="room-detail-operational-events">
+                    <div className="room-detail-operational-events-heading">
+                      <strong>
+                        Lifecycle Timeline
+                      </strong>
+
+                      <span>
+                        {(task.events || []).length}{" "}
+                        {(task.events || []).length === 1
+                          ? "event"
+                          : "events"}
+                      </span>
+                    </div>
+
+                    {(task.events || []).length === 0 ? (
+                      <div className="room-detail-operational-event-empty">
+                        No lifecycle events recorded.
+                      </div>
+                    ) : (
+                      (task.events || []).map(
+                        (event) => (
+                          <div
+                            className="room-detail-operational-event"
+                            key={
+                              "cleaning-event-" +
+                              event.housekeepingEventId
+                            }
+                          >
+                            <div className="room-detail-operational-event-head">
+                              <strong>
+                                {formatStatus(
+                                  event.eventType
+                                )}
+                              </strong>
+
+                              <span>
+                                {formatDateTime(
+                                  event.createdAt
+                                )}
+                              </span>
+                            </div>
+
+                            <div className="room-detail-operational-event-transition">
+                              {event.fromStatus
+                                ? formatStatus(
+                                    event.fromStatus
+                                  )
+                                : "Start"}
+
+                              {" → "}
+
+                              {event.toStatus
+                                ? formatStatus(
+                                    event.toStatus
+                                  )
+                                : "—"}
+                            </div>
+
+                            {event.staff && (
+                              <small>
+                                Staff:{" "}
+                                {displayText(
+                                  event.staff.fullName,
+                                  event.staff.staffCode
+                                )}
+                              </small>
+                            )}
+
+                            <small>
+                              Admin:{" "}
+                              {event.adminId ?? "—"}
+                            </small>
+
+                            {event.notes && (
+                              <p>
+                                {displayText(
+                                  event.notes
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      )
+                    )}
+                  </div>
+                </article>
+              )
+            )}
+          </div>
+        )}
+      </section>
+      {/* ======================================================
           CANONICAL ROOM HISTORY
       ====================================================== */}
 

@@ -1057,8 +1057,253 @@ async function createHotel(
   }
 }
 
+/* ============================================================
+   PATCH /api/superadmin/hotels/:hotelDisplayId
+
+   Updates only a hotel owned by the authenticated Super Admin.
+
+   Supported lifecycle status:
+   - active
+   - inactive
+
+   No hotel ownership value is accepted from the client.
+============================================================ */
+
+async function updateHotel(
+  req,
+  res
+) {
+  const superadminId =
+    Number(
+      req.dbUser?.superadminId
+    );
+
+  const hotelId =
+    parseHotelDisplayId(
+      req.params.hotelDisplayId
+    );
+
+
+  if (
+    !Number.isSafeInteger(
+      superadminId
+    ) ||
+    superadminId <= 0
+  ) {
+    return sendError(
+      res,
+      403,
+      "SUPER_ADMIN_CONTEXT_MISSING",
+      "Your Super Admin account could not be identified. Please sign in again."
+    );
+  }
+
+
+  if (!hotelId) {
+    return sendError(
+      res,
+      400,
+      "INVALID_HOTEL_ID",
+      "The hotel ID is invalid. Use a value such as HT-0001."
+    );
+  }
+
+
+  const validation =
+    validateHotelPayload(
+      req.body
+    );
+
+
+  if (validation.error) {
+    return sendError(
+      res,
+      400,
+      "INVALID_HOTEL_DETAILS",
+      validation.error
+    );
+  }
+
+
+  const status =
+    String(
+      req.body?.status || ""
+    )
+      .trim()
+      .toLowerCase();
+
+
+  if (
+    ![
+      "active",
+      "inactive",
+    ].includes(
+      status
+    )
+  ) {
+    return sendError(
+      res,
+      400,
+      "INVALID_HOTEL_STATUS",
+      "Hotel status must be active or inactive."
+    );
+  }
+
+
+  const hotel =
+    validation.value;
+
+
+  try {
+    /*
+     * Ownership is checked before mutation.
+     *
+     * hotel_id alone is never sufficient.
+     */
+    const [ownedRows] =
+      await db.query(
+        `
+          SELECT hotel_id
+          FROM hotels
+          WHERE hotel_id = ?
+            AND superadmin_id = ?
+          LIMIT 1
+        `,
+        [
+          hotelId,
+          superadminId,
+        ]
+      );
+
+
+    if (
+      ownedRows.length === 0
+    ) {
+      return sendError(
+        res,
+        404,
+        "HOTEL_NOT_FOUND",
+        "The requested hotel was not found in your portfolio."
+      );
+    }
+
+
+    await db.query(
+      `
+        UPDATE hotels
+        SET
+          hotel_name = ?,
+          hotel_type = ?,
+          hotel_desc = ?,
+          star_rating = ?,
+          year_established = ?,
+          gst_number = ?,
+          pan_number = ?,
+          business_reg_number = ?,
+          hotel_logo = ?,
+          status = ?
+        WHERE hotel_id = ?
+          AND superadmin_id = ?
+      `,
+      [
+        hotel.hotelName,
+        hotel.hotelType,
+        hotel.hotelDescription,
+        hotel.starRating,
+        hotel.yearEstablished,
+        hotel.gstNumber,
+        hotel.panNumber,
+        hotel.businessRegistrationNumber,
+        hotel.hotelLogo,
+        status,
+        hotelId,
+        superadminId,
+      ]
+    );
+
+
+    /*
+     * Read the updated hotel using the same ownership-safe
+     * portfolio query used by the GET endpoints.
+     */
+    const [rows] =
+      await db.query(
+        `
+          ${HOTEL_PORTFOLIO_QUERY}
+
+          WHERE h.hotel_id = ?
+            AND h.superadmin_id = ?
+
+          LIMIT 1
+        `,
+        [
+          superadminId,
+          hotelId,
+          superadminId,
+        ]
+      );
+
+
+    if (
+      rows.length === 0
+    ) {
+      return sendError(
+        res,
+        404,
+        "HOTEL_NOT_FOUND",
+        "The updated hotel could not be loaded."
+      );
+    }
+
+
+    return res
+      .status(200)
+      .json({
+        success: true,
+
+        message:
+          status === "active"
+            ? "Hotel updated and activated successfully."
+            : "Hotel updated and deactivated successfully.",
+
+        hotel:
+          mapHotelRow(
+            rows[0]
+          ),
+      });
+  } catch (error) {
+    logHotelError(
+      "UPDATE_HOTEL",
+      error
+    );
+
+
+    if (
+      error?.code ===
+      "ER_DUP_ENTRY"
+    ) {
+      return sendError(
+        res,
+        409,
+        "HOTEL_CONFLICT",
+        "The hotel could not be updated because one of its unique details is already in use."
+      );
+    }
+
+
+    return sendError(
+      res,
+      500,
+      "HOTEL_UPDATE_FAILED",
+      "The hotel could not be updated. Please try again."
+    );
+  }
+}
+
+
 module.exports = {
   getHotels,
   getHotelByDisplayId,
   createHotel,
+  updateHotel,
 };

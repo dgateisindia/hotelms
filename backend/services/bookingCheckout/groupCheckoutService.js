@@ -8,6 +8,16 @@ const {
    ERROR
 ============================================================ */
 
+const {
+  ensureAutomaticReservationGroupInvoiceWithConnection,
+} = require(
+  "./automaticGroupInvoiceService"
+);
+
+
+/* G6 GROUP CHECKOUT AUTOMATION */
+
+
 function throwHttp(
   status,
   code,
@@ -459,6 +469,32 @@ async function checkoutReservationGroup(
      RESULT
   ========================================================== */
 
+
+  /*
+   * G6 consolidated invoice evaluation.
+   *
+   * Partial group:
+   *   wait safely.
+   *
+   * Final terminal booking:
+   *   create exactly one group invoice.
+   */
+  const reservationGroupInvoice =
+    await ensureAutomaticReservationGroupInvoiceWithConnection(
+      connection,
+      {
+        hotelId:
+          hId,
+
+        reservationGroupId:
+          Number(
+            group
+              .reservation_group_id
+          ),
+      }
+    );
+
+
   return {
     reservationGroupId:
       Number(
@@ -485,6 +521,9 @@ async function checkoutReservationGroup(
 
     checkedOutBookingCount:
       results.length,
+
+
+    reservationGroupInvoice,
 
     bookings:
       results,

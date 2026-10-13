@@ -102,16 +102,143 @@ function futureLabels(period, count, lastBucket) {
 // ============================================================
 // GET /api/reports/overview?period=daily|weekly|monthly
 // ============================================================
+
+// UI-R6B CUSTOM DATE
+
+function parseCustomReportDate(value) {
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return null;
+  }
+
+  const date = new Date(value + 'T00:00:00Z');
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function shiftCustomReportDate(value, days) {
+  const date = parseCustomReportDate(value);
+
+  if (!date) {
+    throw new Error('Invalid custom report date');
+  }
+
+  date.setUTCDate(date.getUTCDate() + days);
+
+  return date.toISOString().slice(0, 10);
+}
+
+function customReportDays(from, to) {
+  return Math.round(
+    (
+      parseCustomReportDate(to) -
+      parseCustomReportDate(from)
+    ) / 86400000
+  ) + 1;
+}
+
+function buildCustomReportBuckets(from, to) {
+  const totalDays = customReportDays(from, to);
+
+  const bucketSize = Math.ceil(totalDays / 12);
+
+  const buckets = [];
+
+  for (
+    let offset = 0;
+    offset < totalDays;
+    offset += bucketSize
+  ) {
+    const start = shiftCustomReportDate(from, offset);
+
+    const end = shiftCustomReportDate(
+      from,
+      Math.min(
+        totalDays - 1,
+        offset + bucketSize - 1
+      )
+    );
+
+    buckets.push({
+      start,
+      end,
+      label: start === end
+        ? start.slice(5)
+        : `${start.slice(5)} - ${end.slice(5)}`
+    });
+  }
+
+  return {
+    buckets,
+    count: buckets.length,
+    unit: 'day'
+  };
+}
+
 const getReportsOverview = async (req, res) => {
   const hotelId = req.dbUser.hotelId;
 
   try {
-    const period = ['daily', 'weekly', 'monthly'].includes(req.query.period) ? req.query.period : 'monthly';
+    const allowedPeriods = [
+      'daily',
+      'weekly',
+      'monthly',
+      'custom'
+    ];
+
+    const period = allowedPeriods.includes(req.query.period)
+      ? req.query.period
+      : 'monthly';
+
+    let customRange = null;
+
+    if (period === 'custom') {
+      const from = req.query.from;
+      const to = req.query.to;
+
+      const fromDate = parseCustomReportDate(from);
+      const toDate = parseCustomReportDate(to);
+
+      if (
+        !fromDate ||
+        !toDate ||
+        fromDate > toDate
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid custom range. Use YYYY-MM-DD with From <= To.'
+        });
+      }
+
+      const duration = customReportDays(from, to);
+
+      if (duration < 1 || duration > 366) {
+        return res.status(400).json({
+          success: false,
+          message: 'Custom report range cannot exceed 366 days.'
+        });
+      }
+
+      customRange = {
+        from,
+        to,
+        duration
+      };
+    }
 
     // Anchor date: everything (buckets, monthly summary) is computed as of
     // this date instead of always defaulting to "today".
     let anchorDate = new Date();
-    if (req.query.date) {
+    if (period !== 'custom' && req.query.date) {
       const parsed = new Date(req.query.date);
       if (isNaN(parsed.getTime())) {
         return res.status(400).json({ success: false, message: 'Invalid date query param — expected YYYY-MM-DD' });
@@ -119,17 +246,52 @@ const getReportsOverview = async (req, res) => {
       anchorDate = parsed;
     }
 
-    const { buckets, count, unit } = buildBuckets(period, anchorDate);
+    if (customRange) {
+      anchorDate = new Date(
+        customRange.to + 'T12:00:00'
+      );
+    }
+
+    const bucketConfiguration = customRange
+      ? buildCustomReportBuckets(
+          customRange.from,
+          customRange.to
+        )
+      : buildBuckets(period, anchorDate);
+
+    const {
+      buckets,
+      count,
+      unit
+    } = bucketConfiguration;
+
     const rangeStart = buckets[0].start;
     const rangeEnd = buckets[buckets.length - 1].end;
-    const prevRange = shiftBack(rangeStart, rangeEnd, count, unit);
+
+    const prevRange = customRange
+      ? {
+          start: shiftCustomReportDate(
+            rangeStart,
+            -customRange.duration
+          ),
+          end: shiftCustomReportDate(
+            rangeStart,
+            -1
+          )
+        }
+      : shiftBack(
+          rangeStart,
+          rangeEnd,
+          count,
+          unit
+        );
 
     // ---- Total rooms (used for occupancy/RevPAR math) ----
     const [[roomCountRow]] = await db.query(
       `SELECT COUNT(*) AS total FROM rooms WHERE hotel_id=?`,
       [hotelId]
     );
-    const totalRooms = roomCountRow.total || 1;
+    const totalRooms = Number(roomCountRow.total || 0);
 
     // ---- Revenue + booking trend, bucket by bucket (also fetches the
     // equivalent bucket from the previous period, for the dashed comparison line) ----
@@ -142,7 +304,18 @@ const getReportsOverview = async (req, res) => {
          WHERE hotel_id=? AND payment_status='success' AND DATE(payment_date) BETWEEN ? AND ?`,
         [hotelId, b.start, b.end]
       );
-      const prevBucket = shiftBack(b.start, b.end, count, unit);
+      const prevBucket = customRange
+        ? {
+            start: shiftCustomReportDate(
+              b.start,
+              -customRange.duration
+            ),
+            end: shiftCustomReportDate(
+              b.end,
+              -customRange.duration
+            )
+          }
+        : shiftBack(b.start, b.end, count, unit);
       const [[prev]] = await db.query(
         `SELECT COALESCE(SUM(CASE WHEN transaction_type='payment' THEN amount WHEN transaction_type='refund' THEN -amount ELSE 0 END),0) AS revenue
          FROM payments
@@ -825,7 +998,7 @@ const getReportsOverview = async (req, res) => {
 
     const forecast = revenueTrend.map((r) => ({ label: r.label, actual: r.thisPeriod, forecast: r.thisPeriod }));
     let lastVal = revenueTrend.length ? revenueTrend[revenueTrend.length - 1].thisPeriod : 0;
-    const futLabels = futureLabels(period, count, buckets[buckets.length - 1]);
+    const futLabels = customRange ? [] : futureLabels(period, count, buckets[buckets.length - 1]);
     futLabels.forEach((label) => {
       lastVal = Math.max(0, Math.round(lastVal * (1 + avgGrowth)));
       forecast.push({ label, actual: null, forecast: lastVal });
@@ -970,6 +1143,10 @@ const getReportsOverview = async (req, res) => {
       data: {
         period,
         rangeLabel: `${rangeStart} to ${rangeEnd}`,
+        rangeStart,
+        rangeEnd,
+        isCustomRange: Boolean(customRange),
+        monthlySummaryScope: 'Last 6 calendar months ending in selected anchor month',
         stats,
         revenueTrend,
         revenueByRoom,

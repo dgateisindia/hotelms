@@ -3,18 +3,23 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import apiClient from "../../../shared/api/apiClient";
+import AppAlert from "../../../shared/components/ui/AppAlert";
 
 
 
 import GroupCheckInDialog from "../actions/GroupCheckInDialog";
 import GroupCheckoutDialog from "../actions/GroupCheckoutDialog";
 import GroupPaymentDialog from "../actions/GroupPaymentDialog";
+import CollectPaymentDialog from "../actions/CollectPaymentDialog";
+import FinancialSettlementReviewDialog from "../actions/FinancialSettlementReviewDialog";
+import LifecycleRefundDialog from "../actions/LifecycleRefundDialog";
 import ManageGuestsDialog from "../guests/ManageGuestsDialog";
 import ReservationWorkspaceHeader from "../components/ReservationWorkspaceHeader";
 import ReservationGroupSummary from "../components/ReservationGroupSummary";
 import ReservationOverviewDetails from "../components/ReservationOverviewDetails";
 import ReservationFinancialSummary from "../components/ReservationFinancialSummary";
 import ReservationRoomBookings from "../components/ReservationRoomBookings";
+import useReservationFinancialActions from "../hooks/useReservationFinancialActions";
 
 
 
@@ -73,6 +78,17 @@ function ReservationWorkspace() {
   const [showGroupCheckIn, setShowGroupCheckIn] = useState(false);
   const [showGroupPayment, setShowGroupPayment] = useState(false);
   const [showGroupCheckout, setShowGroupCheckout] = useState(false);
+
+  const [
+    checkoutPaymentBookingIds,
+    setCheckoutPaymentBookingIds,
+  ] = useState([]);
+
+  const financialActions =
+    useReservationFinancialActions({
+      group,
+      refreshGroup,
+    });
 
 
   useEffect(
@@ -233,6 +249,19 @@ function ReservationWorkspace() {
       ? group.bookings
       : [];
 
+
+  const groupInvoice =
+    group.group_invoice ||
+    null;
+
+
+  const hasGroupInvoice =
+    Number(
+      groupInvoice
+        ?.invoice_id ||
+      0
+    ) > 0;
+
   const canAddRoom =
     bookings.some(
       (booking) =>
@@ -302,6 +331,17 @@ function ReservationWorkspace() {
   return (
     <div className="bookings-page">
 
+      <AppAlert
+        type="success"
+        message={
+          financialActions.operationSuccess
+        }
+        onClose={
+          financialActions.clearOperationSuccess
+        }
+        autoClose
+      />
+
       {/* ======================================================
           HEADER
       ====================================================== */}
@@ -318,9 +358,10 @@ function ReservationWorkspace() {
           onGroupCheckIn={() =>
             setShowGroupCheckIn(true)
           }
-          onGroupPayment={() =>
-            setShowGroupPayment(true)
-          }
+          onGroupPayment={() => {
+            setCheckoutPaymentBookingIds([]);
+            setShowGroupPayment(true);
+          }}
           onGroupCheckout={() =>
             setShowGroupCheckout(true)
           }
@@ -331,32 +372,109 @@ function ReservationWorkspace() {
           }
         />
 
-{/* ======================================================
-          SUMMARY
+
+      {/* ======================================================
+          QUICK RESERVATION SUMMARY
       ====================================================== */}
 
         <ReservationGroupSummary
           summary={summary}
         />
 
-{/* ======================================================
-          CUSTOMER
-      ====================================================== */}
-
-        <ReservationOverviewDetails
-          customer={customer}
-          group={group}
-          summary={summary}
-        />
 
 
       {/* ======================================================
-          FINANCIAL SUMMARY
+          PRIMARY ACCESS
+          Invoice + room bookings stay near the top because
+          they are the most frequently accessed reservation
+          records during front-desk operations.
       ====================================================== */}
 
-        <ReservationFinancialSummary
-          summary={summary}
-        />
+
+
+        {hasGroupInvoice && (
+          <div className="bookings-card reservation-group-invoice-card">
+
+            <div className="reservation-group-invoice-main">
+
+              <div className="reservation-group-invoice-copy">
+
+                <span className="reservation-group-invoice-kicker">
+                  CONSOLIDATED INVOICE
+                </span>
+
+                <strong className="reservation-group-invoice-number">
+                  {groupInvoice.invoice_number}
+                </strong>
+
+                <div className="reservation-group-invoice-meta">
+
+                  <span>
+                    {new Intl.NumberFormat(
+                      "en-IN",
+                      {
+                        style:
+                          "currency",
+
+                        currency:
+                          "INR",
+
+                        minimumFractionDigits:
+                          2,
+
+                        maximumFractionDigits:
+                          2,
+                      }
+                    ).format(
+                      Number(
+                        groupInvoice
+                          .total_amount ||
+                        0
+                      )
+                    )}
+                  </span>
+
+                  <span
+                    className={`reservation-group-invoice-status reservation-group-invoice-status--${String(
+                      groupInvoice
+                        .invoice_status ||
+                      "unknown"
+                    )
+                      .trim()
+                      .toLowerCase()}`}
+                  >
+                    {String(
+                      groupInvoice
+                        .invoice_status ||
+                      "unknown"
+                    )
+                      .replace(
+                        /_/g,
+                        " "
+                      )}
+                  </span>
+
+                </div>
+
+              </div>
+
+
+              <button
+                type="button"
+                className="reservation-group-invoice-action"
+                onClick={() =>
+                  navigate(
+                    `/billing?invoice=${groupInvoice.invoice_id}`
+                  )
+                }
+              >
+                View / Print Invoice
+              </button>
+
+            </div>
+
+          </div>
+        )}
 
 
       {/* ======================================================
@@ -381,15 +499,62 @@ function ReservationWorkspace() {
               `/booking-desk?edit=${bookingId}`
             )
           }
+          onReviewSettlement={(booking) =>
+            void financialActions.openFinancialSettlementReview(
+              booking
+            )
+          }
+          onCollectPayment={
+            financialActions.openCollectPayment
+          }
+          onRefund={
+            financialActions.openLifecycleRefund
+          }
+          hideInvoiceActions={
+            hasGroupInvoice
+          }
+          onViewInvoice={(booking) =>
+            navigate(
+              `/billing?invoice=${booking.invoice_id}`
+            )
+          }
+        />
+{/* ======================================================
+          CUSTOMER
+      ====================================================== */}
+
+        <ReservationOverviewDetails
+          customer={customer}
+          group={group}
+          summary={summary}
         />
 
+
+      {/* ======================================================
+          FINANCIAL SUMMARY
+      ====================================================== */}
+
+        <ReservationFinancialSummary
+          summary={summary}
+        />
 {showGroupPayment && (
         <GroupPaymentDialog
           group={group}
-          onClose={() =>
-            setShowGroupPayment(false)
-          }
+          initialBookingIds={checkoutPaymentBookingIds}
+          onClose={() => {
+            setShowGroupPayment(false);
+            setCheckoutPaymentBookingIds([]);
+          }}
           onChanged={refreshGroup}
+          onContinueToCheckout={
+            checkoutPaymentBookingIds.length > 0
+              ? () => {
+                  setShowGroupPayment(false);
+                  setCheckoutPaymentBookingIds([]);
+                  setShowGroupCheckout(true);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -400,6 +565,11 @@ function ReservationWorkspace() {
             setShowGroupCheckout(false)
           }
           onChanged={refreshGroup}
+          onCollectPayment={(bookingIds) => {
+            setShowGroupCheckout(false);
+            setCheckoutPaymentBookingIds(bookingIds);
+            setShowGroupPayment(true);
+          }}
         />
       )}
 
@@ -434,6 +604,120 @@ function ReservationWorkspace() {
           }}
         />
       )}
+
+      <FinancialSettlementReviewDialog
+        booking={
+          financialActions.financialReviewBooking
+        }
+        review={
+          financialActions.financialReviewData
+        }
+        finalPayable={
+          financialActions.financialReviewFinalPayable
+        }
+        reviewNotes={
+          financialActions.financialReviewNotes
+        }
+        loading={
+          financialActions.financialReviewLoading
+        }
+        processing={
+          financialActions.financialReviewProcessing
+        }
+        error={
+          financialActions.financialReviewError
+        }
+        onChangeFinalPayable={
+          financialActions.setFinancialReviewFinalPayable
+        }
+        onChangeReviewNotes={
+          financialActions.setFinancialReviewNotes
+        }
+        onClose={
+          financialActions.closeFinancialSettlementReview
+        }
+        onConfirm={() =>
+          void financialActions.confirmFinancialSettlementReview()
+        }
+      />
+
+      <CollectPaymentDialog
+        booking={
+          financialActions.paymentBooking
+        }
+        amount={
+          financialActions.paymentAmount
+        }
+        method={
+          financialActions.paymentMethod
+        }
+        transactionId={
+          financialActions.paymentTransactionId
+        }
+        notes={
+          financialActions.paymentNotes
+        }
+        processing={
+          financialActions.paymentProcessing
+        }
+        error={
+          financialActions.paymentError
+        }
+        onChangeAmount={
+          financialActions.setPaymentAmount
+        }
+        onChangeMethod={
+          financialActions.setPaymentMethod
+        }
+        onChangeTransactionId={
+          financialActions.setPaymentTransactionId
+        }
+        onChangeNotes={
+          financialActions.setPaymentNotes
+        }
+        onClose={
+          financialActions.closeCollectPayment
+        }
+        onConfirm={() =>
+          void financialActions.confirmCollectPayment()
+        }
+      />
+
+      <LifecycleRefundDialog
+        booking={
+          financialActions.refundBooking
+        }
+        method={
+          financialActions.refundMethod
+        }
+        transactionId={
+          financialActions.refundTransactionId
+        }
+        notes={
+          financialActions.refundNotes
+        }
+        processing={
+          financialActions.refundProcessing
+        }
+        error={
+          financialActions.refundError
+        }
+        onChangeMethod={
+          financialActions.setRefundMethod
+        }
+        onChangeTransactionId={
+          financialActions.setRefundTransactionId
+        }
+        onChangeNotes={
+          financialActions.setRefundNotes
+        }
+        onClose={
+          financialActions.closeLifecycleRefund
+        }
+        onConfirm={() =>
+          void financialActions.confirmLifecycleRefund()
+        }
+      />
 
       <ManageGuestsDialog
         booking={

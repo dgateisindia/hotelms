@@ -15,8 +15,26 @@ const {
 } = require("./bookingPaymentService");
 
 const {
+  resolveBookingPaymentPolicyWithConnection,
+} = require(
+  "./bookingPayments/paymentPolicyService"
+);
+
+const {
   closeBookingGuestsForRoomCheckoutWithConnection,
 } = require("./bookingGuestService");
+
+const {
+  resolveCheckoutHousekeepingPolicyWithConnection,
+} = require("./housekeeping/housekeepingPolicyService");
+
+const {
+  createCheckoutCleaningTaskWithConnection,
+} = require("./housekeeping/housekeepingService");
+
+const {
+  ensureCheckoutInvoiceWithConnection,
+} = require("./billing/checkoutInvoiceService");
 
 function throwHttp(
   status,
@@ -1336,7 +1354,7 @@ async function extendStayBooking(
    Effects:
    - actual_check_out = database NOW()
    - booking status = checked_out
-   - room status = cleaning
+   - room status = policy-driven cleaning / available
    - active room history = completed
 
    MVP financial rule:
@@ -1614,9 +1632,32 @@ async function checkoutBooking(
     );
 
 
+  const paymentPolicy =
+    await resolveBookingPaymentPolicyWithConnection(
+      connection,
+      {
+        hotelId,
+        bookingId,
+      }
+    );
+
+
+  /* ==========================================================
+     SET-PROP CHECKOUT PAYMENT POLICY
+
+     true:
+       outstanding balance blocks checkout
+
+     false:
+       checkout may complete with an outstanding receivable
+  ========================================================== */
+
   if (
+    paymentPolicy
+      .fullPaymentRequiredBeforeCheckout ===
+      true &&
     outstandingAmount >
-    0.009
+      0.009
   ) {
     throwHttp(
       409,
@@ -1624,6 +1665,30 @@ async function checkoutBooking(
       `₹${outstandingAmount.toFixed(2)} is still due. Collect the remaining payment before checkout.`
     );
   }
+
+
+  /* ==========================================================
+     HOUSEKEEPING POLICY
+
+     Operational room release is driven by CURRENT hotel
+     housekeeping settings.
+
+     true
+       -> canonical housekeeping task
+       -> room cleaning
+
+     false
+       -> no housekeeping task
+       -> room available
+  ========================================================== */
+
+  const housekeepingPolicy =
+    await resolveCheckoutHousekeepingPolicyWithConnection(
+      connection,
+      {
+        hotelId,
+      }
+    );
 
 
   /* ==========================================================
@@ -1693,28 +1758,71 @@ async function checkoutBooking(
 
 
   /* ==========================================================
-     ROOM → CLEANING
+     POLICY-DRIVEN ROOM RELEASE
 
-     Room must not become directly available after checkout.
-     Housekeeping must complete cleaning first.
+     The caller owns this transaction.
+     Therefore booking checkout + housekeeping task + room
+     status either all commit together or all roll back.
   ========================================================== */
 
-  await connection.query(
-    `
-      UPDATE rooms
+  let housekeepingTask =
+    null;
 
-      SET
-        status =
-          'cleaning'
+  let finalRoomStatus =
+    housekeepingPolicy
+      .roomStatusAfterCheckout;
 
-      WHERE hotel_id = ?
-        AND room_id = ?
-    `,
-    [
-      hotelId,
-      booking.room_id,
-    ]
-  );
+
+  if (
+    housekeepingPolicy
+      .createHousekeepingTask
+  ) {
+    const housekeepingResult =
+      await createCheckoutCleaningTaskWithConnection(
+        connection,
+        {
+          hotelId,
+          adminId,
+          bookingId,
+
+          roomId:
+            booking.room_id,
+
+          notes:
+            "Automatically created by formal room checkout.",
+        }
+      );
+
+    housekeepingTask =
+      housekeepingResult
+        .task;
+
+    finalRoomStatus =
+      housekeepingResult
+        .task
+        .roomStatus;
+  }
+  else {
+    await connection.query(
+      `
+        UPDATE rooms
+
+        SET status =
+          'available'
+
+        WHERE hotel_id = ?
+          AND room_id = ?
+          AND status = 'occupied'
+      `,
+      [
+        hotelId,
+        booking.room_id,
+      ]
+    );
+
+    finalRoomStatus =
+      "available";
+  }
 
 
   /* ==========================================================
@@ -1784,6 +1892,23 @@ async function checkoutBooking(
     );
 
 
+  /* ==========================================================
+     CANONICAL CHECKOUT INVOICE
+
+     Normal completed stays receive their invoice automatically.
+     Existing invoice remains untouched.
+  ========================================================== */
+
+  const checkoutInvoice =
+    await ensureCheckoutInvoiceWithConnection(
+      connection,
+      {
+        hotelId,
+        bookingId,
+      }
+    );
+
+
   return {
     bookingId:
       updated.booking_id,
@@ -1840,7 +1965,7 @@ async function checkoutBooking(
       ),
 
     outstandingAmount:
-      0,
+      outstandingAmount,
 
     paymentStatus:
       updated.payment_status,
@@ -1849,7 +1974,40 @@ async function checkoutBooking(
       updated.booking_status,
 
     roomStatus:
-      "cleaning",
+      finalRoomStatus,
+
+    invoice:
+      checkoutInvoice,
+
+    housekeeping: {
+      cleaningRequiredAfterCheckout:
+        housekeepingPolicy
+          .cleaningRequiredAfterCheckout,
+
+      taskCreated:
+        Boolean(
+          housekeepingTask
+        ),
+
+      taskId:
+        housekeepingTask
+          ?.housekeepingTaskId ||
+        null,
+
+      taskStatus:
+        housekeepingTask
+          ?.taskStatus ||
+        null,
+
+      releaseRequiresHousekeepingCompletion:
+        housekeepingPolicy
+          .releaseRequiresHousekeepingCompletion,
+
+      compatibilityWarnings:
+        housekeepingPolicy
+          .compatibility
+          .warnings,
+    },
   };
 }
 

@@ -8,6 +8,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import apiClient from '../../shared/api/apiClient';
 import './Staff.css';
 import {
@@ -357,7 +358,8 @@ function Staff() {
   //  RENDER
   // ════════════════════════════════════════════════════════════
   return (
-    <>
+    <div className="hms-staff-page" data-hms-fast-ui="staff">
+<>
       {/* ── Page Header ── */}
       <div className="page-header">
         <div className="page-header-left">
@@ -581,7 +583,9 @@ function Staff() {
         </div>
       </div>
 
-      {/* ══════════ MODALS ══════════ */}
+      {/* STAFF-S3A-R1 PORTAL */}
+      {createPortal(
+        <div className="hms-staff-page hms-staff-modal-portal">
       {showAdd && (
         <StaffFormModal
           title="Add New Staff"
@@ -637,7 +641,11 @@ function Staff() {
           </div>
         </div>
       )}
+        </div>,
+        document.body
+      )}
     </>
+</div>
   );
 }
 

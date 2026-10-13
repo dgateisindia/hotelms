@@ -1511,6 +1511,235 @@ export function validateStayRoomsStep({
 
 
 /* ============================================================
+   INITIAL PAYMENT POLICY
+
+   Frontend guidance only.
+
+   Backend immutable/current policy enforcement remains
+   authoritative.
+
+   CREATE / ADD ROOM:
+   BookingDesk supplies current Hotel Settings payment policy.
+
+   EDIT:
+   BookingDesk supplies the immutable booking snapshot policy,
+   although edit mode does not collect a new initial payment.
+============================================================ */
+
+const INITIAL_PAYMENT_METHODS = [
+  "cash",
+  "upi",
+  "card",
+  "bank_transfer",
+];
+
+
+export function getInitialPaymentPolicyState({
+  paymentPolicy,
+  grandTotal,
+}) {
+
+  const total =
+    Number.isFinite(
+      Number(
+        grandTotal
+      )
+    )
+      ? Math.max(
+          0,
+          Number(
+            Number(
+              grandTotal
+            ).toFixed(2)
+          )
+        )
+      : 0;
+
+
+  const allowPartialPayment =
+    paymentPolicy
+      ?.allow_partial_payment !==
+    false;
+
+
+  const allowedMethods =
+    Array.isArray(
+      paymentPolicy
+        ?.allowed_methods
+    )
+      ? [
+          ...new Set(
+            paymentPolicy
+              .allowed_methods
+              .map(
+                (method) =>
+                  String(
+                    method || ""
+                  )
+                    .trim()
+                    .toLowerCase()
+                    .replace(
+                      /[\s-]+/g,
+                      "_"
+                    )
+              )
+              .filter(
+                (method) =>
+                  INITIAL_PAYMENT_METHODS
+                    .includes(
+                      method
+                    )
+              )
+          ),
+        ]
+      : [
+          ...INITIAL_PAYMENT_METHODS,
+        ];
+
+
+  const advanceRule =
+    paymentPolicy
+      ?.advance_requirement &&
+    typeof paymentPolicy
+      .advance_requirement ===
+      "object" &&
+    !Array.isArray(
+      paymentPolicy
+        .advance_requirement
+    )
+      ? paymentPolicy
+          .advance_requirement
+      : {
+          method:
+            "none",
+
+          value:
+            0,
+        };
+
+
+  const requestedAdvanceMethod =
+    String(
+      advanceRule.method ||
+      "none"
+    )
+      .trim()
+      .toLowerCase();
+
+
+  const advanceMethod =
+    [
+      "none",
+      "fixed_amount",
+      "percentage",
+      "manual",
+    ].includes(
+      requestedAdvanceMethod
+    )
+      ? requestedAdvanceMethod
+      : "none";
+
+
+  const rawAdvanceValue =
+    Number(
+      advanceRule.value ??
+      0
+    );
+
+
+  const advanceValue =
+    Number.isFinite(
+      rawAdvanceValue
+    ) &&
+    rawAdvanceValue >= 0
+      ? rawAdvanceValue
+      : 0;
+
+
+  let automaticAdvanceAmount =
+    0;
+
+
+  if (
+    advanceMethod ===
+      "fixed_amount"
+  ) {
+
+    automaticAdvanceAmount =
+      Math.min(
+        total,
+        advanceValue
+      );
+  }
+  else if (
+    advanceMethod ===
+      "percentage"
+  ) {
+
+    const percentage =
+      Math.min(
+        100,
+        advanceValue
+      );
+
+
+    automaticAdvanceAmount =
+      Math.min(
+        total,
+        (
+          total *
+          percentage
+        ) /
+          100
+      );
+  }
+
+
+  automaticAdvanceAmount =
+    Number(
+      automaticAdvanceAmount
+        .toFixed(2)
+    );
+
+
+  const requiredAmount =
+    !allowPartialPayment &&
+    total >
+      0.009
+
+      ? total
+
+      : automaticAdvanceAmount;
+
+
+  return {
+    total,
+
+    allowPartialPayment,
+
+    allowedMethods,
+
+    advanceMethod,
+
+    advanceValue,
+
+    automaticAdvanceAmount,
+
+    requiredAmount:
+      Number(
+        requiredAmount.toFixed(
+          2
+        )
+      ),
+
+    requiresPayment:
+      requiredAmount >
+      0.009,
+  };
+}
+
+
+/* ============================================================
    STEP 3
 ============================================================ */
 
@@ -1519,6 +1748,7 @@ export function validateReservationPaymentStep({
   payment,
   isEditMode,
   grandTotal,
+  paymentPolicy,
 
   refund,
   pricingQuote,
@@ -1661,10 +1891,113 @@ export function validateReservationPaymentStep({
      NEW BOOKING PAYMENT
   ========================================================== */
 
+  const paymentPolicyState =
+    getInitialPaymentPolicyState({
+      paymentPolicy,
+      grandTotal,
+    });
+
+
+  if (
+    ![
+      "none",
+      "advance",
+      "full",
+    ].includes(
+      payment.mode
+    )
+  ) {
+    return (
+      "Select a valid payment option."
+    );
+  }
+
+
   if (
     payment.mode ===
-    "advance"
+      "none"
   ) {
+
+    if (
+      paymentPolicyState
+        .requiresPayment
+    ) {
+
+      if (
+        !paymentPolicyState
+          .allowPartialPayment
+      ) {
+        return (
+          `Full payment of ₹${paymentPolicyState.requiredAmount.toFixed(2)} is required at booking because partial payments are disabled.`
+        );
+      }
+
+
+      return (
+        `A minimum payment of ₹${paymentPolicyState.requiredAmount.toFixed(2)} is required at booking by hotel payment policy.`
+      );
+    }
+
+
+    return "";
+  }
+
+
+  if (
+    paymentPolicyState
+      .allowedMethods
+      .length ===
+    0
+  ) {
+    return (
+      "No payment method is enabled in Hotel Settings. Update Payment Settings before collecting payment."
+    );
+  }
+
+
+  const paymentMethod =
+    String(
+      payment.payment_method ||
+      ""
+    )
+      .trim()
+      .toLowerCase()
+      .replace(
+        /[\s-]+/g,
+        "_"
+      );
+
+
+  if (
+    !paymentPolicyState
+      .allowedMethods
+      .includes(
+        paymentMethod
+      )
+  ) {
+    return (
+      "Select a payment method allowed by Hotel Settings."
+    );
+  }
+
+
+  if (
+    !paymentPolicyState
+      .allowPartialPayment &&
+    payment.mode ===
+      "advance"
+  ) {
+    return (
+      "Partial payments are disabled by Hotel Settings. Select Full Payment."
+    );
+  }
+
+
+  if (
+    payment.mode ===
+      "advance"
+  ) {
+
     const amount =
       Number(
         payment.amount
@@ -1691,36 +2024,45 @@ export function validateReservationPaymentStep({
         "Advance amount must be lower than the booking total. Choose Full Payment when the entire amount is received."
       );
     }
+
+
+    if (
+      amount +
+        0.009 <
+      paymentPolicyState
+        .requiredAmount
+    ) {
+      return (
+        `Enter at least ₹${paymentPolicyState.requiredAmount.toFixed(2)} as required by hotel payment policy.`
+      );
+    }
   }
 
 
+  const transactionId =
+    String(
+      payment.transaction_id ||
+      ""
+    ).trim();
+
+
   if (
-    payment.mode !==
-      "none" &&
-    ![
-      "cash",
-      "card",
-      "upi",
-      "bank_transfer",
-    ].includes(
-      payment.payment_method
-    )
+    paymentMethod !==
+      "cash" &&
+    !transactionId
   ) {
     return (
-      "Select a valid payment method."
+      "Transaction ID is required for UPI, Card or Bank Transfer payments."
     );
   }
 
 
   if (
-    payment.mode !==
-      "none" &&
-    payment.payment_method !==
-      "cash" &&
-    !payment.transaction_id.trim()
+    transactionId.length >
+    255
   ) {
     return (
-      "Transaction ID is required for UPI, Card or Bank Transfer payments."
+      "Payment transaction ID is too long."
     );
   }
 
